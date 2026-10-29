@@ -3,14 +3,13 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title VN Script Editor
 
-rem 第一次執行時先安裝套件
+rem 第一次使用時先安裝套件（含 Electron，需要網路，約幾分鐘）
 if not exist node_modules (
-  echo 第一次執行，正在安裝套件……
-  call npm install
+    echo 第一次啟動，正在安裝套件…
+    call npm install
 )
 
-rem 等伺服器啟動後，用 Edge 的「應用程式模式」開啟（沒有網址列，像一般桌面程式）
-start "" cmd /c "timeout /t 3 >nul & start msedge --app=http://localhost:5173"
-
-echo 編輯器執行中。關掉這個視窗就會停止編輯器。
+rem 啟動 Vite 開發伺服器與 Electron 視窗（Electron 會自己開視窗，不再用瀏覽器）
+rem 關掉編輯器視窗後，這個命令列視窗會跟著結束
+echo 正在啟動編輯器，請稍候…
 call npm run dev

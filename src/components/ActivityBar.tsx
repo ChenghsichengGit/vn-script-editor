@@ -1,11 +1,10 @@
 import { SectionId } from '../model';
 import { sectionMeta, sectionOrder } from '../sampleData';
 
-// 最左邊的圖示列：每個圖示是一個開關，可以同時開好幾個；最下面是「關閉專案」
+// 最左邊的圖示列：每個圖示是一個開關，可以同時開好幾個（關閉專案改由選單的「檔案」操作）
 export default function ActivityBar(props: {
   active: SectionId[];
   onToggle: (id: SectionId) => void;
-  onCloseProject: () => void;
 }) {
   return (
     <nav className="activity-bar">
@@ -19,9 +18,6 @@ export default function ActivityBar(props: {
           {sectionMeta[id].icon}
         </button>
       ))}
-      <button className="activity-bottom" title="關閉專案（回到開始畫面）" onClick={props.onCloseProject}>
-        ⏏
-      </button>
     </nav>
   );
 }

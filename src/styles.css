@@ -304,9 +304,8 @@ body.dragging, body.dragging * { user-select: none; }
 .welcome-folder { color: var(--text-dim); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .welcome .icon-btn { padding: 0; border: none; background: none; }
 
-/* 分頁上的「還沒存檔」圓點、活動列底部的按鈕 */
+/* 分頁上的「還沒存檔」圓點 */
 .tab-dirty { color: var(--text); font-size: 10px; }
-.activity-bar .activity-bottom { margin-top: auto; font-size: 16px; }
 
 /* 捲軸：細細的深色捲軸（VS Code 風格） */
 ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }

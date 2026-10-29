@@ -1,0 +1,46 @@
+// window.api 的型別：由 electron/preload.cjs 提供，所有路徑都是絕對路徑
+// 注意：此檔不可有 import / export，才會被當成全域宣告
+
+interface DirEntry {
+  name: string;
+  kind: 'file' | 'directory';
+}
+
+interface RecentProject {
+  name: string;
+  path: string;
+}
+
+// 原生選單送來的事件
+type MenuEvent =
+  | { type: 'new-project' }
+  | { type: 'open-project' }
+  | { type: 'open-recent'; path: string }
+  | { type: 'close-project' };
+
+interface ElectronApi {
+  // 檔案操作：路徑必須在使用者開啟過的專案資料夾內，否則會丟錯
+  listDir(path: string): Promise<DirEntry[]>;
+  readText(path: string): Promise<string>;
+  writeText(path: string, text: string): Promise<void>; // 會先建立上層資料夾
+  mkdir(path: string): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
+  remove(path: string, opts?: { recursive?: boolean }): Promise<void>;
+  exists(path: string): Promise<boolean>;
+
+  // 專案資料夾與最近的專案
+  pickFolder(): Promise<string | null>; // 取消時回傳 null
+  getRecent(): Promise<RecentProject[]>;
+  rememberProject(name: string, path: string): Promise<void>;
+  forgetProject(path: string): Promise<void>;
+  allowRoot(path: string): Promise<boolean>; // 重新開啟最近的專案前呼叫
+
+  // 選單與關閉視窗；onXxx 回傳取消訂閱的函式
+  onMenu(cb: (event: MenuEvent) => void): () => void;
+  onAppClosing(cb: () => void): () => void;
+  readyToClose(): void;
+}
+
+interface Window {
+  api: ElectronApi;
+}

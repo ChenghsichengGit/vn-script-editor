@@ -8,7 +8,7 @@ import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId, parseCardTab } from './model';
 import { sectionMeta, sectionOrder } from './sampleData';
-import { ProjectData, ProjectStore } from './projectFiles';
+import { ProjectData, ProjectStore, openRecent, pickFolder, rememberProject } from './projectFiles';
 
 const emptyCards: Record<CardSectionId, Card[]> = { characters: [], world: [], commands: [] };
 
@@ -108,13 +108,20 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [dirty, contents, cards, files]);
 
-  // 還有沒存的東西時關閉視窗，瀏覽器會先問一下
+  // 關閉視窗：主程序會先通知這裡，把沒存的存完（存失敗就問一下）再回報可以關了
+  const closingRef = useRef(false);
   useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (latest.current.dirty.size > 0) e.preventDefault();
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    return window.api.onAppClosing(async () => {
+      if (closingRef.current) return; // 正在存檔中，不要重複處理
+      closingRef.current = true;
+      try {
+        await flushRef.current();
+        if (latest.current.dirty.size > 0 && !window.confirm('有內容存檔失敗，確定要關閉嗎？')) return;
+        window.api.readyToClose();
+      } finally {
+        closingRef.current = false;
+      }
+    });
   }, []);
 
   // 刪除檔案時直接呼叫，失敗就顯示在狀態列
@@ -138,10 +145,20 @@ export default function App() {
     setProject({ store, name: data.name });
   };
 
-  // 關閉專案：先把還沒存的存完，再回到開始畫面
-  const closeProject = async () => {
+  // 開始畫面要不要直接進入「建立新專案」；createKey 每次加一，讓開始畫面重新建立
+  const [createKey, setCreateKey] = useState(0);
+  const [startInCreate, setStartInCreate] = useState(false);
+
+  // 切換專案前：先把還沒存的存完；存失敗的話問使用者要不要放棄那些內容。回傳 true 代表可以繼續
+  const flushBeforeLeave = async (question: string) => {
     await flushRef.current();
-    if (latest.current.dirty.size > 0 && !window.confirm('有內容存檔失敗，確定要關閉專案嗎？')) return;
+    return !(latest.current.dirty.size > 0 && !window.confirm(question));
+  };
+
+  // 關閉專案：先把還沒存的存完，再回到開始畫面
+  const closeProject = async (): Promise<boolean> => {
+    if (!(await flushBeforeLeave('有內容存檔失敗，確定要關閉專案嗎？'))) return false;
+    setStartInCreate(false);
     setProject(null);
     setFiles({});
     setContents({});
@@ -149,7 +166,41 @@ export default function App() {
     setOpenTabs([]);
     setActiveTab(null);
     setDirty(new Set());
+    return true;
   };
+
+  // 開啟專案後共用的收尾：記到「最近的專案」再載入畫面
+  const openOpened = async ({ store, data }: { store: ProjectStore; data: ProjectData }) => {
+    await rememberProject(data.name, store.root);
+    loadProject(store, data);
+  };
+
+  // 原生選單送來的指令（用 ref 讓訂閱一次就好，執行時永遠是最新版）
+  const onMenu = async (ev: MenuEvent) => {
+    try {
+      if (ev.type === 'close-project') {
+        await closeProject();
+      } else if (ev.type === 'new-project') {
+        if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
+        await closeProject();
+        setStartInCreate(true);
+        setCreateKey((k) => k + 1);
+      } else if (ev.type === 'open-project') {
+        if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
+        const root = await pickFolder();
+        if (root) await openOpened(await ProjectStore.open(root));
+      } else if (ev.type === 'open-recent') {
+        if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
+        await openRecent(ev.path);
+        await openOpened(await ProjectStore.open(ev.path));
+      }
+    } catch (e) {
+      window.alert(`發生錯誤：${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  const onMenuRef = useRef(onMenu);
+  onMenuRef.current = onMenu;
+  useEffect(() => window.api.onMenu((ev) => void onMenuRef.current(ev)), []);
 
   // 版面一有變動就記到瀏覽器
   useEffect(() => {
@@ -303,7 +354,7 @@ export default function App() {
     };
   }
 
-  if (!project) return <WelcomeScreen onOpen={loadProject} />;
+  if (!project) return <WelcomeScreen key={createKey} startInCreateMode={startInCreate} onOpen={loadProject} />;
 
   const saveLabel =
     saveState === 'error' ? `⚠ 存檔失敗：${saveError}` : saveState === 'saving' ? '儲存中…' : dirty.size > 0 ? '尚未儲存' : '已儲存';
@@ -311,7 +362,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="main">
-        <ActivityBar active={sidebarVisible ? layout.open : []} onToggle={toggleSection} onCloseProject={closeProject} />
+        <ActivityBar active={sidebarVisible ? layout.open : []} onToggle={toggleSection} />
         {sidebarVisible && layout.open.length > 0 && (
           <>
             <Sidebar
