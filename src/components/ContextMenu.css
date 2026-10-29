@@ -1,0 +1,31 @@
+/* 右鍵選單：浮在滑鼠位置的小選單 */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 140px;
+  padding: 4px 0;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  font-size: 13px;
+}
+.context-menu-item {
+  padding: 4px 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.context-menu-item:hover { background: var(--accent); color: #fff; }
+
+/* 檔名改名用的輸入框 */
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-editor);
+  border: 1px solid var(--accent);
+  outline: none;
+  padding: 0 4px;
+}
