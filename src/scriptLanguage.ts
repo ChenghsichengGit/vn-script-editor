@@ -58,6 +58,7 @@ interface ParamValue {
 // App 每次卡片或範本改變時呼叫 setScriptData 更新這兩份資料；補齊和提示每次都讀最新的
 let commands: Command[] = [];
 let paramValues = new Map<string, ParamValue[]>(); // 參數名稱 → 可選的值
+let paramSources = new Map<string, string[]>(); // 參數名稱 → 在欄位設定裡是哪個區塊的哪個欄位（例如「角色的名稱」）
 
 const fieldOf = (card: Card, key: string) => card.fields.find((f) => f.key === key)?.value.trim() ?? '';
 const linesOf = (text: string) => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -133,6 +134,8 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
 
   // 參數的可選值：每個區塊範本裡有設「指令參數」的欄位（含卡片名稱），收集所有卡的那個內容（空白的跳過、重複的只留一個）
   paramValues = new Map();
+  paramSources = new Map();
+  const addSource = (param: string, text: string) => paramSources.set(param, [...(paramSources.get(param) ?? []), text]);
   const collect = (param: string, section: CardSectionId, valueOf: (card: Card) => string) => {
     const list = paramValues.get(param) ?? [];
     for (const card of cards[section]) {
@@ -145,9 +148,15 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
   };
   for (const section of Object.keys(schemas) as CardSectionId[]) {
     const { nameParam, fields } = schemas[section];
-    if (nameParam) collect(nameParam, section, (card) => card.name.trim());
+    const title = sectionMeta[section].title;
+    if (nameParam) {
+      collect(nameParam, section, (card) => card.name.trim());
+      addSource(nameParam, `${title}的名稱`);
+    }
     for (const field of fields) {
-      if (field.param) collect(field.param, section, (card) => fieldOf(card, field.key));
+      if (!field.param) continue;
+      collect(field.param, section, (card) => fieldOf(card, field.key));
+      addSource(field.param, `${title}的「${field.key}」`);
     }
   }
   for (const model of monaco.editor.getModels()) refresh(model);
@@ -412,4 +421,38 @@ export function commandSpecialFields(card: Card): Map<string, string> {
     }
   }
   return out;
+}
+
+// ── 欄位設定的「指令參數」和指令格式的 [參數] 互相補齊 ──────────────────────────────
+
+// 所有指令格式裡用到的 [參數] → 用到它的指令
+export function usedParams(): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const cmd of commands) {
+    for (const u of cmd.usages) {
+      for (const p of u.params) {
+        if (p.kind !== 'ref') continue;
+        const list = out.get(p.name) ?? [];
+        if (!list.includes(cmd.name)) list.push(cmd.name);
+        out.set(p.name, list);
+      }
+    }
+  }
+  return out;
+}
+
+// 欄位設定裡已經設好的指令參數 → 來源說明
+export const definedParams = () => paramSources;
+
+// 寫指令格式時：游標前面有還沒關起來的 [，就列出欄位設定裡的指令參數，選了補成 [名字]
+export function bracketSuggest(value: string, caret: number) {
+  const open = value.lastIndexOf('[', caret - 1);
+  if (open < 0 || value.slice(open, caret).includes(']')) return null;
+  const typing = value.slice(open + 1, caret);
+  if (/[\s:=?]/.test(typing)) return null; // 已經在打類型或預設值了
+  const to = value[caret] === ']' ? caret + 1 : caret;
+  const items = [...paramSources]
+    .filter(([name]) => name.includes(typing))
+    .map(([name, from]) => ({ label: name, detail: from.join('、'), insert: `${name}]` }));
+  return { items, from: open + 1, to };
 }

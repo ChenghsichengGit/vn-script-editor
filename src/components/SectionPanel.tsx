@@ -216,6 +216,7 @@ export default function SectionPanel(props: Props) {
     }
     if (t.kind === 'card') {
       return [
+        { label: '編輯', onClick: () => props.cardOps.open(t.section, t.id) },
         { label: '重新命名', onClick: () => setEditing({ mode: 'rename', kind: 'card', section: t.section, id: t.id }) },
         {
           label: '刪除',

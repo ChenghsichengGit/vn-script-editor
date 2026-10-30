@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SchemaEdit, SectionSchema } from '../model';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
+import SuggestInput from './SuggestInput';
+import { definedParams, usedParams } from '../scriptLanguage';
 import './SchemaDialog.css';
 
 // 編輯中的一列：from 記住原本的欄位名稱（新增的列沒有），讓呼叫端能替已有的卡改名
@@ -67,6 +69,21 @@ export default function SchemaDialog({
   const add = (name: string) => {
     setRows((rs) => [...rs, { id: nextId, name, param: '' }]);
     setNextId(nextId + 1);
+  };
+
+  // 指令參數輸入框的選項：所有指令格式裡用到的 [參數]；已經在欄位設定裡設過的標「已設定」
+  const paramSuggest = (value: string) => {
+    const typing = value.trim();
+    const defined = definedParams();
+    const here = new Set([nameParam, ...rows.map((r) => r.param)].map((p) => p.trim()));
+    const items = [...usedParams()]
+      .filter(([name]) => name.includes(typing) && name !== typing)
+      .map(([name, cmds]) => ({
+        label: name,
+        detail: (defined.has(name) || here.has(name) ? '已設定・' : '') + `用在 ${cmds.join('、')}`,
+        insert: name,
+      }));
+    return { items, from: 0, to: value.length };
   };
 
   const specialOf = (name: string) => specialFields.find((f) => f.name === name.trim())?.description;
@@ -177,13 +194,17 @@ export default function SchemaDialog({
                 {icon}
               </button>
               <span className="schema-col schema-fixed">名稱</span>
-              <input
-                type="text"
-                className="schema-input schema-col"
-                value={nameParam}
-                placeholder="（不當參數）"
-                onChange={(e) => setNameParam(e.target.value)}
-              />
+              <span className="schema-col schema-name-cell">
+                <SuggestInput
+                  type="text"
+                  className="schema-input"
+                  value={nameParam}
+                  placeholder="（不當參數）"
+                  openOnFocus
+                  suggest={paramSuggest}
+                  onChange={setNameParam}
+                />
+              </span>
             </div>
 
             {rows.map((r, i) => (
@@ -202,13 +223,17 @@ export default function SchemaDialog({
                   />
                   {specialOf(r.name) && <span className="field-special">✦</span>}
                 </span>
-                <input
-                  type="text"
-                  className="schema-input schema-col"
-                  value={r.param}
-                  placeholder="（不當參數）"
-                  onChange={(e) => patch(r.id, { param: e.target.value })}
-                />
+                <span className="schema-col schema-name-cell">
+                  <SuggestInput
+                    type="text"
+                    className="schema-input"
+                    value={r.param}
+                    placeholder="（不當參數）"
+                    openOnFocus
+                    suggest={paramSuggest}
+                    onChange={(param) => patch(r.id, { param })}
+                  />
+                </span>
               </div>
             ))}
           </div>

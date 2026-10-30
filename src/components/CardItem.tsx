@@ -71,7 +71,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         {!renaming && (
           <button
             className="icon-btn card-edit"
-            title="編輯"
+            title="在分頁中編輯"
             onClick={(e) => {
               e.stopPropagation(); // 避免同時觸發「展開／收起」
               ops.open(section, card.id);

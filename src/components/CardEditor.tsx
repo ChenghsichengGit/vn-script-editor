@@ -3,7 +3,8 @@ import { Card, Field } from '../model';
 import RichTextEditor, { useRichEditor } from './RichTextEditor';
 import Outline, { Heading } from './Outline';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
-import { commandSpecialFields } from '../scriptLanguage';
+import SuggestInput from './SuggestInput';
+import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
 // 側邊欄只是預覽，所有修改都在這裡做
@@ -33,20 +34,73 @@ export default function CardEditor({
   const special = isCommand ? commandSpecialFields(card) : new Map<string, string>();
   const [addMenu, setAddMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
-  // 「＋ 新增欄位」：指令卡先跳選單選專用名稱（已經有的變灰），一般卡直接加一個空白欄位
+  // 「＋ 新增欄位」：指令卡先跳選單（已經有的變灰），一般卡直接加一個空白欄位
+  // 選單：固定的「用法」「說明」→「自訂參數 ▸」（格式裡用到的參數）→「自訂欄位」（空白）
   const openAddMenu = (e: React.MouseEvent) => {
     if (!isCommand) return addField('');
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const has = new Set(card.fields.map((f) => f.key));
-    const names = [...special.keys()].filter((n) => n !== '格式' || has.has('格式'));
+    const item = (n: string) => ({ label: n, disabled: has.has(n), onClick: () => addField(n) });
+    const params = [...special.keys()].filter((n) => n !== '格式' && !FIXED_COMMAND_FIELDS.some((f) => f.name === n));
     setAddMenu({
       x: box.left,
       y: box.bottom + 2,
       items: [
-        ...names.map((n) => ({ label: n, disabled: has.has(n), onClick: () => addField(n) })),
+        ...FIXED_COMMAND_FIELDS.map((f) => item(f.name)),
+        { label: '自訂參數', disabled: params.length === 0, children: params.map(item) },
         { label: '自訂欄位', onClick: () => addField('') },
       ],
     });
+  };
+
+  // 「用法」一行一格：Enter 在下面多開一格並移過去
+  const usageRefs = useRef<HTMLDivElement>(null);
+  const focusUsage = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusUsage.current === null) return;
+    usageRefs.current?.querySelectorAll('input')[focusUsage.current]?.focus();
+    focusUsage.current = null;
+  });
+  const usageEditor = (i: number, value: string) => {
+    const lines = value.split('\n');
+    const set = (next: string[]) => setField(i, { value: next.join('\n') });
+    return (
+      <div className="usage-list" ref={usageRefs}>
+        {lines.map((line, j) => (
+          <div className="usage-row" key={j}>
+            <SuggestInput
+              className="cmd-format usage-input"
+              value={line}
+              placeholder="#指令 參數：說明"
+              suggest={bracketSuggest}
+              onChange={(v) => set(lines.map((l, k) => (k === j ? v : l)))}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                focusUsage.current = j + 1;
+                set([...lines.slice(0, j + 1), '', ...lines.slice(j + 1)]);
+              }}
+            />
+            <button
+              className="icon-btn"
+              title="刪除這種用法"
+              onClick={() => set(lines.length > 1 ? lines.filter((_, k) => k !== j) : [''])}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          className="text-btn"
+          onClick={() => {
+            focusUsage.current = lines.length;
+            set([...lines, '']);
+          }}
+        >
+          ＋ 新增用法
+        </button>
+      </div>
+    );
   };
 
   // 文件一有變動，就重新收集所有標題
@@ -106,12 +160,18 @@ export default function CardEditor({
     <div className="card-editor">
       <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="card-editor-inner">
-          <input
-            className={`card-editor-name${isCommand ? ' cmd-format cmd-name' : ''}`}
-            value={card.name}
-            placeholder={isCommand ? '#指令 [參數]' : '名稱'}
-            onChange={(e) => onChange({ name: e.target.value })}
-          />
+          {isCommand ? (
+            // 指令卡的名稱就是指令格式：打 [ 可以選欄位設定裡的指令參數
+            <SuggestInput
+              className="card-editor-name cmd-format cmd-name"
+              value={card.name}
+              placeholder="#指令 [參數]"
+              suggest={bracketSuggest}
+              onChange={(name) => onChange({ name })}
+            />
+          ) : (
+            <input className="card-editor-name" value={card.name} placeholder="名稱" onChange={(e) => onChange({ name: e.target.value })} />
+          )}
 
           <div className="card-editor-fields">
             {card.fields.map((f, i) => {
@@ -133,12 +193,16 @@ export default function CardEditor({
                     {use && <span className="field-special">✦</span>}
                   </div>
                 )}
-                <textarea
-                  rows={1}
-                  value={f.value}
-                  placeholder="內容"
-                  onChange={(e) => setField(i, { value: e.target.value })}
-                />
+                {isCommand && f.key.trim() === '用法' ? (
+                  usageEditor(i, f.value)
+                ) : (
+                  <textarea
+                    rows={1}
+                    value={f.value}
+                    placeholder="內容"
+                    onChange={(e) => setField(i, { value: e.target.value })}
+                  />
+                )}
                 <button
                   className={`fold-toggle${f.collapsed ? ' on' : ''}`}
                   title="開啟後，側邊欄只顯示欄位名稱，點了才展開"

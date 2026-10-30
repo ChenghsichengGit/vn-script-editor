@@ -3,8 +3,9 @@ import './ContextMenu.css';
 
 export interface ContextMenuItem {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   disabled?: boolean; // 灰色、點了沒反應
+  children?: ContextMenuItem[]; // 有的話是第二層：滑鼠移上去才在右邊展開
 }
 
 interface Props {
@@ -49,19 +50,39 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
 
   return (
     <div className="context-menu" ref={ref} style={pos} onContextMenu={(e) => e.preventDefault()}>
-      {items.map((item) => (
-        <div
-          key={item.label}
-          className={`context-menu-item${item.disabled ? ' disabled' : ''}`}
-          onClick={() => {
-            if (item.disabled) return;
-            onClose();
-            item.onClick();
-          }}
-        >
-          {item.label}
-        </div>
-      ))}
+      <MenuItems items={items} onClose={onClose} />
     </div>
+  );
+}
+
+// 一層選單的項目；有 children 的項目滑鼠移上去，在右邊展開下一層
+function MenuItems({ items, onClose }: { items: ContextMenuItem[]; onClose: () => void }) {
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <>
+      {items.map((item) => {
+        const sub = item.children && !item.disabled;
+        return (
+          <div
+            key={item.label}
+            className={`context-menu-item${item.disabled ? ' disabled' : ''}${item.children ? ' has-sub' : ''}`}
+            onMouseEnter={() => setOpen(sub ? item.label : null)}
+            onClick={() => {
+              if (item.disabled || item.children) return;
+              onClose();
+              item.onClick?.();
+            }}
+          >
+            {item.label}
+            {item.children && <span className="context-menu-arrow">▸</span>}
+            {sub && open === item.label && (
+              <div className="context-menu context-submenu">
+                <MenuItems items={item.children!} onClose={onClose} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

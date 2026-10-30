@@ -197,8 +197,8 @@ body.dragging, body.dragging * { user-select: none; }
 /* 側邊欄裡的設定卡 */
 .card-header { padding-left: 4px; }
 .card-header .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.card-edit { opacity: 0.35; font-size: 12px; flex-shrink: 0; }
-.card-header:hover .card-edit { opacity: 1; }
+.card-edit { font-size: 12px; flex-shrink: 0; }
+.card-edit:hover { background: var(--bg-selected); outline: 1px solid var(--border); }
 .card-body { display: flex; flex-direction: column; gap: 3px; padding: 2px 10px 8px 30px; }
 .card-row { display: flex; align-items: flex-start; gap: 8px; min-height: 20px; line-height: 1.5; }
 .card-row.clickable { cursor: pointer; }
@@ -517,3 +517,9 @@ body.dragging, body.dragging * { user-select: none; }
 .monaco-editor .vns-hint-pad { margin-left: 6px; }
 /* 補齊清單選中項目右邊的「展開說明」小箭頭：不顯示（要看說明可以按 Ctrl+Space） */
 .monaco-editor .suggest-widget .readMore { display: none !important; }
+
+/* 指令卡的「用法」：一種寫法一格 */
+.usage-list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.usage-row { display: flex; gap: 4px; align-items: center; }
+.usage-row .usage-input { flex: 1; min-width: 0; color: var(--cmd-arg); }
+.usage-list .text-btn { align-self: flex-start; }
