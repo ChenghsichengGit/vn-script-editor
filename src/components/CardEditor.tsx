@@ -5,7 +5,16 @@ import Outline, { Heading } from './Outline';
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
 // 側邊欄只是預覽，所有修改都在這裡做
-export default function CardEditor({ card, onChange }: { card: Card; onChange: (patch: Partial<Card>) => void }) {
+// lockedKeys = 這個區塊欄位範本裡的欄位：名稱不能改、不能刪（要改請到「欄位設定」）
+export default function CardEditor({
+  card,
+  lockedKeys,
+  onChange,
+}: {
+  card: Card;
+  lockedKeys: string[];
+  onChange: (patch: Partial<Card>) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const editor = useRichEditor(card.detail, (detail) => onChange({ detail }));
   const [headings, setHeadings] = useState<Heading[]>([]);
@@ -79,9 +88,18 @@ export default function CardEditor({ card, onChange }: { card: Card; onChange: (
           />
 
           <div className="card-editor-fields">
-            {card.fields.map((f, i) => (
+            {card.fields.map((f, i) => {
+              const locked = lockedKeys.includes(f.key);
+              return (
               <div className="card-editor-row" key={i}>
-                <input value={f.key} placeholder="欄位名稱" onChange={(e) => setField(i, { key: e.target.value })} />
+                <input
+                  value={f.key}
+                  placeholder="欄位名稱"
+                  readOnly={locked}
+                  className={locked ? 'locked' : undefined}
+                  title={locked ? '範本欄位：名稱要到區塊的「欄位設定」裡改' : undefined}
+                  onChange={(e) => setField(i, { key: e.target.value })}
+                />
                 <textarea
                   rows={1}
                   value={f.value}
@@ -97,13 +115,16 @@ export default function CardEditor({ card, onChange }: { card: Card; onChange: (
                 </button>
                 <button
                   className="icon-btn"
-                  title="刪除欄位"
+                  title={locked ? '範本欄位不能刪除' : '刪除欄位'}
+                  disabled={locked}
+                  style={locked ? { visibility: 'hidden' } : undefined}
                   onClick={() => onChange({ fields: card.fields.filter((_, j) => j !== i) })}
                 >
                   ×
                 </button>
               </div>
-            ))}
+              );
+            })}
             <button className="text-btn" onClick={() => onChange({ fields: [...card.fields, { key: '', value: '' }] })}>
               ＋ 新增欄位
             </button>

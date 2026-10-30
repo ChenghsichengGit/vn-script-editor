@@ -63,6 +63,7 @@ export interface TreeProps {
   setCollapsed: React.Dispatch<React.SetStateAction<Set<string>>>;
   onMove: (section: SectionId, item: MoveItem, toFolder: string) => Promise<void>; // 拖曳放開時呼叫
   onHeaderDrag: (id: SectionId, e: React.MouseEvent) => void; // 按住標題列開始搬動整個區塊
+  onEditSchema: (section: CardSectionId) => void; // 打開某個設定卡區塊的「欄位設定」
 }
 
 interface Props extends TreeProps {
@@ -198,6 +199,7 @@ export default function SectionPanel(props: Props) {
           label: bulk.show ? '全部收起' : '全部展開',
           onClick: () => setBulk((b) => ({ show: !b.show, tick: b.tick + 1 })),
         });
+        items.push({ label: '欄位設定…', onClick: () => props.onEditSchema(id as CardSectionId) });
       }
       return items;
     }

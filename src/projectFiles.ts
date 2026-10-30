@@ -1,13 +1,13 @@
 // 專案資料夾的讀寫：透過 Electron 的 window.api（主程序用 Node 的 fs）存取使用者硬碟上的資料夾
 //
 // 資料夾結構：
-//   <project>/project.json   {"name": "...", "version": 1}
+//   <project>/project.json   {"name": "...", "version": 1, "schemas": {角色/世界觀/指令的欄位範本}}
 //   <project>/劇本/**/*.vns|txt|md
 //   <project>/角色/**/*.md  世界觀/**/*.md  指令/**/*.md   （設定卡：YAML front matter + Markdown 內文）
 //   每個區塊底下可以有任意層的子資料夾；檔案／卡片屬於哪個資料夾由位置決定，不寫進 YAML
 
 import { dump, load } from 'js-yaml';
-import { Card, CardSectionId, Field, SectionId } from './model';
+import { Card, CardSectionId, Field, SchemaField, Schemas, SectionId, defaultSchemas } from './model';
 
 export interface ScriptFile {
   name: string; // 含副檔名，例如 "第一章.vns"
@@ -20,6 +20,26 @@ export interface ProjectData {
   files: Record<string, ScriptFile>; // key = 記憶體中的 id
   cards: Record<CardSectionId, Card[]>; // card.id = 記憶體中的 id；card.folder = 所在子資料夾
   folders: Record<SectionId, string[]>; // 每個區塊裡所有的子資料夾（含空的、含巢狀的每一層），例如 "第一章"、"第一章/場景1"
+  schemas: Schemas; // 每個設定卡區塊的欄位範本，取自 project.json
+}
+
+// 把 project.json 裡的 schemas 整理成合法的範本：認不得的丟掉、同名欄位只留第一個；整個沒有就用預設
+function normalizeSchemas(raw: unknown): Schemas {
+  const out = defaultSchemas();
+  if (!raw || typeof raw !== 'object') return out;
+  for (const section of Object.keys(out) as CardSectionId[]) {
+    const list = (raw as Record<string, unknown>)[section];
+    if (!Array.isArray(list)) continue;
+    const seen = new Set<string>();
+    out[section] = list.flatMap((f): SchemaField[] => {
+      const key = typeof f?.key === 'string' ? f.key.trim() : '';
+      if (!key || seen.has(key)) return [];
+      seen.add(key);
+      const param = typeof f.param === 'string' && f.param.trim() ? f.param.trim() : undefined;
+      return [param ? { key, param } : { key }];
+    });
+  }
+  return out;
 }
 
 // ───────────────────────── 路徑 ─────────────────────────
@@ -219,6 +239,9 @@ export class ProjectStore {
   // 所有寫入都排進同一條佇列，自動存檔連續觸發時不會讓寫入與刪除交錯
   private queue: Promise<unknown> = Promise.resolve();
 
+  // project.json 的完整內容：改範本時只換掉 schemas，其他欄位（含以後新增的）原封不動寫回
+  private meta: Record<string, unknown> = {};
+
   private constructor(root: string) {
     this.root = root;
   }
@@ -235,6 +258,7 @@ export class ProjectStore {
     let name = baseName(root);
     try {
       const meta = JSON.parse(await window.api.readText(joinPath(root, 'project.json')));
+      if (meta && typeof meta === 'object' && !Array.isArray(meta)) store.meta = meta;
       if (meta && typeof meta.name === 'string' && meta.name.trim() !== '') name = meta.name;
     } catch {
       // 沒有或壞掉的 project.json：沿用資料夾名稱
@@ -264,15 +288,24 @@ export class ProjectStore {
       }
     }
 
-    return { store, data: { name, files, cards, folders } };
+    return { store, data: { name, files, cards, folders, schemas: normalizeSchemas(store.meta.schemas) } };
   }
 
   static async create(root: string, name: string): Promise<{ store: ProjectStore; data: ProjectData }> {
-    await window.api.writeText(joinPath(root, 'project.json'), JSON.stringify({ name, version: 1 }, null, 2) + '\n');
+    const meta = { name, version: 1, schemas: defaultSchemas() };
+    await window.api.writeText(joinPath(root, 'project.json'), JSON.stringify(meta, null, 2) + '\n');
     // 四個子資料夾 + 一個空白的起始劇本
     for (const section of SECTIONS) await window.api.mkdir(joinPath(root, CARD_DIRS[section]));
     await window.api.writeText(joinPath(root, SCRIPT_DIR, '第一章.vns'), '');
     return ProjectStore.open(root);
+  }
+
+  // 存欄位範本：寫回 project.json（只換 schemas）
+  saveSchemas(schemas: Schemas): Promise<void> {
+    return this.enqueue(async () => {
+      this.meta = { ...this.meta, schemas };
+      await window.api.writeText(joinPath(this.root, 'project.json'), JSON.stringify(this.meta, null, 2) + '\n');
+    });
   }
 
   // 把一個動作排到佇列尾端；前一個失敗不會卡住後面的，但錯誤仍會回傳給該次呼叫者

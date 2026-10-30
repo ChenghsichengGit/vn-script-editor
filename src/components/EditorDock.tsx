@@ -12,7 +12,7 @@ import {
   themeDark,
 } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
-import { Card, CardSectionId, parseCardTab } from '../model';
+import { Card, CardSectionId, Schemas, parseCardTab } from '../model';
 import ScriptEditor from './ScriptEditor';
 import CardEditor from './CardEditor';
 
@@ -36,6 +36,7 @@ interface EditorCtxValue {
   files: Record<string, { name: string; folder: string }>;
   contents: Record<string, string>;
   cards: Record<CardSectionId, Card[]>;
+  schemas: Schemas;
   activePanelId: string | null; // 目前作用中的面板（狀態列和游標追蹤都跟著它）
   isDirty: (tabId: string) => boolean;
   tabLabel: (tabId: string) => string;
@@ -57,7 +58,13 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
   if (cardRef) {
     const card = ctx.cards[cardRef.section].find((c) => c.id === cardRef.id);
     if (!card) return null;
-    return <CardEditor card={card} onChange={(patch) => ctx.onCardChange(cardRef.section, card.id, patch)} />;
+    return (
+      <CardEditor
+        card={card}
+        lockedKeys={ctx.schemas[cardRef.section].map((f) => f.key)}
+        onChange={(patch) => ctx.onCardChange(cardRef.section, card.id, patch)}
+      />
+    );
   }
   if (!ctx.files[tabId]) return null;
   return (
@@ -178,6 +185,7 @@ interface Props {
   files: EditorCtxValue['files'];
   contents: EditorCtxValue['contents'];
   cards: EditorCtxValue['cards'];
+  schemas: EditorCtxValue['schemas'];
   isDirty: EditorCtxValue['isDirty'];
   tabLabel: EditorCtxValue['tabLabel'];
   onFileChange: EditorCtxValue['onFileChange'];
@@ -304,6 +312,7 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
     files: props.files,
     contents: props.contents,
     cards: props.cards,
+    schemas: props.schemas,
     activePanelId,
     isDirty: props.isDirty,
     tabLabel: props.tabLabel,

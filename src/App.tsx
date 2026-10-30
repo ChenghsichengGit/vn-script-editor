@@ -8,7 +8,19 @@ import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import SettingsDialog from './components/SettingsDialog';
 import { useSettings } from './settings';
-import { Card, CardOps, CardSectionId, SectionId, cardTabId, parseCardTab } from './model';
+import {
+  Card,
+  CardOps,
+  CardSectionId,
+  SchemaEdit,
+  Schemas,
+  SectionId,
+  applySchema,
+  cardTabId,
+  defaultSchemas,
+  parseCardTab,
+} from './model';
+import SchemaDialog from './components/SchemaDialog';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
   FLOAT_DEFAULT_H,
@@ -84,6 +96,9 @@ export default function App() {
   // 每個區塊所有的子資料夾（含空的）
   const [folders, setFolders] = useState(emptyFolders);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  // 角色／世界觀／指令的欄位範本（存在 project.json），以及正在編輯哪一個區塊的範本
+  const [schemas, setSchemas] = useState<Schemas>(defaultSchemas);
+  const [schemaDialog, setSchemaDialog] = useState<CardSectionId | null>(null);
 
   // ── 存檔 ──────────────────────────────
   // 有改動的東西記在 dirty 清單；停止輸入 1 秒後（或按 Ctrl+S）把清單裡的東西寫回資料夾
@@ -183,6 +198,7 @@ export default function App() {
     setFolders(data.folders);
     setContents(Object.fromEntries(ids.map((id) => [id, data.files[id].content])));
     setCards(data.cards);
+    setSchemas(data.schemas);
     setActiveTab(null);
     setDirty(new Set());
     setSaveState('saved');
@@ -424,6 +440,24 @@ export default function App() {
 
   // ── 設定卡 ──────────────────────────────
 
+  // 存欄位範本：先把改了名的欄位在每張卡上跟著改名，再讓每張卡都符合新範本（缺的補空白）
+  // 有變動的卡標成「還沒存」，交給自動存檔寫回去；範本本身寫進 project.json
+  const saveSchema = (section: CardSectionId, edits: SchemaEdit[]) => {
+    const schema = edits.map(({ key, param }) => (param ? { key, param } : { key }));
+    const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
+    const updated = new Map<string, Card>();
+    for (const c of cards[section]) {
+      const renamed = c.fields.map((f) => (renames.has(f.key) ? { ...f, key: renames.get(f.key)! } : f));
+      const fields = applySchema(renamed, schema);
+      if (JSON.stringify(fields) !== JSON.stringify(c.fields)) updated.set(c.id, { ...c, fields });
+    }
+    setCards((all) => ({ ...all, [section]: all[section].map((c) => updated.get(c.id) ?? c) }));
+    updated.forEach((_, id) => markDirty(cardTabId(section, id)));
+    const next = { ...schemas, [section]: schema };
+    setSchemas(next);
+    project?.store.saveSchemas(next).catch(reportError);
+  };
+
   const findCard = (section: CardSectionId, id: string) => cards[section].find((c) => c.id === id);
 
   const cardOps: CardOps = {
@@ -432,7 +466,8 @@ export default function App() {
       const name = rawName.trim();
       const err = nameError(section, folder, name, name + '.md', '已經有同名的項目');
       if (err) return err;
-      const card: Card = { id: Date.now().toString(36), name, fields: [], detail: '', folder };
+      // 新的卡一建立就帶著範本裡的欄位（內容空白）
+      const card: Card = { id: Date.now().toString(36), name, fields: applySchema([], schemas[section]), detail: '', folder };
       setCards((all) => ({ ...all, [section]: [...all[section], card] }));
       markDirty(cardTabId(section, card.id));
       openTab(cardTabId(section, card.id));
@@ -685,6 +720,7 @@ export default function App() {
     setCollapsed,
     onMove: moveItem,
     onHeaderDrag: startPanelDrag,
+    onEditSchema: setSchemaDialog,
   };
   const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
   // 拖曳整個區塊時，沒有顯示側邊欄的那一邊要先露出一條窄窄的「放這裡」區域
@@ -712,6 +748,7 @@ export default function App() {
           files={files}
           contents={contents}
           cards={cards}
+          schemas={schemas}
           isDirty={(tabId) => dirty.has(parseCardTab(tabId) ? tabId : fileKey(tabId))}
           tabLabel={tabLabel}
           onFileChange={(id, text) => {
@@ -753,6 +790,15 @@ export default function App() {
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
       />
       {settingsDialog}
+      {schemaDialog && (
+        <SchemaDialog
+          key={schemaDialog}
+          title={sectionMeta[schemaDialog].title}
+          fields={schemas[schemaDialog]}
+          onSave={(edits) => saveSchema(schemaDialog, edits)}
+          onClose={() => setSchemaDialog(null)}
+        />
+      )}
     </div>
   );
 }

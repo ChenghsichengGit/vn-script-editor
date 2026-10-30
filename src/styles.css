@@ -476,3 +476,6 @@ body.dragging, body.dragging * { user-select: none; }
 ::-webkit-scrollbar-thumb { background: rgba(121, 121, 121, 0.4); border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(100, 100, 100, 0.7); }
 ::-webkit-scrollbar-thumb:active { background: rgba(191, 191, 191, 0.4); }
+
+/* 範本欄位的名稱：唯讀，顏色暗一點，看得出來不能改 */
+.card-editor input.locked { color: var(--text-dim); cursor: default; }

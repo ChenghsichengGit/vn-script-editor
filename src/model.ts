@@ -22,6 +22,30 @@ export interface Card {
   folder?: string; // 所在子資料夾（相對於該區塊，用 "/" 分隔；沒有或空字串 = 區塊根目錄）。由檔案位置決定，不存進 YAML
 }
 
+// 欄位範本的一個欄位：這個區塊的每張卡都一定有這個欄位
+// param 有填時，這個欄位的內容可以拿來當指令參數，例如 param = "名字" → 指令裡的 [名字] 可以選所有卡的這個欄位
+export interface SchemaField {
+  key: string;
+  param?: string;
+}
+export type Schemas = Record<CardSectionId, SchemaField[]>;
+// 欄位設定視窗交回來的結果：from = 這個欄位原本的名稱（新加的沒有），用來把舊卡片上的欄位跟著改名
+export type SchemaEdit = SchemaField & { from?: string };
+
+// 新專案（或舊專案沒有範本時）的預設範本：指令區塊固定有「格式」和「說明」
+export const defaultSchemas = (): Schemas => ({
+  characters: [],
+  world: [],
+  commands: [{ key: '格式' }, { key: '說明' }],
+});
+
+// 讓一張卡符合範本：範本欄位依範本順序排在最前面（已有的保留內容，缺的補空白），其他欄位接在後面
+export function applySchema(fields: Field[], schema: SchemaField[]): Field[] {
+  const head = schema.map((s) => fields.find((f) => f.key === s.key) ?? { key: s.key, value: '' });
+  const rest = fields.filter((f) => !schema.some((s) => s.key === f.key));
+  return [...head, ...rest];
+}
+
 // 檔案樹的一個節點。有 children 的可以摺疊；有 fileId 的點了會開分頁
 export interface TreeNode {
   label: string;
