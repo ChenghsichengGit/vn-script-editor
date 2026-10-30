@@ -8,9 +8,22 @@ import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId, parseCardTab } from './model';
 import { sectionMeta, sectionOrder } from './sampleData';
-import { ProjectData, ProjectStore, openRecent, pickFolder, rememberProject } from './projectFiles';
+import {
+  ProjectData,
+  ProjectStore,
+  folderBase,
+  isInFolder,
+  openRecent,
+  parentFolder,
+  pickFolder,
+  rememberProject,
+  sanitizeName,
+  validateName,
+  withScriptExt,
+} from './projectFiles';
 
 const emptyCards: Record<CardSectionId, Card[]> = { characters: [], world: [], commands: [] };
+const emptyFolders: Record<SectionId, string[]> = { files: [], characters: [], world: [], commands: [] };
 
 // 「還沒存檔」清單裡的代號：劇本是 file:id，設定卡直接用分頁 id（card:區塊:id）
 const fileKey = (id: string) => `file:${id}`;
@@ -34,10 +47,19 @@ function loadLayout(): Layout {
 }
 
 // 劇本檔案的操作：由 App 實作，Sidebar 只負責呼叫
+// add / rename 回傳錯誤訊息（名稱不能用或重複）；成功回傳 null
 export interface FileOps {
-  add: () => void;
-  rename: (id: string, name: string) => void;
+  add: (folder: string, name: string) => string | null;
+  rename: (id: string, name: string) => string | null;
   remove: (id: string) => void;
+}
+
+// 資料夾的操作（四個區塊共用）：立即寫到硬碟，不經過 dirty／自動存檔
+// 名稱的錯誤用回傳值告訴輸入框；硬碟操作失敗則已經 alert 過，回傳 null
+export interface FolderOps {
+  create: (section: SectionId, parent: string, name: string) => Promise<string | null>;
+  rename: (section: SectionId, folder: string, name: string) => Promise<string | null>;
+  remove: (section: SectionId, folder: string) => Promise<void>;
 }
 
 // App 是「總管」：所有狀態都存在這裡，子元件只負責顯示、把使用者的操作回報上來
@@ -50,7 +72,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [contents, setContents] = useState<Record<string, string>>({});
   // 檔案清單（只有檔名；文字內容在上面的 contents）。物件的順序就是加入的順序
-  const [files, setFiles] = useState<Record<string, { name: string }>>({});
+  // folder = 所在子資料夾（'' = 根目錄）
+  const [files, setFiles] = useState<Record<string, { name: string; folder: string }>>({});
+  // 每個區塊所有的子資料夾（含空的）
+  const [folders, setFolders] = useState(emptyFolders);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
 
   // ── 存檔 ──────────────────────────────
@@ -69,8 +94,8 @@ export default function App() {
     });
 
   // 存檔是非同步的，跑的時候要讀「最新」的資料，所以每次畫面更新都把目前的狀態放進 ref
-  const latest = useRef({ project, files, contents, cards, dirty });
-  latest.current = { project, files, contents, cards, dirty };
+  const latest = useRef({ project, files, contents, cards, dirty, openTabs, activeTab });
+  latest.current = { project, files, contents, cards, dirty, openTabs, activeTab };
 
   const flush = async () => {
     const { project, files, contents, cards, dirty } = latest.current;
@@ -87,7 +112,11 @@ export default function App() {
           if (c) await project.store.saveCard(card.section, c);
         } else {
           const id = key.slice('file:'.length);
-          if (files[id]) await project.store.saveFile(id, { name: files[id].name, content: contents[id] ?? '' });
+          if (files[id]) await project.store.saveFile(id, {
+              name: files[id].name,
+              folder: files[id].folder,
+              content: contents[id] ?? '',
+            });
         }
       }
       setSaveState('saved');
@@ -135,7 +164,8 @@ export default function App() {
   // 從開始畫面打開專案：把資料夾讀到的內容放進各個狀態，並打開第一個劇本
   const loadProject = (store: ProjectStore, data: ProjectData) => {
     const ids = Object.keys(data.files);
-    setFiles(Object.fromEntries(ids.map((id) => [id, { name: data.files[id].name }])));
+    setFiles(Object.fromEntries(ids.map((id) => [id, { name: data.files[id].name, folder: data.files[id].folder }])));
+    setFolders(data.folders);
     setContents(Object.fromEntries(ids.map((id) => [id, data.files[id].content])));
     setCards(data.cards);
     setOpenTabs(ids.slice(0, 1));
@@ -161,6 +191,7 @@ export default function App() {
     setStartInCreate(false);
     setProject(null);
     setFiles({});
+    setFolders(emptyFolders);
     setContents({});
     setCards(emptyCards);
     setOpenTabs([]);
@@ -258,17 +289,70 @@ export default function App() {
     if (activeTab === id) setActiveTab(next[next.length - 1] ?? null);
   };
 
+  // 一次關掉好幾個分頁（刪除資料夾時用）。在 await 之後呼叫，所以讀 ref 裡最新的分頁狀態
+  const closeTabs = (ids: string[]) => {
+    const gone = new Set(ids);
+    const { openTabs: tabs, activeTab: active } = latest.current;
+    const next = tabs.filter((t) => !gone.has(t));
+    setOpenTabs(next);
+    if (active && gone.has(active)) setActiveTab(next[next.length - 1] ?? null);
+  };
+
+  // ── 名稱檢查 ──────────────────────────────
+
+  // 某區塊某個資料夾裡已被占用的名稱（小寫）：子資料夾 + 檔案／卡片（卡片的檔名 = 名稱 + .md）
+  // except 用來排除「正在改名的自己」
+  const takenNames = (section: SectionId, folder: string, except: { id?: string; folder?: string } = {}) => {
+    const taken = new Set<string>();
+    for (const f of folders[section]) {
+      if (parentFolder(f) === folder && f !== except.folder) taken.add(folderBase(f).toLowerCase());
+    }
+    if (section === 'files') {
+      for (const [id, f] of Object.entries(files)) {
+        if (f.folder === folder && id !== except.id) taken.add(f.name.toLowerCase());
+      }
+    } else {
+      for (const c of cards[section]) {
+        if ((c.folder ?? '') === folder && c.id !== except.id) taken.add((sanitizeName(c.name) + '.md').toLowerCase());
+      }
+    }
+    return taken;
+  };
+
+  // 檢查「檔名／資料夾名」candidate 能不能用；raw 是使用者打的原文（用來檢查非法字元）
+  const nameError = (
+    section: SectionId,
+    folder: string,
+    raw: string,
+    candidate: string,
+    dupMessage: string,
+    except?: { id?: string; folder?: string },
+  ) => validateName(raw) ?? (takenNames(section, folder, except).has(candidate.toLowerCase()) ? dupMessage : null);
+
   // ── 設定卡 ──────────────────────────────
 
   const findCard = (section: CardSectionId, id: string) => cards[section].find((c) => c.id === id);
 
   const cardOps: CardOps = {
     open: (section, id) => openTab(cardTabId(section, id)),
-    add: (section) => {
-      const card: Card = { id: Date.now().toString(36), name: sectionMeta[section].newName!, fields: [], detail: '' };
+    add: (section, folder, rawName) => {
+      const name = rawName.trim();
+      const err = nameError(section, folder, name, name + '.md', '已經有同名的項目');
+      if (err) return err;
+      const card: Card = { id: Date.now().toString(36), name, fields: [], detail: '', folder };
       setCards((all) => ({ ...all, [section]: [...all[section], card] }));
       markDirty(cardTabId(section, card.id));
       openTab(cardTabId(section, card.id));
+      return null;
+    },
+    rename: (section, id, rawName) => {
+      const card = findCard(section, id);
+      const name = rawName.trim();
+      if (!card || name === card.name) return null;
+      const err = nameError(section, card.folder ?? '', name, name + '.md', '已經有同名的項目', { id });
+      if (err) return err;
+      cardOps.update(section, id, { name });
+      return null;
     },
     update: (section, id, patch) => {
       setCards((all) => ({ ...all, [section]: all[section].map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
@@ -285,23 +369,30 @@ export default function App() {
   // ── 劇本檔案 ──────────────────────────────
 
   const fileOps: FileOps = {
-    add: () => {
-      // 預設檔名被占用就加編號：新劇本 2.vns、新劇本 3.vns…
-      const taken = new Set(Object.values(files).map((f) => f.name));
-      let name = '新劇本.vns';
-      for (let n = 2; taken.has(name); n++) name = `新劇本 ${n}.vns`;
+    add: (folder, rawName) => {
+      // 使用者打的就是完整檔名；沒有副檔名就補 .vns
+      const typed = rawName.trim();
+      const name = withScriptExt(typed);
+      const err = nameError('files', folder, typed, name, '已經有同名的檔案');
+      if (err) return err;
       const id = Date.now().toString(36);
-      setFiles((all) => ({ ...all, [id]: { name } }));
+      setFiles((all) => ({ ...all, [id]: { name, folder } }));
       setContents((c) => ({ ...c, [id]: '' }));
       markDirty(fileKey(id));
       openTab(id);
+      return null;
     },
-    rename: (id, name) => {
-      const trimmed = name.trim();
-      // 空白或和別的檔案同名就不改
-      if (!trimmed || Object.entries(files).some(([otherId, f]) => otherId !== id && f.name === trimmed)) return;
-      setFiles((all) => ({ ...all, [id]: { name: trimmed } }));
+    rename: (id, rawName) => {
+      const file = files[id];
+      const typed = rawName.trim();
+      if (!file) return null;
+      const name = withScriptExt(typed);
+      if (name === file.name) return null;
+      const err = nameError('files', file.folder, typed, name, '已經有同名的檔案', { id });
+      if (err) return err;
+      setFiles((all) => ({ ...all, [id]: { ...all[id], name } }));
       markDirty(fileKey(id));
+      return null;
     },
     remove: (id) => {
       setFiles((all) => Object.fromEntries(Object.entries(all).filter(([fileId]) => fileId !== id)));
@@ -309,6 +400,80 @@ export default function App() {
       unmarkDirty(fileKey(id));
       project?.store.deleteFile(id).catch(reportError);
       if (openTabs.includes(id)) closeTab(id);
+    },
+  };
+
+  // ── 資料夾 ──────────────────────────────
+
+  const showFolderError = (action: string, e: unknown) =>
+    window.alert(`${action}失敗：${e instanceof Error ? e.message : String(e)}`);
+
+  const folderOps: FolderOps = {
+    create: async (section, parent, rawName) => {
+      const name = rawName.trim();
+      const err = nameError(section, parent, name, name, '已經有同名的項目');
+      if (err) return err;
+      try {
+        const rel = await latest.current.project!.store.createFolder(section, parent, name);
+        setFolders((f) => ({ ...f, [section]: [...f[section], rel] }));
+      } catch (e) {
+        showFolderError('新增資料夾', e);
+      }
+      return null;
+    },
+    rename: async (section, folder, rawName) => {
+      const name = rawName.trim();
+      if (name === folderBase(folder)) return null;
+      const err = nameError(section, parentFolder(folder), name, name, '已經有同名的項目', { folder });
+      if (err) return err;
+      // 先把還沒存的內容存完，才不會有存檔還在用舊路徑
+      await flushRef.current();
+      try {
+        const newRel = await latest.current.project!.store.renameFolder(section, folder, name);
+        // 資料夾本身和裡面每個檔案／卡片的路徑都換成新的前綴
+        const remap = (p: string) => (isInFolder(p, folder) ? newRel + p.slice(folder.length) : p);
+        setFolders((f) => ({ ...f, [section]: f[section].map(remap) }));
+        if (section === 'files') {
+          setFiles((all) => Object.fromEntries(Object.entries(all).map(([id, f]) => [id, { ...f, folder: remap(f.folder) }])));
+        } else {
+          setCards((all) => ({
+            ...all,
+            [section]: all[section].map((c) => ({ ...c, folder: remap(c.folder ?? '') })),
+          }));
+        }
+      } catch (e) {
+        showFolderError('重新命名資料夾', e);
+      }
+      return null;
+    },
+    remove: async (section, folder) => {
+      // 這個資料夾（含各層子資料夾）裡的所有檔案／卡片
+      const inside =
+        section === 'files'
+          ? Object.keys(files).filter((id) => isInFolder(files[id].folder, folder))
+          : cards[section].filter((c) => isInFolder(c.folder ?? '', folder)).map((c) => c.id);
+      const keys = inside.map((id) => (section === 'files' ? fileKey(id) : cardTabId(section, id)));
+      const tabIds = inside.map((id) => (section === 'files' ? id : cardTabId(section, id)));
+      const wasDirty = keys.filter((k) => dirty.has(k));
+
+      // 先清掉它們的「還沒存」記號，避免刪除途中自動存檔又把檔案寫回去
+      setDirty((d) => new Set([...d].filter((k) => !keys.includes(k))));
+      try {
+        await latest.current.project!.store.deleteFolder(section, folder);
+      } catch (e) {
+        setDirty((d) => new Set([...d, ...wasDirty]));
+        showFolderError('刪除資料夾', e);
+        return;
+      }
+      setFolders((f) => ({ ...f, [section]: f[section].filter((p) => !isInFolder(p, folder)) }));
+      if (section === 'files') {
+        const gone = new Set(inside);
+        setFiles((all) => Object.fromEntries(Object.entries(all).filter(([id]) => !gone.has(id))));
+        setContents((c) => Object.fromEntries(Object.entries(c).filter(([id]) => !gone.has(id))));
+      } else {
+        setCards((all) => ({ ...all, [section]: all[section].filter((c) => !inside.includes(c.id)) }));
+      }
+      closeTabs(tabIds);
     },
   };
 
@@ -370,6 +535,8 @@ export default function App() {
               onLayoutChange={(patch) => setLayout((l) => ({ ...l, ...patch }))}
               files={files}
               fileOps={fileOps}
+              folders={folders}
+              folderOps={folderOps}
               cards={cards}
               cardOps={cardOps}
               activeTab={activeTab}

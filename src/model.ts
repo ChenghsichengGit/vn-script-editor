@@ -19,6 +19,7 @@ export interface Card {
   name: string;
   fields: Field[];
   detail: string;
+  folder?: string; // 所在子資料夾（相對於該區塊，用 "/" 分隔；沒有或空字串 = 區塊根目錄）。由檔案位置決定，不存進 YAML
 }
 
 // 檔案樹的一個節點。有 children 的可以摺疊；有 fileId 的點了會開分頁
@@ -31,7 +32,10 @@ export interface TreeNode {
 // 對設定卡能做的操作，由 App 實作、往下傳給需要的元件
 export interface CardOps {
   open: (section: CardSectionId, id: string) => void;
-  add: (section: CardSectionId) => void;
+  // 在 folder 底下新增名為 name 的卡；名稱不能用就回傳錯誤訊息，成功回傳 null
+  add: (section: CardSectionId, folder: string, name: string) => string | null;
+  // 改卡片名稱（同資料夾內不可重複），同樣以回傳值表示錯誤
+  rename: (section: CardSectionId, id: string, name: string) => string | null;
   update: (section: CardSectionId, id: string, patch: Partial<Card>) => void;
   remove: (section: CardSectionId, id: string) => void;
 }

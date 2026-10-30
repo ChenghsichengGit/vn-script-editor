@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardOps, CardSectionId } from '../model';
 import { RichTextView } from './RichTextEditor';
+import NameInput from './NameInput';
 
 interface Props {
   section: CardSectionId;
@@ -8,11 +9,16 @@ interface Props {
   ops: CardOps;
   bulk: { show: boolean; tick: number };
   selected: boolean;
+  depth: number; // 所在資料夾的深度（0 = 區塊根目錄），決定縮排
+  onMenu: (e: React.MouseEvent) => void; // 右鍵：由側邊欄顯示選單
+  renaming: boolean; // 正在改名：名稱換成輸入框
+  onRename: (name: string) => string | null; // 回傳錯誤訊息（重名等）或 null
+  onRenameClose: () => void;
 }
 
 // 側邊欄裡的一張設定卡（只能看，不能改）
-// 點整列：展開／收起（欄位和詳細內容）；✏️：在分頁開啟編輯；右鍵：刪除
-export default function CardItem({ section, card, ops, bulk, selected }: Props) {
+// 點整列：展開／收起（欄位和詳細內容）；✏️：在分頁開啟編輯；右鍵：選單（重新命名／刪除）
+export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose }: Props) {
   const [open, setOpen] = useState(false);
   const [openFields, setOpenFields] = useState<Set<number>>(new Set()); // 被點開的「收合欄位」
 
@@ -28,34 +34,39 @@ export default function CardItem({ section, card, ops, bulk, selected }: Props) 
     setOpenFields(next);
   };
 
-  const onContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (window.confirm(`要刪除「${card.name}」嗎？`)) ops.remove(section, card.id);
-  };
-
   return (
     <div className="card">
       <div
         className={`tree-row card-header${selected ? ' selected' : ''}`}
         onClick={() => setOpen(!open)}
-        onContextMenu={onContextMenu}
+        style={{ paddingLeft: 6 + depth * 14 }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onMenu(e);
+        }}
       >
         <span className="chevron">{open ? '▾' : '▸'}</span>
-        <span className="tree-label">{card.name || '（未命名）'}</span>
-        <button
-          className="icon-btn card-edit"
-          title="編輯"
-          onClick={(e) => {
-            e.stopPropagation(); // 避免同時觸發「展開／收起」
-            ops.open(section, card.id);
-          }}
-        >
-          ✏️
-        </button>
+        {renaming ? (
+          <NameInput initial={card.name} onSubmit={onRename} onClose={onRenameClose} />
+        ) : (
+          <span className="tree-label">{card.name || '（未命名）'}</span>
+        )}
+        {!renaming && (
+          <button
+            className="icon-btn card-edit"
+            title="編輯"
+            onClick={(e) => {
+              e.stopPropagation(); // 避免同時觸發「展開／收起」
+              ops.open(section, card.id);
+            }}
+          >
+            ✏️
+          </button>
+        )}
       </div>
 
       {open && (
-        <div className="card-body">
+        <div className="card-body" style={{ paddingLeft: 30 + depth * 14 }}>
           {card.fields.map((f, i) =>
             f.collapsed ? (
               // 收合欄位：只顯示名稱，點了才展開內容

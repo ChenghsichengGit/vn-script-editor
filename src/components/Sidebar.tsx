@@ -1,16 +1,20 @@
 import { Fragment, useRef, useState } from 'react';
-import type { FileOps, Layout } from '../App';
+import type { FileOps, FolderOps, Layout } from '../App';
 import { dragWith } from '../App';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId } from '../model';
 import { sectionMeta } from '../sampleData';
+import { folderBase, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
 import ContextMenu from './ContextMenu';
+import NameInput from './NameInput';
 
 interface Props {
   layout: Layout;
   onLayoutChange: (patch: Partial<Layout>) => void;
-  files: Record<string, { name: string }>;
+  files: Record<string, { name: string; folder: string }>;
   fileOps: FileOps;
+  folders: Record<SectionId, string[]>;
+  folderOps: FolderOps;
   cards: Record<CardSectionId, Card[]>;
   cardOps: CardOps;
   activeTab: string | null;
@@ -20,6 +24,27 @@ interface Props {
 const MIN_HEIGHT = 60; // 每個展開區塊最矮多高
 const FILLER_MIN_HEIGHT = 120; // 填滿用的區塊最矮多高（要和 styles.css 的 .section.filler 一致）
 const DEFAULT_HEIGHT = 200; // 還沒調整過的區塊預設高度（像素）
+const INDENT = 14; // 每深一層資料夾縮排多少像素
+
+// 樹狀列的左邊距：資料夾和設定卡有 ▸ 箭頭；劇本檔案沒有，所以多推一個箭頭的寬度，讓檔名和資料夾名對齊
+const rowPad = (depth: number, hasChevron: boolean) => (hasChevron ? 6 : 22) + depth * INDENT;
+const byName = (a: string, b: string) => a.localeCompare(b, 'zh-Hant');
+
+// 右鍵選單對準的目標
+type MenuTarget =
+  | { kind: 'file'; id: string }
+  | { kind: 'card'; section: CardSectionId; id: string }
+  | { kind: 'folder'; section: SectionId; folder: string };
+
+// 正在顯示輸入框的位置：新增（在 parent 資料夾底下新增項目或資料夾），或幫某個東西改名
+type Editing =
+  | { mode: 'create'; section: SectionId; parent: string; what: 'item' | 'folder' }
+  | { mode: 'rename'; kind: 'file'; id: string }
+  | { mode: 'rename'; kind: 'card'; section: CardSectionId; id: string }
+  | { mode: 'rename'; kind: 'folder'; section: SectionId; folder: string };
+
+// 摺疊狀態的 key（預設全部展開，所以記的是「被摺起來」的資料夾）
+const folderKey = (section: SectionId, folder: string) => `${section}:${folder}`;
 
 // 側邊欄：把開著的區塊上下疊起來
 // 每個區塊拖到多高就固定多高；只有「最下面的區塊」會伸縮填滿剩下的空間
@@ -30,11 +55,43 @@ export default function Sidebar(props: Props) {
   // 每個區塊的「全部展開／全部收起」訊號：tick 每按一次加 1，卡片看到變化就跟著切換
   const [bulk, setBulk] = useState<Partial<Record<SectionId, { show: boolean; tick: number }>>>({});
 
-  // 檔案的右鍵選單（記著位置和是哪個檔案）、以及正在改名的檔案
-  const [menu, setMenu] = useState<{ x: number; y: number; fileId: string } | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
+  // 右鍵選單（記著位置和對象）、以及正在顯示的名稱輸入框（新增／改名）
+  const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
+  // 被摺起來的資料夾
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const filler = layout.open[layout.open.length - 1]; // 負責填滿空間的那一塊
+
+  const toggleFolder = (section: SectionId, folder: string) =>
+    setCollapsed((c) => {
+      const next = new Set(c);
+      const key = folderKey(section, folder);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+
+  // 開始新增：目標資料夾自動展開，並在那裡顯示輸入框
+  const startCreate = (section: SectionId, parent: string, what: 'item' | 'folder') => {
+    setCollapsed((c) => {
+      const next = new Set(c);
+      next.delete(folderKey(section, parent));
+      return next;
+    });
+    setEditing({ mode: 'create', section, parent, what });
+  };
+
+  // 資料夾改名後，它（和底下各層）的摺疊記號跟著換成新路徑
+  const remapCollapsed = (section: SectionId, oldPath: string, newPath: string) =>
+    setCollapsed((c) => {
+      const oldKey = folderKey(section, oldPath);
+      const newKey = folderKey(section, newPath);
+      const next = new Set<string>();
+      for (const key of c) {
+        next.add(key === oldKey || key.startsWith(oldKey + '/') ? newKey + key.slice(oldKey.length) : key);
+      }
+      return next;
+    });
 
   // 拖曳第 index 條分隔線：改變上方區塊的高度
   // 下方如果是填滿用的區塊，它會自動吸收差額；如果是固定高度的，就一增一減
@@ -61,6 +118,173 @@ export default function Sidebar(props: Props) {
     });
   };
 
+  // 右鍵選單的項目
+  const menuItems = (t: MenuTarget) => {
+    if (t.kind === 'file') {
+      return [
+        { label: '重新命名', onClick: () => setEditing({ mode: 'rename', kind: 'file', id: t.id }) },
+        {
+          label: '刪除',
+          onClick: () => {
+            if (window.confirm(`要刪除「${props.files[t.id].name}」嗎？`)) props.fileOps.remove(t.id);
+          },
+        },
+      ];
+    }
+    if (t.kind === 'card') {
+      return [
+        { label: '重新命名', onClick: () => setEditing({ mode: 'rename', kind: 'card', section: t.section, id: t.id }) },
+        {
+          label: '刪除',
+          onClick: () => {
+            const card = props.cards[t.section].find((c) => c.id === t.id);
+            if (card && window.confirm(`要刪除「${card.name}」嗎？`)) props.cardOps.remove(t.section, t.id);
+          },
+        },
+      ];
+    }
+    return [
+      {
+        label: t.section === 'files' ? '新增檔案' : `新增${sectionMeta[t.section].title}`,
+        onClick: () => startCreate(t.section, t.folder, 'item'),
+      },
+      { label: '新增資料夾', onClick: () => startCreate(t.section, t.folder, 'folder') },
+      {
+        label: '重新命名',
+        onClick: () => setEditing({ mode: 'rename', kind: 'folder', section: t.section, folder: t.folder }),
+      },
+      {
+        label: '刪除',
+        onClick: () => {
+          if (window.confirm(`要刪除資料夾「${folderBase(t.folder)}」以及裡面所有的內容嗎？`)) {
+            void props.folderOps.remove(t.section, t.folder);
+          }
+        },
+      },
+    ];
+  };
+
+  const openMenu = (e: React.MouseEvent, target: MenuTarget) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, target });
+  };
+
+  // 畫出某個區塊的某個資料夾裡的內容：先子資料夾、再項目，各自依名稱排序；子資料夾遞迴處理
+  const renderLevel = (section: SectionId, folder: string, depth: number, sectionBulk: { show: boolean; tick: number }) => {
+    const subs = props.folders[section]
+      .filter((f) => parentFolder(f) === folder)
+      .sort((a, b) => byName(folderBase(a), folderBase(b)));
+    const creating = editing?.mode === 'create' && editing.section === section && editing.parent === folder ? editing : null;
+
+    // 新增用的輸入框：資料夾的排在子資料夾群的最上面，檔案／設定卡的排在項目群的最上面
+    const createRow = (what: 'item' | 'folder') => {
+      if (creating?.what !== what) return null;
+      const chevron = what === 'folder' || section !== 'files'; // 劇本檔案的列沒有箭頭
+      return (
+        <div className="tree-row" style={{ paddingLeft: rowPad(depth, chevron) }}>
+          {chevron && <span className="chevron">▸</span>}
+          <NameInput
+            onSubmit={(name) => {
+              if (what === 'folder') return props.folderOps.create(section, folder, name);
+              return section === 'files' ? props.fileOps.add(folder, name) : props.cardOps.add(section, folder, name);
+            }}
+            onClose={() => setEditing(null)}
+          />
+        </div>
+      );
+    };
+
+    // 這個資料夾直接包含的項目
+    let items: React.ReactNode;
+    if (section === 'files') {
+      items = Object.entries(props.files)
+        .filter(([, f]) => f.folder === folder)
+        .sort(([, a], [, b]) => byName(a.name, b.name))
+        .map(([fileId, file]) => {
+          const renaming = editing?.mode === 'rename' && editing.kind === 'file' && editing.id === fileId;
+          const dot = file.name.lastIndexOf('.');
+          return (
+            <div
+              key={fileId}
+              className={`tree-row${props.activeTab === fileId ? ' selected' : ''}`}
+              style={{ paddingLeft: rowPad(depth, false) }}
+              onClick={() => props.onOpenFile(fileId)}
+              onContextMenu={(e) => openMenu(e, { kind: 'file', id: fileId })}
+            >
+              {renaming ? (
+                <NameInput
+                  initial={file.name}
+                  selectTo={dot > 0 ? dot : undefined} // 一開始只選副檔名前面的部分
+                  onSubmit={(name) => props.fileOps.rename(fileId, name)}
+                  onClose={() => setEditing(null)}
+                />
+              ) : (
+                <span className="tree-label">{file.name}</span>
+              )}
+            </div>
+          );
+        });
+    } else {
+      items = props.cards[section]
+        .filter((c) => (c.folder ?? '') === folder)
+        .sort((a, b) => byName(a.name, b.name))
+        .map((card) => (
+          <CardItem
+            key={card.id}
+            section={section}
+            card={card}
+            ops={props.cardOps}
+            bulk={sectionBulk}
+            selected={props.activeTab === cardTabId(section, card.id)}
+            depth={depth}
+            onMenu={(e) => openMenu(e, { kind: 'card', section, id: card.id })}
+            renaming={editing?.mode === 'rename' && editing.kind === 'card' && editing.id === card.id}
+            onRename={(name) => props.cardOps.rename(section, card.id, name)}
+            onRenameClose={() => setEditing(null)}
+          />
+        ));
+    }
+
+    return (
+      <>
+        {createRow('folder')}
+        {subs.map((sub) => {
+          const open = !collapsed.has(folderKey(section, sub));
+          const renaming =
+            editing?.mode === 'rename' && editing.kind === 'folder' && editing.section === section && editing.folder === sub;
+          return (
+            <Fragment key={sub}>
+              <div
+                className="tree-row"
+                style={{ paddingLeft: rowPad(depth, true) }}
+                onClick={() => toggleFolder(section, sub)}
+                onContextMenu={(e) => openMenu(e, { kind: 'folder', section, folder: sub })}
+              >
+                <span className="chevron">{open ? '▾' : '▸'}</span>
+                {renaming ? (
+                  <NameInput
+                    initial={folderBase(sub)}
+                    onSubmit={async (name) => {
+                      const err = await props.folderOps.rename(section, sub, name);
+                      if (!err) remapCollapsed(section, sub, joinFolder(parentFolder(sub), name.trim()));
+                      return err;
+                    }}
+                    onClose={() => setEditing(null)}
+                  />
+                ) : (
+                  <span className="tree-label">{folderBase(sub)}</span>
+                )}
+              </div>
+              {open && renderLevel(section, sub, depth + 1, sectionBulk)}
+            </Fragment>
+          );
+        })}
+        {createRow('item')}
+        {items}
+      </>
+    );
+  };
+
   return (
     <aside className="sidebar" style={{ width: layout.width }}>
       {layout.open.map((id, i) => {
@@ -74,18 +298,11 @@ export default function Sidebar(props: Props) {
               ref={(el) => (sectionEls.current[id] = el)}
               style={id !== filler ? { height: layout.sizes[id] ?? DEFAULT_HEIGHT } : undefined}
             >
-              {/* 區塊標題列：檔案區塊只有＋，設定卡區塊還多一個全部展開／收起 */}
+              {/* 區塊標題列：新增檔案（設定卡）、新增資料夾；設定卡區塊還多一個全部展開／收起 */}
               <div className="section-header">
                 <span className="section-title">{meta.title}</span>
-                {id === 'files' && (
-                  <span className="section-actions">
-                    <button className="icon-btn" title="新增劇本" onClick={props.fileOps.add}>
-                      ＋
-                    </button>
-                  </span>
-                )}
-                {id !== 'files' && (
-                  <span className="section-actions">
+                <span className="section-actions">
+                  {id !== 'files' && (
                     <button
                       className="icon-btn"
                       title={sectionBulk.show ? '全部收起' : '全部展開'}
@@ -93,105 +310,26 @@ export default function Sidebar(props: Props) {
                     >
                       {sectionBulk.show ? '⊟' : '⊞'}
                     </button>
-                    <button className="icon-btn" title={`新增${meta.title}`} onClick={() => props.cardOps.add(id)}>
-                      ＋
-                    </button>
-                  </span>
-                )}
+                  )}
+                  <button
+                    className="icon-btn wide"
+                    title={id === 'files' ? '新增檔案' : `新增${meta.title}`}
+                    onClick={() => startCreate(id, '', 'item')}
+                  >
+                    {id === 'files' ? '📄' : meta.icon}＋
+                  </button>
+                  <button className="icon-btn wide" title="新增資料夾" onClick={() => startCreate(id, '', 'folder')}>
+                    📁＋
+                  </button>
+                </span>
               </div>
 
-              <div className="section-body">
-                {id === 'files'
-                  ? Object.entries(props.files).map(([fileId, file]) => (
-                      <div
-                        key={fileId}
-                        className={`tree-row${props.activeTab === fileId ? ' selected' : ''}`}
-                        style={{ paddingLeft: 22 }}
-                        onClick={() => props.onOpenFile(fileId)}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setMenu({ x: e.clientX, y: e.clientY, fileId });
-                        }}
-                      >
-                        {renamingId === fileId ? (
-                          <RenameInput
-                            name={file.name}
-                            onCommit={(name) => {
-                              props.fileOps.rename(fileId, name);
-                              setRenamingId(null);
-                            }}
-                            onCancel={() => setRenamingId(null)}
-                          />
-                        ) : (
-                          <span className="tree-label">{file.name}</span>
-                        )}
-                      </div>
-                    ))
-                  : props.cards[id].map((card) => (
-                      <CardItem
-                        key={card.id}
-                        section={id}
-                        card={card}
-                        ops={props.cardOps}
-                        bulk={sectionBulk}
-                        selected={props.activeTab === cardTabId(id, card.id)}
-                      />
-                    ))}
-              </div>
+              <div className="section-body">{renderLevel(id, '', 0, sectionBulk)}</div>
             </div>
           </Fragment>
         );
       })}
-      {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          onClose={() => setMenu(null)}
-          items={[
-            { label: '重新命名', onClick: () => setRenamingId(menu.fileId) },
-            {
-              label: '刪除',
-              onClick: () => {
-                const name = props.files[menu.fileId].name;
-                if (window.confirm(`要刪除「${name}」嗎？`)) props.fileOps.remove(menu.fileId);
-              },
-            },
-          ]}
-        />
-      )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} items={menuItems(menu.target)} />}
     </aside>
-  );
-}
-
-// 改名用的輸入框：Enter 或離開輸入框就確定，Esc 取消
-function RenameInput(props: { name: string; onCommit: (name: string) => void; onCancel: () => void }) {
-  const [value, setValue] = useState(props.name);
-  // 確定或取消後輸入框會消失並觸發 blur，用這個旗標避免重複處理
-  const finished = useRef(false);
-
-  const finish = (commit: boolean) => {
-    if (finished.current) return;
-    finished.current = true;
-    if (commit) props.onCommit(value);
-    else props.onCancel();
-  };
-
-  // 一開始選取副檔名前面的部分，直接打字就能改檔名
-  const dot = props.name.lastIndexOf('.');
-
-  return (
-    <input
-      className="rename-input"
-      value={value}
-      autoFocus
-      onFocus={(e) => e.currentTarget.setSelectionRange(0, dot > 0 ? dot : props.name.length)}
-      onChange={(e) => setValue(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') finish(true);
-        else if (e.key === 'Escape') finish(false);
-      }}
-      onBlur={() => finish(true)}
-    />
   );
 }

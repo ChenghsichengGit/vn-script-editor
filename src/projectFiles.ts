@@ -2,21 +2,24 @@
 //
 // 資料夾結構：
 //   <project>/project.json   {"name": "...", "version": 1}
-//   <project>/劇本/*.vns|txt|md
-//   <project>/角色/*.md  世界觀/*.md  指令/*.md   （設定卡：YAML front matter + Markdown 內文）
+//   <project>/劇本/**/*.vns|txt|md
+//   <project>/角色/**/*.md  世界觀/**/*.md  指令/**/*.md   （設定卡：YAML front matter + Markdown 內文）
+//   每個區塊底下可以有任意層的子資料夾；檔案／卡片屬於哪個資料夾由位置決定，不寫進 YAML
 
 import { dump, load } from 'js-yaml';
-import { Card, CardSectionId, Field } from './model';
+import { Card, CardSectionId, Field, SectionId } from './model';
 
 export interface ScriptFile {
   name: string; // 含副檔名，例如 "第一章.vns"
   content: string;
+  folder: string; // 所在子資料夾（相對於「劇本」資料夾，用 "/" 分隔；'' = 區塊根目錄）
 }
 
 export interface ProjectData {
   name: string; // 取自 project.json，沒有就用資料夾名稱
   files: Record<string, ScriptFile>; // key = 記憶體中的 id
-  cards: Record<CardSectionId, Card[]>; // card.id = 記憶體中的 id
+  cards: Record<CardSectionId, Card[]>; // card.id = 記憶體中的 id；card.folder = 所在子資料夾
+  folders: Record<SectionId, string[]>; // 每個區塊裡所有的子資料夾（含空的、含巢狀的每一層），例如 "第一章"、"第一章/場景1"
 }
 
 // ───────────────────────── 路徑 ─────────────────────────
@@ -71,11 +74,32 @@ const SECTIONS = Object.keys(CARD_DIRS) as CardSectionId[];
 const SCRIPT_EXT = /\.(vns|txt|md)$/i;
 
 // 去掉 Windows 不允許的字元與控制字元，結尾的點與空白也不行；空字串給預設名稱
-function sanitizeName(raw: string): string {
+export function sanitizeName(raw: string): string {
   // eslint-disable-next-line no-control-regex
   const s = raw.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/[. ]+$/, '');
   return s.trim() === '' ? '未命名' : s;
 }
+
+// 新增／改名時檢查名稱能不能用（和 sanitizeName 不同：這裡直接拒絕，讓使用者自己改）
+// 回傳錯誤訊息；沒問題回傳 null
+export function validateName(raw: string): string | null {
+  const s = raw.trim();
+  if (s === '') return '請輸入名稱';
+  // eslint-disable-next-line no-control-regex
+  if (/[\\/:*?"<>|\u0000-\u001f]/.test(s)) return '名稱不能包含 \\ / : * ? " < > |';
+  if (/[. ]+$/.test(s)) return '名稱結尾不能是點或空白';
+  return null;
+}
+
+// 資料夾路徑（"A/B"）的上一層（"A"）、最後一段（"B"），以及接上新的一段
+export const parentFolder = (folder: string) => folder.slice(0, Math.max(0, folder.lastIndexOf('/')));
+export const folderBase = (folder: string) => folder.slice(folder.lastIndexOf('/') + 1);
+export const joinFolder = (parent: string, name: string) => (parent ? `${parent}/${name}` : name);
+// folder 是不是 ancestor 本身，或在它底下的任何一層
+export const isInFolder = (folder: string, ancestor: string) => folder === ancestor || folder.startsWith(ancestor + '/');
+
+// 劇本檔名沒有副檔名就補 .vns（有任何副檔名都照使用者打的）
+export const withScriptExt = (name: string) => (/\.[^./\\]+$/.test(name) ? name : name + '.vns');
 
 // 一個前後都有 "---" 的 YAML 區塊，後面可接內文
 const FRONT_MATTER = /^﻿?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
@@ -136,33 +160,54 @@ async function removeFile(path: string): Promise<void> {
   if (await window.api.exists(path)) await window.api.remove(path);
 }
 
-// 列出資料夾內符合條件的檔案（忽略子資料夾）；資料夾不存在就是空清單
-async function listFiles(
+// 遞迴讀一個區塊的資料夾：收集所有子資料夾（含空的）和符合條件的檔案（含內容）
+// 以 "." 開頭的資料夾（例如 .git）略過；找不到區塊資料夾就是空的
+async function scanTree(
   dirPath: string,
   accept: (name: string) => boolean,
-): Promise<{ name: string; text: string }[]> {
-  const out: { name: string; text: string }[] = [];
+): Promise<{ folders: string[]; files: { folder: string; name: string; text: string }[] }> {
+  const out = { folders: [] as string[], files: [] as { folder: string; name: string; text: string }[] };
   if (!(await window.api.exists(dirPath))) return out;
-  for (const entry of await window.api.listDir(dirPath)) {
-    if (entry.kind !== 'file' || !accept(entry.name)) continue;
-    out.push({ name: entry.name, text: await window.api.readText(joinPath(dirPath, entry.name)) });
-  }
-  // 依檔名排序，讓每次開啟的順序固定
-  out.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+
+  const walk = async (abs: string, rel: string) => {
+    const entries = await window.api.listDir(abs);
+    // 依名稱排序，讓每次開啟的順序固定
+    entries.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+    for (const entry of entries) {
+      if (entry.kind === 'directory') {
+        if (entry.name.startsWith('.')) continue;
+        const sub = joinFolder(rel, entry.name);
+        out.folders.push(sub);
+        await walk(joinPath(abs, entry.name), sub);
+      } else if (accept(entry.name)) {
+        out.files.push({ folder: rel, name: entry.name, text: await window.api.readText(joinPath(abs, entry.name)) });
+      }
+    }
+  };
+  await walk(dirPath, '');
   return out;
 }
 
 let idCounter = 0;
 const newId = () => `${Date.now().toString(36)}${(idCounter++).toString(36)}`;
 
+// 每個區塊在專案資料夾底下的資料夾名稱
+const sectionDir = (section: SectionId) => (section === 'files' ? SCRIPT_DIR : CARD_DIRS[section]);
+
+// 記憶體 id → 目前在硬碟上的位置（所在子資料夾 + 檔名）
+interface Loc {
+  folder: string;
+  name: string;
+}
+
 // ───────────────────────── ProjectStore ─────────────────────────
 
 export class ProjectStore {
   readonly root: string; // 專案資料夾的絕對路徑
 
-  // 記憶體 id → 目前在硬碟上的檔名；只有這裡登記過的檔案，我們才會去刪
-  private fileNames = new Map<string, string>();
-  private cardNames: Record<CardSectionId, Map<string, string>> = {
+  // 每個區塊的 id → 硬碟位置；只有這裡登記過的檔案，我們才會去刪／搬
+  private locs: Record<SectionId, Map<string, Loc>> = {
+    files: new Map(),
     characters: new Map(),
     world: new Map(),
     commands: new Map(),
@@ -173,6 +218,11 @@ export class ProjectStore {
 
   private constructor(root: string) {
     this.root = root;
+  }
+
+  // 某區塊某個子資料夾的絕對路徑（folder = '' 就是區塊根目錄）
+  private dirPath(section: SectionId, folder: string): string {
+    return folder ? joinPath(this.root, sectionDir(section), folder) : joinPath(this.root, sectionDir(section));
   }
 
   static async open(root: string): Promise<{ store: ProjectStore; data: ProjectData }> {
@@ -187,25 +237,31 @@ export class ProjectStore {
       // 沒有或壞掉的 project.json：沿用資料夾名稱
     }
 
+    const folders = { files: [], characters: [], world: [], commands: [] } as ProjectData['folders'];
+
     // 劇本
     const files: Record<string, ScriptFile> = {};
-    for (const f of await listFiles(joinPath(root, SCRIPT_DIR), (n) => SCRIPT_EXT.test(n))) {
+    const scripts = await scanTree(joinPath(root, SCRIPT_DIR), (n) => SCRIPT_EXT.test(n));
+    folders.files = scripts.folders;
+    for (const f of scripts.files) {
       const id = newId();
-      files[id] = { name: f.name, content: f.text };
-      store.fileNames.set(id, f.name);
+      files[id] = { name: f.name, content: f.text, folder: f.folder };
+      store.locs.files.set(id, { folder: f.folder, name: f.name });
     }
 
     // 三種設定卡
     const cards = { characters: [], world: [], commands: [] } as ProjectData['cards'];
     for (const section of SECTIONS) {
-      for (const f of await listFiles(joinPath(root, CARD_DIRS[section]), (n) => /\.md$/i.test(n))) {
+      const tree = await scanTree(joinPath(root, CARD_DIRS[section]), (n) => /\.md$/i.test(n));
+      folders[section] = tree.folders;
+      for (const f of tree.files) {
         const id = newId();
-        cards[section].push(parseCard(id, f.name, f.text));
-        store.cardNames[section].set(id, f.name);
+        cards[section].push({ ...parseCard(id, f.name, f.text), folder: f.folder });
+        store.locs[section].set(id, { folder: f.folder, name: f.name });
       }
     }
 
-    return { store, data: { name, files, cards } };
+    return { store, data: { name, files, cards, folders } };
   }
 
   static async create(root: string, name: string): Promise<{ store: ProjectStore; data: ProjectData }> {
@@ -223,11 +279,13 @@ export class ProjectStore {
     return run;
   }
 
-  // 在 names 裡找一個不與「其他項目」衝突的檔名，衝突就加 " 2"、" 3"…
+  // 在「同一個資料夾」裡找一個不與其他項目衝突的檔名，衝突就加 " 2"、" 3"…
   // Windows 檔名不分大小寫，所以比對時一律轉小寫
-  private uniqueName(names: Map<string, string>, selfId: string, wanted: string, ext: string): string {
+  private uniqueName(section: SectionId, selfId: string, folder: string, wanted: string, ext: string): string {
     const taken = new Set<string>();
-    for (const [id, n] of names) if (id !== selfId) taken.add(n.toLowerCase());
+    for (const [id, loc] of this.locs[section]) {
+      if (id !== selfId && loc.folder === folder) taken.add(loc.name.toLowerCase());
+    }
     if (!taken.has(wanted.toLowerCase())) return wanted;
     const stem = ext && wanted.toLowerCase().endsWith(ext.toLowerCase()) ? wanted.slice(0, -ext.length) : wanted;
     for (let i = 2; ; i++) {
@@ -236,25 +294,26 @@ export class ProjectStore {
     }
   }
 
-  // 寫入檔案；檔名有變就改名：優先用真正的 rename（保留檔案本身），
+  // 寫入檔案；位置（資料夾或檔名）有變就搬／改名：優先用真正的 rename（保留檔案本身），
   // 失敗（例如舊檔其實已不在）就退回「先寫新檔、再刪舊檔」，中途失敗也不會丟資料
   private async writeAndRename(
-    dirPath: string,
-    names: Map<string, string>,
+    section: SectionId,
     id: string,
+    folder: string,
     newName: string,
     text: string,
   ): Promise<void> {
-    const oldName = names.get(id);
-    const newPath = joinPath(dirPath, newName);
+    const locs = this.locs[section];
+    const old = locs.get(id);
+    const newPath = joinPath(this.dirPath(section, folder), newName);
 
-    if (oldName === undefined || oldName === newName) {
+    if (old === undefined || (old.folder === folder && old.name === newName)) {
       await window.api.writeText(newPath, text);
-      names.set(id, newName);
+      locs.set(id, { folder, name: newName });
       return;
     }
 
-    const oldPath = joinPath(dirPath, oldName);
+    const oldPath = joinPath(this.dirPath(section, old.folder), old.name);
     let renamed = false;
     try {
       await window.api.rename(oldPath, newPath);
@@ -263,46 +322,86 @@ export class ProjectStore {
       // 改名失敗：下面退回寫新檔再刪舊檔
     }
     await window.api.writeText(newPath, text);
-    names.set(id, newName);
+    locs.set(id, { folder, name: newName });
     // 只差大小寫時在 Windows 是同一個檔案，刪掉舊名等於刪掉剛寫的，所以跳過
-    if (!renamed && oldName.toLowerCase() !== newName.toLowerCase()) await removeFile(oldPath);
+    if (!renamed && oldPath.toLowerCase() !== newPath.toLowerCase()) await removeFile(oldPath);
   }
 
   saveFile(id: string, file: ScriptFile): Promise<void> {
     return this.enqueue(async () => {
-      const dirPath = joinPath(this.root, SCRIPT_DIR);
       const wanted = sanitizeName(file.name);
       // 撞名時把 " 2" 插在副檔名前面
-      const name = this.uniqueName(this.fileNames, id, wanted, /\.[^.]*$/.exec(wanted)?.[0] ?? '');
-      await this.writeAndRename(dirPath, this.fileNames, id, name, file.content);
+      const name = this.uniqueName('files', id, file.folder, wanted, /\.[^.]*$/.exec(wanted)?.[0] ?? '');
+      await this.writeAndRename('files', id, file.folder, name, file.content);
     });
   }
 
   deleteFile(id: string): Promise<void> {
     return this.enqueue(async () => {
-      const old = this.fileNames.get(id);
+      const old = this.locs.files.get(id);
       if (old === undefined) return; // 從沒存過也沒載入過：硬碟上沒有對應檔案
-      await removeFile(joinPath(this.root, SCRIPT_DIR, old));
-      this.fileNames.delete(id);
+      await removeFile(joinPath(this.dirPath('files', old.folder), old.name));
+      this.locs.files.delete(id);
     });
   }
 
   saveCard(section: CardSectionId, card: Card): Promise<void> {
     return this.enqueue(async () => {
-      const dirPath = joinPath(this.root, CARD_DIRS[section]);
-      const names = this.cardNames[section];
-      const name = this.uniqueName(names, card.id, sanitizeName(card.name) + '.md', '.md');
-      await this.writeAndRename(dirPath, names, card.id, name, serializeCard(card));
+      const folder = card.folder ?? '';
+      const name = this.uniqueName(section, card.id, folder, sanitizeName(card.name) + '.md', '.md');
+      await this.writeAndRename(section, card.id, folder, name, serializeCard(card));
     });
   }
 
   deleteCard(section: CardSectionId, id: string): Promise<void> {
     return this.enqueue(async () => {
-      const names = this.cardNames[section];
-      const old = names.get(id);
+      const old = this.locs[section].get(id);
       if (old === undefined) return;
-      await removeFile(joinPath(this.root, CARD_DIRS[section], old));
-      names.delete(id);
+      await removeFile(joinPath(this.dirPath(section, old.folder), old.name));
+      this.locs[section].delete(id);
+    });
+  }
+
+  // ── 資料夾（立即執行，不經過自動存檔）──
+
+  // 在 parent 底下建立子資料夾 name，回傳新資料夾的路徑；已經存在就丟錯
+  createFolder(section: SectionId, parent: string, name: string): Promise<string> {
+    return this.enqueue(async () => {
+      const rel = joinFolder(parent, name);
+      const abs = this.dirPath(section, rel);
+      if (await window.api.exists(abs)) throw new Error('已經有同名的項目');
+      await window.api.mkdir(abs);
+      return rel;
+    });
+  }
+
+  // 資料夾改名，回傳新路徑；裡面所有檔案／卡片的位置一併更新，之後存檔就會存到新位置
+  renameFolder(section: SectionId, folder: string, newName: string): Promise<string> {
+    return this.enqueue(async () => {
+      const newRel = joinFolder(parentFolder(folder), newName);
+      const oldAbs = this.dirPath(section, folder);
+      const newAbs = this.dirPath(section, newRel);
+      // 只差大小寫時 exists 會回報「有」（其實是自己），這種情況直接改
+      if (folder.toLowerCase() !== newRel.toLowerCase() && (await window.api.exists(newAbs))) {
+        throw new Error('已經有同名的項目');
+      }
+      await window.api.rename(oldAbs, newAbs);
+      for (const loc of this.locs[section].values()) {
+        if (isInFolder(loc.folder, folder)) loc.folder = newRel + loc.folder.slice(folder.length);
+      }
+      return newRel;
+    });
+  }
+
+  // 連同裡面所有內容一起刪除，並把裡面的檔案從登記中拿掉
+  deleteFolder(section: SectionId, folder: string): Promise<void> {
+    return this.enqueue(async () => {
+      if (folder === '') throw new Error('不能刪除區塊的根目錄');
+      const abs = this.dirPath(section, folder);
+      if (await window.api.exists(abs)) await window.api.remove(abs, { recursive: true });
+      for (const [id, loc] of [...this.locs[section]]) {
+        if (isInFolder(loc.folder, folder)) this.locs[section].delete(id);
+      }
     });
   }
 }
