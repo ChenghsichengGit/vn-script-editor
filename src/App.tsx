@@ -7,7 +7,7 @@ import EditorDock, { EditorDockHandle } from './components/EditorDock';
 import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId, parseCardTab } from './model';
-import { sectionMeta, sectionOrder } from './sampleData';
+import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
   FLOAT_DEFAULT_H,
   FLOAT_DEFAULT_W,
@@ -621,7 +621,7 @@ export default function App() {
 
   const tabLabel = (tabId: string) => {
     const ref = parseCardTab(tabId);
-    if (!ref) return files[tabId]?.name ?? '';
+    if (!ref) return files[tabId] ? `${fileIcon(files[tabId].name)} ${files[tabId].name}` : '';
     return `${sectionMeta[ref.section].icon} ${findCard(ref.section, ref.id)?.name || '（未命名）'}`;
   };
 

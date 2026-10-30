@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { FileOps, FolderOps } from '../App';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId } from '../model';
-import { sectionMeta } from '../sampleData';
+import { fileIcon, sectionMeta } from '../sampleData';
 import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
 import ContextMenu from './ContextMenu';
@@ -268,6 +268,7 @@ export default function SectionPanel(props: Props) {
       return (
         <div className="tree-row" style={{ paddingLeft: rowPad(depth, chevron) }}>
           {chevron && <span className="chevron">▸</span>}
+          <span className="tree-icon">{what === 'folder' ? '📁' : section === 'files' ? '🎬' : meta.icon}</span>
           <NameInput
             onSubmit={(name) => {
               if (what === 'folder') return props.folderOps.create(section, folder, name);
@@ -298,6 +299,7 @@ export default function SectionPanel(props: Props) {
               {...dragSource({ kind: 'file', id: fileId }, file.name)}
               {...dropTarget(folder)}
             >
+              <span className="tree-icon">{fileIcon(file.name)}</span>
               {renaming ? (
                 <NameInput
                   initial={file.name}
@@ -351,6 +353,7 @@ export default function SectionPanel(props: Props) {
                 {...dropTarget(sub, true)}
               >
                 <span className="chevron">{open ? '▾' : '▸'}</span>
+                <span className="tree-icon">{open ? '📂' : '📁'}</span>
                 {renaming ? (
                   <NameInput
                     initial={folderBase(sub)}

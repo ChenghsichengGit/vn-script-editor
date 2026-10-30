@@ -226,6 +226,8 @@ body.dragging, body.dragging * { user-select: none; }
 .tree-row.selected { background: var(--bg-selected); }
 .chevron { width: 14px; flex-shrink: 0; text-align: center; color: var(--text-dim); }
 .tree-label { flex-shrink: 0; }
+/* 名稱前面的類型圖示：固定寬度，名稱才會對齊 */
+.tree-icon { width: 18px; flex-shrink: 0; margin-right: 4px; text-align: center; font-size: 12px; }
 /* 先命名的輸入框：錯誤訊息浮在輸入框正下方（紅字），不推開下面的列 */
 .name-input-wrap { position: relative; flex: 1; min-width: 0; display: block; }
 .name-input-wrap .rename-input { width: 100%; box-sizing: border-box; height: 20px; }

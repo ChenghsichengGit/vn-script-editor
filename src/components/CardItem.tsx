@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardOps, CardSectionId } from '../model';
+import { sectionMeta } from '../sampleData';
 import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
 
@@ -48,6 +49,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         }}
       >
         <span className="chevron">{open ? '▾' : '▸'}</span>
+        <span className="tree-icon">{sectionMeta[section].icon}</span>
         {renaming ? (
           <NameInput initial={card.name} onSubmit={onRename} onClose={onRenameClose} />
         ) : (

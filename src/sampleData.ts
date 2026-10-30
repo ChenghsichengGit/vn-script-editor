@@ -10,6 +10,14 @@ export const sectionMeta: Record<SectionId, { title: string; icon: string; newNa
 };
 export const sectionOrder: SectionId[] = ['files', 'characters', 'world', 'commands'];
 
+// 劇本區塊裡的檔案：依副檔名決定圖示
+export function fileIcon(name: string): string {
+  const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'vns') return '🎬';
+  if (ext === 'md') return '📝';
+  return '📄';
+}
+
 // 劇本檔案的初始資料：id → 檔名和內容（執行時由 App 的 state 管理，可新增／改名／刪除）
 export const scriptFiles: Record<string, { name: string; content: string }> = {
   ch1: {
