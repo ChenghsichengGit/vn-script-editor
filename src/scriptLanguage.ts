@@ -73,13 +73,12 @@ function parseParam(token: string): Param {
   return { kind: 'literal', text: token };
 }
 
-// 參數顯示在提示色塊裡的文字：可以不填的加上方括號
+// 參數顯示在提示色塊裡的文字：有類型的寫成 (int)time，可以不填的加上方括號（不顯示預設值）
 function paramLabel(p: Param) {
   if (p.kind === 'choice') return p.options.join('/');
   if (p.kind === 'literal') return p.text;
-  if (p.def !== undefined) return `[${p.name}=${p.def}]`;
-  if (p.optional) return `[${p.name}?]`;
-  return p.type ? `${p.name}:${p.type}` : p.name;
+  const core = p.type ? `(${p.type})${p.name}` : p.name;
+  return p.optional ? `[${core}]` : core;
 }
 
 // 一行用法拆成「格式」和「說明」：在方括號外面的第一個冒號（：或 :）切開
@@ -205,9 +204,9 @@ function paramChoices(u: Usage, p: Param): Choice[] {
   return p.def !== undefined ? [{ label: p.def, detail: '預設值' }] : [];
 }
 
-// 檢查參數類型：某一段不符合任何寫法，而且那個位置要求的都是數字時，畫紅色波浪線
-const TYPE_NAME: Record<ParamType, string> = { int: '整數', float: '數字', text: '文字' };
-
+// 檢查參數，有問題就畫紅色波浪線：
+//   某一段對不上任何寫法（固定字、選項填錯、類型不對、多填）→ 那一段標「參數錯誤」
+//   全部填對了但還缺必填的參數 → 指令名稱標「缺少參數」
 function validate(model: monaco.editor.ITextModel) {
   const markers: monaco.editor.IMarkerData[] = [];
   if (model.getLanguageId() === LANGUAGE_ID) {
@@ -221,26 +220,30 @@ function validate(model: monaco.editor.ITextModel) {
       re.lastIndex = line.indent + line.name.length;
       const parts: { word: string; start: number }[] = [];
       for (let m = re.exec(text); m; m = re.exec(text)) parts.push({ word: m[0], start: m.index });
+      const mark = (message: string, start: number, length: number) =>
+        markers.push({
+          severity: monaco.MarkerSeverity.Error,
+          message,
+          startLineNumber: n,
+          endLineNumber: n,
+          startColumn: start + 1,
+          endColumn: start + length + 1,
+        });
+      let wrong = false;
       for (let i = 0; i < parts.length; i++) {
         const prefix = parts.slice(0, i).map((p) => p.word);
-        const candidates = matchUsages(cmd, prefix).filter((u) => u.params[i]);
-        if (candidates.some((u) => accepts(u.params[i], parts[i].word))) continue;
-        const types = candidates.map((u) => {
-          const p = u.params[i];
-          return p.kind === 'ref' && (p.type === 'int' || p.type === 'float') ? p.type : null;
-        });
-        if (types.length > 0 && types.every(Boolean)) {
-          markers.push({
-            severity: monaco.MarkerSeverity.Error,
-            message: `這裡要填${TYPE_NAME[types[0]!]}`,
-            startLineNumber: n,
-            endLineNumber: n,
-            startColumn: parts[i].start + 1,
-            endColumn: parts[i].start + parts[i].word.length + 1,
-          });
-        }
+        if (matchUsages(cmd, prefix).some((u) => u.params[i] && accepts(u.params[i], parts[i].word))) continue;
+        mark('參數錯誤', parts[i].start, parts[i].word.length);
+        wrong = true;
         break; // 後面的段落已經對不上任何寫法，不再檢查
       }
+      if (wrong) continue;
+      // 有沒有一種寫法，剩下沒填的參數都是可以不填的
+      const words = parts.map((p) => p.word);
+      const complete = matchUsages(cmd, words).some((u) =>
+        u.params.slice(words.length).every((p) => p.kind === 'ref' && p.optional),
+      );
+      if (!complete) mark('缺少參數', line.indent, line.name.length);
     }
   }
   monaco.editor.setModelMarkers(model, LANGUAGE_ID, markers);
@@ -248,7 +251,7 @@ function validate(model: monaco.editor.ITextModel) {
 
 // 參數提示：指令還缺哪些參數，就在那一行最後面畫灰色小色塊（填完就消失）
 // 還有好幾種寫法符合時：大家一樣的位置照常顯示，從開始不一樣的位置起顯示「a/b …」
-function missingLabel(text: string): { label: string; pad: boolean } | null {
+function missingLabel(text: string): string | null {
   const line = parseLine(text);
   const cmd = line && findCommand(line.name);
   if (!line || !cmd) return null;
@@ -271,11 +274,30 @@ function missingLabel(text: string): { label: string; pad: boolean } | null {
     }
     labels.push(distinct[0]);
   }
-  return labels.length > 0 ? { label: labels.join('  '), pad: !line.endsWithSpace } : null;
+  return labels.length > 0 ? labels.join('  ') : null;
 }
 
 // 每個劇本目前畫上去的提示色塊（下次重算時要先拿掉舊的）
 const hintIds = new WeakMap<monaco.editor.ITextModel, string[]>();
+
+// 提示色塊是用 CSS 的 ::after 畫出來的，不是插進那一行的文字：游標位置才不會被它推到後面
+// 每種提示文字對應一個 class（vns-h0、vns-h1…），第一次用到時加一條 CSS 規則
+const hintClasses = new Map<string, string>();
+let hintSheet: CSSStyleSheet | null = null;
+function hintClass(label: string) {
+  let cls = hintClasses.get(label);
+  if (!cls) {
+    if (!hintSheet) {
+      const style = document.createElement('style');
+      document.head.appendChild(style);
+      hintSheet = style.sheet!;
+    }
+    cls = `vns-h${hintClasses.size}`;
+    hintClasses.set(label, cls);
+    hintSheet.insertRule(`.monaco-editor .${cls}::after { content: ${JSON.stringify(label)}; }`);
+  }
+  return cls;
+}
 
 function showHints(model: monaco.editor.ITextModel) {
   const decorations: monaco.editor.IModelDeltaDecoration[] = [];
@@ -286,13 +308,10 @@ function showHints(model: monaco.editor.ITextModel) {
       const hint = missingLabel(text);
       if (!hint) continue;
       const end = text.length + 1;
-      const cls = ['vns-hint', hint.pad ? 'vns-hint-pad' : '', text !== full ? 'vns-hint-before-comment' : ''].filter(Boolean).join(' ');
+      const cls = ['vns-hint', hintClass(hint), text !== full ? 'vns-hint-before-comment' : ''].filter(Boolean).join(' ');
       decorations.push({
         range: new monaco.Range(n, end, n, end),
-        options: {
-          showIfCollapsed: true,
-          after: { content: hint.label, inlineClassName: cls },
-        },
+        options: { showIfCollapsed: true, afterContentClassName: cls },
       });
     }
   }
