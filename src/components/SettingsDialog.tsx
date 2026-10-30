@@ -144,6 +144,20 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             <Toggle checked={s.wordWrap} onChange={(v) => updateSettings({ wordWrap: v })} />
           </Row>
           <Row label="小地圖" hint="右側的縮圖">
+            {/* 大小：小／中／大 = 放大 1／2／3 倍；關掉小地圖時不能選 */}
+            <div className="settings-segment">
+              {([1, 2, 3] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={s.minimapScale === n ? 'on' : ''}
+                  disabled={!s.minimap}
+                  onClick={() => updateSettings({ minimapScale: n })}
+                >
+                  {['小', '中', '大'][n - 1]}
+                </button>
+              ))}
+            </div>
             <Toggle checked={s.minimap} onChange={(v) => updateSettings({ minimap: v })} />
           </Row>
 

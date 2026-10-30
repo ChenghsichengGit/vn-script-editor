@@ -8,6 +8,7 @@ export interface Settings {
   scriptFontFamily: string; // 劇本編輯器的字型，空白 = 預設
   wordWrap: boolean; // 劇本自動換行
   minimap: boolean; // 劇本右側的小地圖
+  minimapScale: 1 | 2 | 3; // 小地圖的放大倍數（小／中／大）
   cardFontSize: number; // 設定卡編輯畫面的內文大小
   autoSave: boolean; // 關掉後只有 Ctrl+S 才存檔
 }
@@ -22,6 +23,7 @@ export const defaultSettings: Settings = {
   scriptFontFamily: '',
   wordWrap: true,
   minimap: true,
+  minimapScale: 2,
   cardFontSize: 15,
   autoSave: true,
 };
@@ -49,6 +51,7 @@ function normalize(raw: unknown): Settings {
     scriptFontFamily: typeof r.scriptFontFamily === 'string' ? r.scriptFontFamily : d.scriptFontFamily,
     wordWrap: bool(r.wordWrap, d.wordWrap),
     minimap: bool(r.minimap, d.minimap),
+    minimapScale: r.minimapScale === 1 || r.minimapScale === 2 || r.minimapScale === 3 ? r.minimapScale : d.minimapScale,
     cardFontSize: clamp('cardFontSize', r.cardFontSize, d.cardFontSize),
     autoSave: bool(r.autoSave, d.autoSave),
   };

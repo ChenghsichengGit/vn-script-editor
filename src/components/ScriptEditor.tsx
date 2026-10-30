@@ -83,7 +83,12 @@ export default function ScriptEditor(props: Props) {
         fontSize: settings.scriptFontSize,
         lineHeight: Math.round(settings.scriptFontSize * 1.75), // 行距跟著字的大小等比例
         wordWrap: settings.wordWrap ? 'on' : 'off',
-        minimap: { enabled: settings.minimap },
+        minimap: { enabled: settings.minimap, scale: settings.minimapScale },
+        // 左邊的空白會跟著字體變寬，所以盡量收窄：行號先留 3 位數（超過會自動變寬）、
+        // 不要放中斷點的符號欄、行號和文字之間的間距縮小；摺疊箭頭保留，之後分段可以用
+        lineNumbersMinChars: 3,
+        glyphMargin: false,
+        lineDecorationsWidth: 6,
         automaticLayout: true, // 容器大小改變時跟著重新排版（不然縮放後會變很窄、小地圖消失）
       }}
     />
