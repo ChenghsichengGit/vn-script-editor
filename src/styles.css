@@ -26,7 +26,7 @@ html, body, #root {
 
 /* 整體：上面是主區域，下面固定一條狀態列 */
 .app { display: grid; grid-template-rows: 1fr 22px; height: 100%; }
-.main { display: flex; min-height: 0; }
+.main { display: flex; min-height: 0; position: relative; } /* position：浮動面板和放置提示以它為準 */
 
 /* 活動列 */
 .activity-bar {
@@ -78,6 +78,64 @@ html, body, #root {
 .section-sash { height: 4px; flex-shrink: 0; margin: -1px 0; border-top: 1px solid var(--border); cursor: row-resize; position: relative; z-index: 1; }
 .section-sash:hover { background: var(--accent); border-color: var(--accent); }
 body.dragging, body.dragging * { user-select: none; }
+
+/* 拖曳搬移檔案／資料夾：目標資料夾（或區塊空白處 = 根目錄）加藍色框線與淡藍底 */
+.tree-row.drop-target { background: rgba(0, 122, 204, 0.25); outline: 1px solid var(--accent); outline-offset: -1px; }
+.section-body.drop-target { background: rgba(0, 122, 204, 0.12); outline: 1px solid var(--accent); outline-offset: -1px; }
+
+/* 浮動面板：蓋在主區域上的一層。這層不擋滑鼠，只有面板本身接收 */
+.float-layer { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
+.float-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+.float-panel .section.floating { flex: 1 1 0; min-height: 0; }
+/* 標題列同時是視窗的標題列：可以按住拖動 */
+.section.floating .section-header { background: var(--bg-tab); cursor: move; }
+.float-handle { position: absolute; z-index: 2; }
+.float-handle.n, .float-handle.s { left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.float-handle.e, .float-handle.w { top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; }
+.float-handle.n { top: -3px; }
+.float-handle.s { bottom: -3px; }
+.float-handle.e { right: -3px; }
+.float-handle.w { left: -3px; }
+.float-handle.ne, .float-handle.nw, .float-handle.se, .float-handle.sw { width: 12px; height: 12px; }
+.float-handle.ne { top: -3px; right: -3px; cursor: nesw-resize; }
+.float-handle.nw { top: -3px; left: -3px; cursor: nwse-resize; }
+.float-handle.se { bottom: -3px; right: -3px; cursor: nwse-resize; }
+.float-handle.sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
+
+/* 拖曳整個區塊時的提示（都是 fixed／不擋滑鼠） */
+.section-header { cursor: grab; }
+.drop-line { position: fixed; z-index: 100; background: var(--accent); pointer-events: none; }
+.drop-zone {
+  position: fixed;
+  z-index: 100;
+  background: rgba(0, 122, 204, 0.25);
+  border: 2px solid var(--accent);
+  pointer-events: none;
+}
+/* 沒有側邊欄的那一邊，拖曳時露出的放置區 */
+.dock-zone { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 30; pointer-events: none; background: rgba(0, 122, 204, 0.08); }
+.dock-zone.left { left: 48px; }
+.dock-zone.right { right: 0; }
+.dock-zone.hot { background: rgba(0, 122, 204, 0.3); }
+.drag-ghost {
+  position: fixed;
+  z-index: 110;
+  padding: 3px 10px;
+  font-size: 12px;
+  background: var(--bg-selected);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  pointer-events: none;
+  white-space: nowrap;
+}
 
 /* 小按鈕 */
 .icon-btn {

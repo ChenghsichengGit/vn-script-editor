@@ -100,21 +100,7 @@ async function buildMenu() {
         { role: 'quit', label: '結束' },
       ],
     },
-    // 編輯選單提供復原／重做／剪下／複製／貼上，文字輸入框需要它
-    { role: 'editMenu' },
-    {
-      label: '檢視',
-      submenu: [
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ],
-    },
+    // 只留「檔案」選單；Windows 上複製／貼上／復原的快捷鍵不需要「編輯」選單也能用
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import ActivityBar from './components/ActivityBar';
 import Sidebar from './components/Sidebar';
+import FloatLayer from './components/FloatLayer';
+import { MoveItem, folderKey, remapFolderKeys } from './components/SectionPanel';
 import EditorTabs from './components/EditorTabs';
 import ScriptEditor from './components/ScriptEditor';
 import CardEditor from './components/CardEditor';
@@ -8,6 +10,20 @@ import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId, parseCardTab } from './model';
 import { sectionMeta, sectionOrder } from './sampleData';
+import {
+  FLOAT_DEFAULT_H,
+  FLOAT_DEFAULT_W,
+  FLOAT_MIN_H,
+  FLOAT_MIN_W,
+  LAYOUT_KEY,
+  Layout,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  Side,
+  dockSection,
+  floatSection,
+  loadLayout,
+} from './layout';
 import {
   ProjectData,
   ProjectStore,
@@ -29,23 +45,6 @@ const emptyFolders: Record<SectionId, string[]> = { files: [], characters: [], w
 const fileKey = (id: string) => `file:${id}`;
 const SAVE_DELAY = 1000; // 停止輸入多久後自動存檔（毫秒）
 
-// 側邊欄的版面（開了哪些區塊、各自多高、多寬），會記在瀏覽器裡
-export interface Layout {
-  open: SectionId[];
-  sizes: Partial<Record<SectionId, number>>;
-  width: number;
-}
-const LAYOUT_KEY = 'vn-editor-layout';
-const defaultLayout: Layout = { open: [...sectionOrder], sizes: {}, width: 300 };
-
-function loadLayout(): Layout {
-  try {
-    return { ...defaultLayout, ...JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}') };
-  } catch {
-    return defaultLayout;
-  }
-}
-
 // 劇本檔案的操作：由 App 實作，Sidebar 只負責呼叫
 // add / rename 回傳錯誤訊息（名稱不能用或重複）；成功回傳 null
 export interface FileOps {
@@ -65,7 +64,8 @@ export interface FolderOps {
 // App 是「總管」：所有狀態都存在這裡，子元件只負責顯示、把使用者的操作回報上來
 export default function App() {
   const [layout, setLayout] = useState<Layout>(loadLayout);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [leftVisible, setLeftVisible] = useState(true); // Ctrl+B 開關的是左側欄
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set()); // 被摺起來的資料夾（所有區塊共用，key 含區塊名）
   const [project, setProject] = useState<{ store: ProjectStore; name: string } | null>(null); // null = 顯示開始畫面
   const [cards, setCards] = useState(emptyCards);
   const [openTabs, setOpenTabs] = useState<string[]>([]);
@@ -242,25 +242,38 @@ export default function App() {
     }
   }, [layout]);
 
-  // ── 側邊欄 ──────────────────────────────
+  // ── 側邊欄與浮動面板 ──────────────────────────────
 
-  // 點活動列圖示：開／關那個區塊（可以同時開好幾個）
+  // 每個區塊住在哪裡：左、右、浮動（隱藏的區塊位置照樣保留）
+  const visibleIds = (ids: SectionId[]) => ids.filter((s) => !layout.hidden.includes(s));
+  const leftSections = visibleIds(layout.left.sections);
+  const rightSections = visibleIds(layout.right.sections);
+  const floatPanels = layout.floating.filter((f) => !layout.hidden.includes(f.id));
+  // 側邊欄裡沒有任何要顯示的區塊就自動收起來
+  const showLeft = leftVisible && leftSections.length > 0;
+  const showRight = rightSections.length > 0;
+  // 活動列上亮著的圖示 = 現在看得到的區塊（左側欄被 Ctrl+B 收起時，裡面的不算）
+  const activeSections = sectionOrder.filter(
+    (s) => !layout.hidden.includes(s) && (layout.left.sections.includes(s) ? leftVisible : true),
+  );
+
+  // 點活動列圖示：顯示／隱藏那個區塊，不管它現在在左、右還是浮動
+  // 要顯示的區塊如果在被收起的左側欄裡，順便把左側欄打開
   const toggleSection = (id: SectionId) => {
-    if (!sidebarVisible) {
-      setSidebarVisible(true);
-      if (!layout.open.includes(id)) setLayout({ ...layout, open: sortSections([...layout.open, id]) });
-      return;
+    if (activeSections.includes(id)) {
+      setLayout((l) => ({ ...l, hidden: [...l.hidden, id] }));
+    } else {
+      setLayout((l) => ({ ...l, hidden: l.hidden.filter((s) => s !== id) }));
+      if (layout.left.sections.includes(id)) setLeftVisible(true);
     }
-    const open = layout.open.includes(id) ? layout.open.filter((s) => s !== id) : sortSections([...layout.open, id]);
-    setLayout({ ...layout, open });
   };
 
-  // Ctrl+B：收起／打開整個側邊欄；Ctrl+S：立刻存檔
+  // Ctrl+B：收起／打開左側欄；Ctrl+S：立刻存檔
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        setSidebarVisible((v) => !v);
+        setLeftVisible((v) => !v);
       } else if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         flushRef.current();
@@ -270,10 +283,80 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
-  // 拖曳側邊欄右邊的線調整寬度（48 是活動列的寬度）
-  const startWidthResize = (e: React.MouseEvent) => {
+  // 拖曳側邊欄靠編輯區那一側的線調整寬度（左邊要扣掉 48 的活動列；右邊從視窗右緣算起）
+  const startWidthResize = (side: Side, e: React.MouseEvent) => {
     e.preventDefault();
-    dragWith((ev) => setLayout((l) => ({ ...l, width: Math.min(700, Math.max(180, ev.clientX - 48)) })));
+    dragWith((ev) => {
+      const w = side === 'left' ? ev.clientX - 48 : window.innerWidth - ev.clientX;
+      setLayout((l) => ({ ...l, [side]: { ...l[side], width: Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w)) } }));
+    });
+  };
+
+  // 浮動面板：改位置／大小、點一下移到最上層
+  const patchFloat = (id: SectionId, patch: Partial<Layout['floating'][number]>) =>
+    setLayout((l) => ({ ...l, floating: l.floating.map((f) => (f.id === id ? { ...f, ...patch } : f)) }));
+  const bringToFront = (id: SectionId) =>
+    setLayout((l) => {
+      const z = Math.max(0, ...l.floating.map((f) => f.z)) + 1;
+      return { ...l, floating: l.floating.map((f) => (f.id === id ? { ...f, z } : f)) };
+    });
+
+  // ── 拖曳整個區塊（標題列）：換位置／換邊／變浮動視窗 ──────────────────────────────
+  // 用滑鼠事件自己處理（不用 HTML5 拖放，才不會和檔案樹的拖曳搬移打架）
+  // 每次滑鼠移動就判斷「放開會放到哪裡」，並畫出藍色提示：
+  //   側邊欄裡 → 藍線（插入位置）；空的側邊欄 → 整條藍色邊；編輯區 → 半透明藍色（變成浮動視窗）
+  const mainRef = useRef<HTMLDivElement>(null);
+  const [panelDrag, setPanelDrag] = useState<{
+    id: SectionId;
+    ghost: boolean; // 從側邊欄拉出來的才有跟著滑鼠的標籤；浮動面板是整個視窗本身在動
+    x: number;
+    y: number;
+    hit: PanelHit | null;
+  } | null>(null);
+
+  const startPanelDrag = (id: SectionId, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const float = layout.floating.find((f) => f.id === id);
+    const layerRect = mainRef.current!.getBoundingClientRect();
+    // 浮動面板：記住滑鼠抓在面板的哪個位置，移動時保持這個相對位置
+    const grabX = float ? startX - layerRect.left - float.x : 0;
+    const grabY = float ? startY - layerRect.top - float.y : 0;
+    let started = false;
+    let hit: PanelHit | null = null;
+
+    dragWith(
+      (ev) => {
+        // 移動超過幾個像素才算開始拖，避免點一下標題列就被當成拖曳
+        if (!started && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+        started = true;
+        hit = hitTestPanel(ev.clientX, ev.clientY, id, !float);
+        if (float) {
+          // 浮動面板：即時跟著滑鼠，限制在視窗內
+          const x = Math.min(Math.max(0, ev.clientX - layerRect.left - grabX), Math.max(0, layerRect.width - float.w));
+          const y = Math.min(Math.max(0, ev.clientY - layerRect.top - grabY), Math.max(0, layerRect.height - float.h));
+          patchFloat(id, { x, y });
+        }
+        setPanelDrag({ id, ghost: !float, x: ev.clientX, y: ev.clientY, hit });
+      },
+      (ev) => {
+        setPanelDrag(null);
+        const target = hit;
+        if (!started || !target) return;
+        if (target.kind === 'dock') {
+          setLayout((l) => dockSection(l, id, target.side, target.before));
+          if (target.side === 'left') setLeftVisible(true);
+        } else if (!float) {
+          // 放在編輯區：變成浮動視窗，標題列對準滑鼠，並限制在視窗內
+          const w = Math.min(FLOAT_DEFAULT_W, layerRect.width);
+          const h = Math.min(FLOAT_DEFAULT_H, layerRect.height);
+          const x = Math.min(Math.max(0, ev.clientX - layerRect.left - 40), Math.max(0, layerRect.width - w));
+          const y = Math.min(Math.max(0, ev.clientY - layerRect.top - 12), Math.max(0, layerRect.height - h));
+          setLayout((l) => floatSection(l, id, { x, y, w: Math.max(FLOAT_MIN_W, w), h: Math.max(FLOAT_MIN_H, h) }));
+        }
+      },
+    );
   };
 
   // ── 分頁 ──────────────────────────────
@@ -477,6 +560,70 @@ export default function App() {
     },
   };
 
+  // ── 拖曳搬移（檔案／設定卡／資料夾拖進別的資料夾）──────────────────────────────
+
+  // 把 item 搬進 toFolder（'' = 區塊根目錄）。只在同一個區塊內搬；搬在硬碟上也是真的搬
+  // 所有的錯誤（同名、搬進自己底下、硬碟操作失敗）都用 alert 告訴使用者，不會半途改了畫面
+  const moveItem = async (section: SectionId, item: MoveItem, toFolder: string) => {
+    const store = latest.current.project?.store;
+    if (!store) return;
+
+    // 項目目前所在的資料夾，以及搬過去之後會占用的名稱（和 takenNames 一樣的小寫規則）
+    let from: string;
+    let name: string;
+    if (item.kind === 'folder') {
+      if (isInFolder(toFolder, item.folder)) return window.alert('不能把資料夾移到它自己或它的子資料夾裡');
+      from = parentFolder(item.folder);
+      name = folderBase(item.folder);
+    } else if (item.kind === 'file') {
+      const f = files[item.id];
+      if (!f) return;
+      from = f.folder;
+      name = f.name;
+    } else {
+      const c = findCard(section as CardSectionId, item.id);
+      if (!c) return;
+      from = c.folder ?? '';
+      name = sanitizeName(c.name) + '.md';
+    }
+    if (from === toFolder) return; // 已經在那裡
+    if (takenNames(section, toFolder).has(name.toLowerCase())) return window.alert('目標資料夾裡已經有同名的項目');
+
+    // 先把還沒存的內容存完，才不會有存檔還在用舊路徑（和資料夾改名一樣）
+    await flushRef.current();
+    try {
+      if (item.kind === 'file') {
+        await store.moveFile(item.id, toFolder);
+        setFiles((all) => ({ ...all, [item.id]: { ...all[item.id], folder: toFolder } }));
+      } else if (item.kind === 'card') {
+        await store.moveCard(section as CardSectionId, item.id, toFolder);
+        setCards((all) => ({
+          ...all,
+          [section]: all[section as CardSectionId].map((c) => (c.id === item.id ? { ...c, folder: toFolder } : c)),
+        }));
+      } else {
+        const newRel = await store.moveFolder(section, item.folder, toFolder);
+        // 資料夾本身和裡面每個檔案／卡片的路徑都換成新的前綴（和資料夾改名一樣）
+        const remap = (p: string) => (isInFolder(p, item.folder) ? newRel + p.slice(item.folder.length) : p);
+        setFolders((f) => ({ ...f, [section]: f[section].map(remap) }));
+        if (section === 'files') {
+          setFiles((all) => Object.fromEntries(Object.entries(all).map(([id, f]) => [id, { ...f, folder: remap(f.folder) }])));
+        } else {
+          setCards((all) => ({
+            ...all,
+            [section]: all[section as CardSectionId].map((c) => ({ ...c, folder: remap(c.folder ?? '') })),
+          }));
+        }
+        setCollapsed((c) => remapFolderKeys(c, section, item.folder, newRel));
+      }
+      // 目標資料夾如果是摺起來的就展開，才看得到搬進去的東西
+      const targetKey = folderKey(section, toFolder);
+      setCollapsed((c) => (c.has(targetKey) ? new Set([...c].filter((k) => k !== targetKey)) : c));
+    } catch (e) {
+      showFolderError('移動', e);
+    }
+  };
+
   // ── 決定每個分頁的標題、編輯區要顯示什麼、狀態列寫什麼 ─────────
 
   const tabLabel = (tabId: string) => {
@@ -524,25 +671,33 @@ export default function App() {
   const saveLabel =
     saveState === 'error' ? `⚠ 存檔失敗：${saveError}` : saveState === 'saving' ? '儲存中…' : dirty.size > 0 ? '尚未儲存' : '已儲存';
 
+  // 左右側邊欄和浮動面板的 SectionPanel 共用的資料與操作
+  const treeProps = {
+    files,
+    fileOps,
+    folders,
+    folderOps,
+    cards,
+    cardOps,
+    activeTab,
+    onOpenFile: openTab,
+    collapsed,
+    setCollapsed,
+    onMove: moveItem,
+    onHeaderDrag: startPanelDrag,
+  };
+  const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
+  // 拖曳整個區塊時，沒有顯示側邊欄的那一邊要先露出一條窄窄的「放這裡」區域
+  const dockZones: Side[] = panelDrag ? (['left', 'right'] as Side[]).filter((s) => !(s === 'left' ? showLeft : showRight)) : [];
+
   return (
     <div className="app">
-      <div className="main">
-        <ActivityBar active={sidebarVisible ? layout.open : []} onToggle={toggleSection} />
-        {sidebarVisible && layout.open.length > 0 && (
+      <div className="main" ref={mainRef}>
+        <ActivityBar active={activeSections} onToggle={toggleSection} />
+        {showLeft && (
           <>
-            <Sidebar
-              layout={layout}
-              onLayoutChange={(patch) => setLayout((l) => ({ ...l, ...patch }))}
-              files={files}
-              fileOps={fileOps}
-              folders={folders}
-              folderOps={folderOps}
-              cards={cards}
-              cardOps={cardOps}
-              activeTab={activeTab}
-              onOpenFile={openTab}
-            />
-            <div className="splitter" onMouseDown={startWidthResize} />
+            <Sidebar {...treeProps} side="left" sections={leftSections} layout={layout} onLayoutChange={onLayoutChange} />
+            <div className="splitter" onMouseDown={(e) => startWidthResize('left', e)} />
           </>
         )}
         <EditorTabs
@@ -557,7 +712,32 @@ export default function App() {
         >
           {content}
         </EditorTabs>
+        {showRight && (
+          <>
+            <div className="splitter" onMouseDown={(e) => startWidthResize('right', e)} />
+            <Sidebar {...treeProps} side="right" sections={rightSections} layout={layout} onLayoutChange={onLayoutChange} />
+          </>
+        )}
+        <FloatLayer {...treeProps} panels={floatPanels} onChange={patchFloat} onFront={bringToFront} />
+
+        {/* 拖曳區塊時的提示：空側邊欄的放置區 */}
+        {dockZones.map((side) => (
+          <div
+            key={side}
+            className={`dock-zone ${side}${panelDrag?.hit?.kind === 'dock' && panelDrag.hit.side === side ? ' hot' : ''}`}
+            data-dock-zone={side}
+          />
+        ))}
       </div>
+      {/* 藍線（插入位置）或藍色範圍（放進空側邊欄／變成浮動視窗），以及跟著滑鼠的標籤 */}
+      {panelDrag?.hit && (
+        <div className={panelDrag.hit.mark === 'line' ? 'drop-line' : 'drop-zone'} style={{ ...panelDrag.hit.rect }} />
+      )}
+      {panelDrag?.ghost && (
+        <div className="drag-ghost" style={{ left: panelDrag.x + 12, top: panelDrag.y + 8 }}>
+          {sectionMeta[panelDrag.id].icon} {sectionMeta[panelDrag.id].title}
+        </div>
+      )}
       <StatusBar
         left={`📁 ${project.name}　｜　${status.left}`}
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
@@ -566,20 +746,66 @@ export default function App() {
   );
 }
 
-// 區塊永遠照固定順序排（檔案 → 角色 → 世界觀 → 指令）
-const sortSections = (ids: SectionId[]) => sectionOrder.filter((s) => ids.includes(s));
-
 // 字數：不算空白和換行
 const countChars = (text: string) => text.replace(/\s/g, '').length.toLocaleString();
 
-// 拖曳的共用寫法：按下後跟著滑鼠移動，放開就停止
-export function dragWith(onMove: (ev: MouseEvent) => void) {
-  const onUp = () => {
+// 拖曳的共用寫法：按下後跟著滑鼠移動，放開就停止（onEnd 在放開時呼叫）
+export function dragWith(onMove: (ev: MouseEvent) => void, onEnd?: (ev: MouseEvent) => void) {
+  const onUp = (ev: MouseEvent) => {
     window.removeEventListener('mousemove', onMove);
     window.removeEventListener('mouseup', onUp);
     document.body.classList.remove('dragging');
+    onEnd?.(ev);
   };
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
   document.body.classList.add('dragging');
+}
+
+// 拖曳整個區塊時，滑鼠現在指著哪裡、放開會發生什麼，以及要畫在哪裡（螢幕座標）
+type Box = { left: number; top: number; width: number; height: number };
+type PanelHit =
+  | { kind: 'dock'; side: Side; before: SectionId | null; mark: 'line' | 'zone'; rect: Box } // 放進側邊欄，插在 before 前面（null = 最後）
+  | { kind: 'float'; mark: 'zone'; rect: Box }; // 變成浮動視窗
+
+const boxOf = (r: DOMRect): Box => ({ left: r.left, top: r.top, width: r.width, height: r.height });
+
+// 判斷 (x, y) 在哪個放置位置。dragId = 被拖的區塊（算插入位置時不把它自己算進去）
+// allowFloat：從側邊欄拉出來時，放在編輯區 = 變浮動視窗；浮動面板本來就浮著，所以不用
+function hitTestPanel(x: number, y: number, dragId: SectionId, allowFloat: boolean): PanelHit | null {
+  const inside = (r: DOMRect) => x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+
+  for (const side of ['left', 'right'] as Side[]) {
+    const bar = document.querySelector<HTMLElement>(`.sidebar[data-side="${side}"]`);
+    if (bar) {
+      const r = bar.getBoundingClientRect();
+      if (!inside(r)) continue;
+      // 插入位置：第一個「中線在滑鼠下方」的區塊前面；都不是就放最後
+      const panels = [...bar.querySelectorAll<HTMLElement>(':scope > .section')].filter((el) => el.dataset.section !== dragId);
+      let before: SectionId | null = null;
+      let lineY = panels.length ? panels[panels.length - 1].getBoundingClientRect().bottom : r.top;
+      for (const el of panels) {
+        const pr = el.getBoundingClientRect();
+        if (y < pr.top + pr.height / 2) {
+          before = el.dataset.section as SectionId;
+          lineY = pr.top;
+          break;
+        }
+      }
+      return { kind: 'dock', side, before, mark: 'line', rect: { left: r.left, top: lineY - 1, width: r.width, height: 3 } };
+    }
+    // 這一邊沒有側邊欄（空的或被收起）：看有沒有落在放置區
+    const zone = document.querySelector<HTMLElement>(`[data-dock-zone="${side}"]`);
+    if (zone && inside(zone.getBoundingClientRect())) {
+      return { kind: 'dock', side, before: null, mark: 'zone', rect: boxOf(zone.getBoundingClientRect()) };
+    }
+  }
+
+  if (allowFloat) {
+    const editor = document.querySelector<HTMLElement>('.editor-area');
+    if (editor && inside(editor.getBoundingClientRect())) {
+      return { kind: 'float', mark: 'zone', rect: boxOf(editor.getBoundingClientRect()) };
+    }
+  }
+  return null;
 }

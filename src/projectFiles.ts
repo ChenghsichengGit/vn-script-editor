@@ -194,6 +194,9 @@ const newId = () => `${Date.now().toString(36)}${(idCounter++).toString(36)}`;
 // 每個區塊在專案資料夾底下的資料夾名稱
 const sectionDir = (section: SectionId) => (section === 'files' ? SCRIPT_DIR : CARD_DIRS[section]);
 
+// 搬移時目標已有同名項目的錯誤訊息
+const MOVE_CONFLICT = '目標資料夾裡已經有同名的項目';
+
 // 記憶體 id → 目前在硬碟上的位置（所在子資料夾 + 檔名）
 interface Loc {
   folder: string;
@@ -359,6 +362,47 @@ export class ProjectStore {
       if (old === undefined) return;
       await removeFile(joinPath(this.dirPath(section, old.folder), old.name));
       this.locs[section].delete(id);
+    });
+  }
+
+  // ── 搬移（拖曳到別的資料夾；立即執行，不經過自動存檔）──
+
+  // 把單一檔案／卡片搬到 toFolder，檔名不變（沿用硬碟上現在的檔名）
+  // 目標已有同名項目就丟錯；還沒存過的（沒登記位置）不用搬，之後存檔自然會存到新資料夾
+  private moveItem(section: SectionId, id: string, toFolder: string): Promise<void> {
+    return this.enqueue(async () => {
+      const old = this.locs[section].get(id);
+      if (old === undefined || old.folder === toFolder) return;
+      const newPath = joinPath(this.dirPath(section, toFolder), old.name);
+      if (await window.api.exists(newPath)) throw new Error(MOVE_CONFLICT);
+      await window.api.rename(joinPath(this.dirPath(section, old.folder), old.name), newPath);
+      this.locs[section].set(id, { folder: toFolder, name: old.name });
+    });
+  }
+
+  moveFile(id: string, toFolder: string): Promise<void> {
+    return this.moveItem('files', id, toFolder);
+  }
+
+  moveCard(section: CardSectionId, id: string, toFolder: string): Promise<void> {
+    return this.moveItem(section, id, toFolder);
+  }
+
+  // 把資料夾連同裡面所有內容搬到 toParent 底下（名稱不變），回傳新路徑
+  // 不能搬進自己或自己的子資料夾；目標已有同名項目也會丟錯。裡面每個登記過的檔案位置一併更新
+  moveFolder(section: SectionId, folder: string, toParent: string): Promise<string> {
+    return this.enqueue(async () => {
+      if (folder === '') throw new Error('不能移動區塊的根目錄');
+      if (isInFolder(toParent, folder)) throw new Error('不能把資料夾移到它自己或它的子資料夾裡');
+      const newRel = joinFolder(toParent, folderBase(folder));
+      if (newRel === folder) return folder; // 本來就在那裡
+      const newAbs = this.dirPath(section, newRel);
+      if (await window.api.exists(newAbs)) throw new Error(MOVE_CONFLICT);
+      await window.api.rename(this.dirPath(section, folder), newAbs);
+      for (const loc of this.locs[section].values()) {
+        if (isInFolder(loc.folder, folder)) loc.folder = newRel + loc.folder.slice(folder.length);
+      }
+      return newRel;
     });
   }
 
