@@ -105,8 +105,7 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
   // 指令清單：收集每張指令卡的所有寫法，同名的指令（就算在不同卡）合在一起
   const byName = new Map<string, Command>();
   for (const card of cards.commands) {
-    // 舊專案的「格式」欄位也算一種寫法
-    const lines = [...linesOf(fieldOf(card, '格式')), ...linesOf(fieldOf(card, '用法'))];
+    const lines = linesOf(fieldOf(card, '用法'));
     const title = card.name.trim();
     // 卡片名稱：沒另外寫用法時就是唯一的寫法；有寫用法時，名稱只有帶參數（例如 #name [名字]）才算一種寫法
     if (lines.length === 0 || /\s/.test(title)) lines.unshift(title);
@@ -180,18 +179,27 @@ function parseLine(text: string) {
 
 const findCommand = (name: string) => commands.find((c) => c.name === name);
 
-// 這一段文字能不能填在這個參數的位置
-function accepts(p: Param, word: string) {
+// [參數] 可以填的值清單：指令卡上的同名欄位，沒有就用欄位設定裡的參數值（都沒有 = 沒有清單，填什麼都可以）
+function allowedValues(u: Usage, name: string): string[] {
+  const own = u.ownOptions.get(name);
+  if (own) return own.map((c) => c.label);
+  return (paramValues.get(name) ?? []).map((v) => v.value);
+}
+
+// 這一段文字能不能填在這個參數的位置：固定字要一樣、選項要是其中之一、
+// [參數] 有類型就檢查類型，有值清單就要是清單裡的值
+function accepts(u: Usage, p: Param, word: string) {
   if (p.kind === 'literal') return word === p.text;
   if (p.kind === 'choice') return p.options.includes(word);
-  if (p.type === 'int') return /^-?\d+$/.test(word);
-  if (p.type === 'float') return /^-?\d+(\.\d+)?$/.test(word);
-  return true;
+  if (p.type === 'int' && !/^-?\d+$/.test(word)) return false;
+  if (p.type === 'float' && !/^-?\d+(\.\d+)?$/.test(word)) return false;
+  const list = allowedValues(u, p.name);
+  return list.length === 0 || list.includes(word);
 }
 
 // 依已經填的每一段，篩出還符合的寫法
 const matchUsages = (cmd: Command, words: string[]) =>
-  cmd.usages.filter((u) => words.every((w, i) => u.params[i] && accepts(u.params[i], w)));
+  cmd.usages.filter((u) => words.every((w, i) => u.params[i] && accepts(u, u.params[i], w)));
 
 // 某個參數可以選的項目：先看指令卡自己的同名欄位，沒有才用範本裡的參數值，再沒有就給預設值
 function paramChoices(u: Usage, p: Param): Choice[] {
@@ -232,7 +240,7 @@ function validate(model: monaco.editor.ITextModel) {
       let wrong = false;
       for (let i = 0; i < parts.length; i++) {
         const prefix = parts.slice(0, i).map((p) => p.word);
-        if (matchUsages(cmd, prefix).some((u) => u.params[i] && accepts(u.params[i], parts[i].word))) continue;
+        if (matchUsages(cmd, prefix).some((u) => u.params[i] && accepts(u, u.params[i], parts[i].word))) continue;
         mark('參數錯誤', parts[i].start, parts[i].word.length);
         wrong = true;
         break; // 後面的段落已經對不上任何寫法，不再檢查
@@ -250,8 +258,9 @@ function validate(model: monaco.editor.ITextModel) {
 }
 
 // 參數提示：指令還缺哪些參數，就在那一行最後面畫灰色小色塊（填完就消失）
-// 還有好幾種寫法符合時：大家一樣的位置照常顯示，從開始不一樣的位置起顯示「a/b …」
-function missingLabel(text: string): string | null {
+// 還有好幾種寫法符合時：顯示第一種寫法剩下的參數，旁邊一個淡淡的「+N」表示另外還有 N 種
+// 只要有一種寫法剛好寫完整，就不顯示
+function missingLabel(text: string): { label: string; more: number } | null {
   const line = parseLine(text);
   const cmd = line && findCommand(line.name);
   if (!line || !cmd) return null;
@@ -262,30 +271,21 @@ function missingLabel(text: string): string | null {
     start--;
     usages = matchUsages(cmd, line.words.slice(0, -1));
   }
-  const labels: string[] = [];
-  for (let i = start; ; i++) {
-    const here = usages.filter((u) => u.params[i]);
-    if (here.length === 0) break;
-    const distinct = [...new Set(here.map((u) => paramLabel(u.params[i])))];
-    if (distinct.length > 1 || here.length < usages.length) {
-      labels.push(distinct.join('/'));
-      if (here.some((u) => u.params.length > i + 1)) labels.push('…');
-      break;
-    }
-    labels.push(distinct[0]);
-  }
-  return labels.length > 0 ? labels.join('  ') : null;
+  if (usages.length === 0 || usages.some((u) => u.params.length <= start)) return null;
+  const rests = [...new Set(usages.map((u) => u.params.slice(start).map(paramLabel).join('  ')))];
+  return { label: rests[0], more: rests.length - 1 };
 }
 
 // 每個劇本目前畫上去的提示色塊（下次重算時要先拿掉舊的）
 const hintIds = new WeakMap<monaco.editor.ITextModel, string[]>();
 
-// 提示色塊是用 CSS 的 ::after 畫出來的，不是插進那一行的文字：游標位置才不會被它推到後面
-// 每種提示文字對應一個 class（vns-h0、vns-h1…），第一次用到時加一條 CSS 規則
+// 提示色塊是用 CSS 的 ::before／::after 畫出來的，不是插進那一行的文字：游標位置才不會被它推到後面
+// 每種提示文字對應一個 class（vns-h0、vns-h1…），第一次用到時加 CSS 規則：::before = 參數提示，::after = 「+N」
 const hintClasses = new Map<string, string>();
 let hintSheet: CSSStyleSheet | null = null;
-function hintClass(label: string) {
-  let cls = hintClasses.get(label);
+function hintClass(label: string, more: number) {
+  const key = `${label}\u0000${more}`;
+  let cls = hintClasses.get(key);
   if (!cls) {
     if (!hintSheet) {
       const style = document.createElement('style');
@@ -293,8 +293,9 @@ function hintClass(label: string) {
       hintSheet = style.sheet!;
     }
     cls = `vns-h${hintClasses.size}`;
-    hintClasses.set(label, cls);
-    hintSheet.insertRule(`.monaco-editor .${cls}::after { content: ${JSON.stringify(label)}; }`);
+    hintClasses.set(key, cls);
+    hintSheet.insertRule(`.monaco-editor .${cls}::before { content: ${JSON.stringify(label)}; }`);
+    if (more > 0) hintSheet.insertRule(`.monaco-editor .${cls}::after { content: "+${more}"; }`);
   }
   return cls;
 }
@@ -308,7 +309,7 @@ function showHints(model: monaco.editor.ITextModel) {
       const hint = missingLabel(text);
       if (!hint) continue;
       const end = text.length + 1;
-      const cls = ['vns-hint', hintClass(hint), text !== full ? 'vns-hint-before-comment' : ''].filter(Boolean).join(' ');
+      const cls = ['vns-hint', hintClass(hint.label, hint.more), text !== full ? 'vns-hint-before-comment' : ''].filter(Boolean).join(' ');
       decorations.push({
         range: new monaco.Range(n, end, n, end),
         options: { showIfCollapsed: true, afterContentClassName: cls },
@@ -434,18 +435,17 @@ export function registerScriptLanguage() {
 }
 
 // ── 指令卡上的專用欄位名稱 ──────────────────────────────
-// 名稱 → 作用說明。固定的有「用法」「說明」「格式」（舊版），另外格式裡的 [參數] 同名欄位 = 那個參數的選項清單
+// 名稱 → 作用說明。固定的有「用法」「說明」，另外格式裡的 [參數] 同名欄位 = 那個參數的選項清單
 export const FIXED_COMMAND_FIELDS: { name: string; description: string }[] = [
   { name: '用法', description: '這個指令的各種寫法：一行寫一種，冒號後面是說明，例如\n#fade in [time:int=0]：淡入' },
   { name: '說明', description: '這個指令是做什麼的：會顯示在劇本的補齊清單裡' },
 ];
-const LEGACY_FORMAT = { name: '格式', description: '（舊版）指令格式；現在可以直接寫在卡片名稱，或寫在「用法」' };
 
 // 一張指令卡上，哪些欄位名稱有特別用途（含它格式裡用到的參數）
 export function commandSpecialFields(card: Card): Map<string, string> {
   const out = new Map<string, string>();
-  for (const f of [...FIXED_COMMAND_FIELDS, LEGACY_FORMAT]) out.set(f.name, f.description);
-  const lines = [card.name, ...linesOf(fieldOf(card, '格式')), ...linesOf(fieldOf(card, '用法'))];
+  for (const f of FIXED_COMMAND_FIELDS) out.set(f.name, f.description);
+  const lines = [card.name, ...linesOf(fieldOf(card, '用法'))];
   for (const line of lines) {
     const [format] = splitDescription(line);
     for (const token of format.split(/\s+/).slice(1)) {
@@ -490,4 +490,21 @@ export function bracketSuggest(value: string, caret: number) {
     .filter(([name]) => name.includes(typing))
     .map(([name, from]) => ({ label: name, detail: from.join('、'), insert: `${name}]` }));
   return { items, from: open + 1, to };
+}
+
+// ── 舊專案的「格式」欄位併進「用法」──────────────────────────────
+// 「格式」的每一行搬到「用法」最前面，然後刪掉「格式」欄位；
+// 只有指令名稱、沒有參數的行（例如 #fade），在「用法」已經有其他寫法時直接丟掉（不然 #fade 單獨也會變成合法寫法）
+// 回傳整理後的卡；沒有「格式」欄位的卡回傳 null（不用改）
+export function migrateFormatField(card: Card): Card | null {
+  const format = card.fields.find((f) => f.key === '格式');
+  if (!format) return null;
+  const usage = linesOf(fieldOf(card, '用法'));
+  const moved = linesOf(format.value).filter((l) => usage.length === 0 || /\s/.test(splitDescription(l)[0]));
+  const merged = [...moved, ...usage.filter((l) => !moved.includes(l))].join('\n');
+  const rest = card.fields.filter((f) => f.key !== '格式');
+  const fields = rest.some((f) => f.key === '用法')
+    ? rest.map((f) => (f.key === '用法' ? { ...f, value: merged } : f))
+    : [{ key: '用法', value: merged }, ...rest];
+  return { ...card, fields };
 }

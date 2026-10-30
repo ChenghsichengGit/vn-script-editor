@@ -507,8 +507,8 @@ body.dragging, body.dragging * { user-select: none; }
 .card-editor input.cmd-name { color: var(--cmd-name); }
 
 /* 劇本行尾的參數提示色塊（指令還缺哪些參數） */
-/* 文字由 ::after 的 content 決定（每種提示一個 class，見 scriptLanguage.ts 的 hintClass） */
-.monaco-editor .vns-hint::after {
+/* 文字由 ::before（參數提示）和 ::after（+N 還有幾種寫法）的 content 決定，見 scriptLanguage.ts 的 hintClass */
+.monaco-editor .vns-hint::before {
   color: #a0a0a0;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
@@ -517,7 +517,15 @@ body.dragging, body.dragging * { user-select: none; }
   font-size: 0.9em;
   white-space: pre;
 }
-.monaco-editor .vns-hint-before-comment::after { margin-right: 6px; }
+.monaco-editor .vns-hint::after {
+  color: #808080;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-left: 4px;
+  font-size: 0.75em;
+}
+.monaco-editor .vns-hint-before-comment { margin-right: 6px; }
 /* 補齊清單選中項目右邊的「展開說明」小箭頭：不顯示（要看說明可以按 Ctrl+Space） */
 .monaco-editor .suggest-widget .readMore { display: none !important; }
 

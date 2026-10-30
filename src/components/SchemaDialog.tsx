@@ -165,7 +165,7 @@ export default function SchemaDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="schema-panel" role="dialog" aria-label={`${title}的欄位設定`}>
+      <div className="schema-panel" spellCheck={false} role="dialog" aria-label={`${title}的欄位設定`}>
         <div className="schema-header">
           <span className="schema-title">
             {title}的欄位設定

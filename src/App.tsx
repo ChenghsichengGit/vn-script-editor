@@ -22,7 +22,7 @@ import {
   parseCardTab,
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
-import { FIXED_COMMAND_FIELDS, setScriptData } from './scriptLanguage';
+import { FIXED_COMMAND_FIELDS, migrateFormatField, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
   FLOAT_DEFAULT_H,
@@ -203,11 +203,28 @@ export default function App() {
     setFiles(Object.fromEntries(ids.map((id) => [id, { name: data.files[id].name, folder: data.files[id].folder }])));
     setFolders(data.folders);
     setContents(Object.fromEntries(ids.map((id) => [id, data.files[id].content])));
-    setCards(data.cards);
-    setSchemas(data.schemas);
+    // 舊專案：指令卡的「格式」欄位併進「用法」，改過的卡標成還沒存（自動存檔會寫回去）
+    const migrated: string[] = [];
+    const commands = data.cards.commands.map((card) => {
+      const next = migrateFormatField(card);
+      if (!next) return card;
+      migrated.push(cardTabId('commands', card.id));
+      return next;
+    });
+    setCards({ ...data.cards, commands });
+    // 欄位設定也一起：拿掉「格式」，沒有「用法」就補在最前面
+    let nextSchemas = data.schemas;
+    const cmdFields = data.schemas.commands.fields;
+    if (cmdFields.some((f) => f.key === '格式')) {
+      const kept = cmdFields.filter((f) => f.key !== '格式');
+      const fields = kept.some((f) => f.key === '用法') ? kept : [{ key: '用法' }, ...kept];
+      nextSchemas = { ...data.schemas, commands: { ...data.schemas.commands, fields } };
+      store.saveSchemas(nextSchemas).catch(reportError);
+    }
+    setSchemas(nextSchemas);
     setOrder(data.order);
     setActiveTab(null);
-    setDirty(new Set());
+    setDirty(new Set(migrated));
     setSaveState('saved');
     setProject({ store, name: data.name });
   };

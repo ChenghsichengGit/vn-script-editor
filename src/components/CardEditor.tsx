@@ -41,7 +41,7 @@ export default function CardEditor({
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const has = new Set(card.fields.map((f) => f.key));
     const item = (n: string) => ({ label: n, disabled: has.has(n), onClick: () => addField(n) });
-    const params = [...special.keys()].filter((n) => n !== '格式' && !FIXED_COMMAND_FIELDS.some((f) => f.name === n));
+    const params = [...special.keys()].filter((n) => !FIXED_COMMAND_FIELDS.some((f) => f.name === n));
     setAddMenu({
       x: box.left,
       y: box.bottom + 2,
@@ -157,7 +157,8 @@ export default function CardEditor({
   };
 
   return (
-    <div className="card-editor">
+    // spellCheck 關掉：瀏覽器的英文拼字檢查會在 time:int 這種字底下畫紅線，跟劇本的錯誤提示搞混
+    <div className="card-editor" spellCheck={false}>
       <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="card-editor-inner">
           {isCommand ? (
