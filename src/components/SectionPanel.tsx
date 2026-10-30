@@ -18,7 +18,8 @@ const byName = (a: string, b: string) => a.localeCompare(b, 'zh-Hant');
 type MenuTarget =
   | { kind: 'file'; id: string }
   | { kind: 'card'; section: CardSectionId; id: string }
-  | { kind: 'folder'; section: SectionId; folder: string };
+  | { kind: 'folder'; section: SectionId; folder: string }
+  | { kind: 'root' }; // 標題列或空白處：區塊的最上層
 
 // 正在顯示輸入框的位置：新增（在 parent 資料夾底下新增項目或資料夾），或幫某個東西改名
 type Editing =
@@ -187,6 +188,19 @@ export default function SectionPanel(props: Props) {
   // ── 右鍵選單 ──────────────────────────────
 
   const menuItems = (t: MenuTarget) => {
+    if (t.kind === 'root') {
+      const items = [
+        { label: id === 'files' ? '新增檔案' : `新增${meta.title}`, onClick: () => startCreate('', 'item') },
+        { label: '新增資料夾', onClick: () => startCreate('', 'folder') },
+      ];
+      if (id !== 'files') {
+        items.push({
+          label: bulk.show ? '全部收起' : '全部展開',
+          onClick: () => setBulk((b) => ({ show: !b.show, tick: b.tick + 1 })),
+        });
+      }
+      return items;
+    }
     if (t.kind === 'file') {
       return [
         { label: '重新命名', onClick: () => setEditing({ mode: 'rename', kind: 'file', id: t.id }) },
@@ -233,6 +247,7 @@ export default function SectionPanel(props: Props) {
 
   const openMenu = (e: React.MouseEvent, target: MenuTarget) => {
     e.preventDefault();
+    e.stopPropagation(); // 列上的右鍵不要再傳到外層空白處，否則會被換成「最上層」的選單
     setMenu({ x: e.clientX, y: e.clientY, target });
   };
 
@@ -373,6 +388,7 @@ export default function SectionPanel(props: Props) {
         onMouseDown={(e) => {
           if (e.button === 0 && !(e.target as HTMLElement).closest('button')) props.onHeaderDrag(id, e);
         }}
+        onContextMenu={(e) => openMenu(e, { kind: 'root' })}
       >
         <span className="section-title">{meta.title}</span>
         <span className="section-actions">
@@ -402,6 +418,7 @@ export default function SectionPanel(props: Props) {
       <div
         className={`section-body${dropFolder === '' ? ' drop-target' : ''}`}
         {...dropTarget('')}
+        onContextMenu={(e) => openMenu(e, { kind: 'root' })}
         onDragLeave={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
             setDropFolder(null);
