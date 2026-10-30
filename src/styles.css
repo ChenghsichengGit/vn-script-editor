@@ -515,6 +515,7 @@ body.dragging, body.dragging * { user-select: none; }
   font-size: 0.9em;
 }
 .monaco-editor .vns-hint-pad { margin-left: 6px; }
+.monaco-editor .vns-hint-before-comment { margin-right: 6px; }
 /* 補齊清單選中項目右邊的「展開說明」小箭頭：不顯示（要看說明可以按 Ctrl+Space） */
 .monaco-editor .suggest-widget .readMore { display: none !important; }
 

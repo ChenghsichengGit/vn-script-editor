@@ -16,6 +16,7 @@
 //   in/out 或 in|out      = 固定選項，只能選其中一個
 //   其他文字              = 照抄的固定字
 // 指令要寫在一行的開頭（前面可以有空白），參數之間用空白分開
+// // 到行尾是註解：綠色，指令會忽略它（Ctrl+/ 可以整行加上或拿掉）
 import * as monaco from 'monaco-editor';
 import { Card, CardSectionId, Schemas } from './model';
 import { sectionMeta } from './sampleData';
@@ -164,8 +165,14 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
 
 // 拆開一行指令：沒有寫指令就回傳 null
 // words = 指令名稱後面已經寫的每一段；endsWithSpace = 最後一段後面是不是已經打了空白（正在等下一個參數）
+// 一行裡 // 前面的部分（// 到行尾是註解，指令不看它）
+const codeOf = (text: string) => {
+  const i = text.indexOf('//');
+  return i < 0 ? text : text.slice(0, i);
+};
+
 function parseLine(text: string) {
-  const m = /^(\s*)(#\S*)(.*)$/.exec(text);
+  const m = /^(\s*)(#\S*)(.*)$/.exec(codeOf(text));
   if (!m) return null;
   const rest = m[3];
   const words = rest.split(/\s+/).filter(Boolean);
@@ -205,7 +212,7 @@ function validate(model: monaco.editor.ITextModel) {
   const markers: monaco.editor.IMarkerData[] = [];
   if (model.getLanguageId() === LANGUAGE_ID) {
     for (let n = 1; n <= model.getLineCount(); n++) {
-      const text = model.getLineContent(n);
+      const text = codeOf(model.getLineContent(n));
       const line = parseLine(text);
       const cmd = line && findCommand(line.name);
       if (!line || !cmd) continue;
@@ -274,15 +281,17 @@ function showHints(model: monaco.editor.ITextModel) {
   const decorations: monaco.editor.IModelDeltaDecoration[] = [];
   if (model.getLanguageId() === LANGUAGE_ID) {
     for (let n = 1; n <= model.getLineCount(); n++) {
-      const text = model.getLineContent(n);
+      const full = model.getLineContent(n);
+      const text = codeOf(full); // 有註解時，提示畫在註解前面
       const hint = missingLabel(text);
       if (!hint) continue;
       const end = text.length + 1;
+      const cls = ['vns-hint', hint.pad ? 'vns-hint-pad' : '', text !== full ? 'vns-hint-before-comment' : ''].filter(Boolean).join(' ');
       decorations.push({
         range: new monaco.Range(n, end, n, end),
         options: {
           showIfCollapsed: true,
-          after: { content: hint.label, inlineClassName: hint.pad ? 'vns-hint vns-hint-pad' : 'vns-hint' },
+          after: { content: hint.label, inlineClassName: cls },
         },
       });
     }
@@ -307,11 +316,16 @@ export function registerScriptLanguage() {
 
   // 上色：行首的 #指令 一個顏色，後面的參數另一個顏色
   // （這套上色規則是從每行開頭比對：開頭是 #xxx 就整行拆成「空白／指令／參數」三段，否則整行是一般文字）
+  // Ctrl+/ 加上或拿掉每行開頭的 //
+  monaco.languages.setLanguageConfiguration(LANGUAGE_ID, { comments: { lineComment: '//' } });
+
   monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, {
     tokenizer: {
       root: [
-        [/(\s*)(#\S*)(.*)/, ['', 'command', 'argument']],
-        [/.+/, ''],
+        // 每行從開頭比對：// 到行尾是註解；開頭是 #xxx 就拆成「空白／指令／參數」（參數到 // 為止）；其他是一般文字（也是到 // 為止）
+        [/\/\/.*/, 'comment'],
+        [/(\s*)(#(?:[^\s/]|\/(?!\/))*)((?:[^/]|\/(?!\/))*)/, ['', 'command', 'argument']],
+        [/(?:[^/]|\/(?!\/))+/, ''],
       ],
     },
   });
@@ -321,6 +335,7 @@ export function registerScriptLanguage() {
     rules: [
       { token: 'command', foreground: 'C586C0', fontStyle: 'bold' },
       { token: 'argument', foreground: '9CDCFE' },
+      { token: 'comment', foreground: '6A9955' },
     ],
     colors: {},
   });
@@ -330,6 +345,7 @@ export function registerScriptLanguage() {
     triggerCharacters: ['#', ' '],
     provideCompletionItems(model, position) {
       const before = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
+      if (before.includes('//')) return { suggestions: [] }; // 在註解裡
       const line = parseLine(before);
       if (!line) return { suggestions: [] };
 
