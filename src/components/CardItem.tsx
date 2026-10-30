@@ -18,6 +18,19 @@ interface Props {
   rowProps?: React.HTMLAttributes<HTMLDivElement>; // 標題列額外的屬性：拖曳搬移用（draggable、dragstart、dragover…）
 }
 
+// 卡片名稱；指令卡的名稱是指令格式：第一段 #指令 和後面的參數分別上色
+function CardName({ section, name }: { section: CardSectionId; name: string }) {
+  if (!name) return <span className="tree-label">（未命名）</span>;
+  if (section !== 'commands') return <span className="tree-label">{name}</span>;
+  const [head, ...rest] = name.split(' ');
+  return (
+    <span className="tree-label cmd-format" title={name}>
+      <span className="cmd-name">{head}</span>
+      {rest.length > 0 && <span className="cmd-arg"> {rest.join(' ')}</span>}
+    </span>
+  );
+}
+
 // 側邊欄裡的一張設定卡（只能看，不能改）
 // 點整列：展開／收起（欄位和詳細內容）；✏️：在分頁開啟編輯；右鍵：選單（重新命名／刪除）
 export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps }: Props) {
@@ -53,7 +66,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         {renaming ? (
           <NameInput initial={card.name} onSubmit={onRename} onClose={onRenameClose} />
         ) : (
-          <span className="tree-label">{card.name || '（未命名）'}</span>
+          <CardName section={section} name={card.name} />
         )}
         {!renaming && (
           <button

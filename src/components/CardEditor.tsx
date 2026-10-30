@@ -6,12 +6,15 @@ import Outline, { Heading } from './Outline';
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
 // 側邊欄只是預覽，所有修改都在這裡做
 // lockedKeys = 這個區塊欄位範本裡的欄位：名稱不能改、不能刪（要改請到「欄位設定」）
+// isCommand = 指令卡：名稱就是指令格式，用等寬字和指令的顏色顯示
 export default function CardEditor({
   card,
+  isCommand,
   lockedKeys,
   onChange,
 }: {
   card: Card;
+  isCommand: boolean;
   lockedKeys: string[];
   onChange: (patch: Partial<Card>) => void;
 }) {
@@ -81,9 +84,9 @@ export default function CardEditor({
       <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="card-editor-inner">
           <input
-            className="card-editor-name"
+            className={`card-editor-name${isCommand ? ' cmd-format cmd-name' : ''}`}
             value={card.name}
-            placeholder="名稱"
+            placeholder={isCommand ? '#指令 [參數]' : '名稱'}
             onChange={(e) => onChange({ name: e.target.value })}
           />
 

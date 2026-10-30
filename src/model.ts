@@ -37,11 +37,11 @@ export type Schemas = Record<CardSectionId, SectionSchema>;
 // 欄位設定視窗交回來的結果：from = 這個欄位原本的名稱（新加的沒有），用來把舊卡片上的欄位跟著改名
 export type SchemaEdit = SchemaField & { from?: string };
 
-// 新專案（或舊專案沒有範本時）的預設範本：指令區塊固定有「格式」和「說明」
+// 新專案（或舊專案沒有範本時）的預設範本：指令卡的名稱就是指令格式，另外固定有「用法」（多種寫法時一行一種）和「說明」
 export const defaultSchemas = (): Schemas => ({
   characters: { fields: [] },
   world: { fields: [] },
-  commands: { fields: [{ key: '格式' }, { key: '說明' }] },
+  commands: { fields: [{ key: '用法' }, { key: '說明' }] },
 });
 
 // 讓一張卡符合範本：範本欄位依範本順序排在最前面（已有的保留內容，缺的補空白），其他欄位接在後面

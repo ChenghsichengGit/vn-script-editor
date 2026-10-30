@@ -1,11 +1,19 @@
-// 劇本（.vns）的語言功能：指令上色、打 # 自動補齊、選參數、參數提示的灰色小色塊
+// 劇本（.vns）的語言功能：指令上色、打指令時自動補齊、選參數、參數提示的灰色小色塊、參數類型錯誤的紅色波浪線
 //
-// 指令定義來自「指令」區塊的卡：「格式」欄位寫成 #name [名字]、#fade in|out 這樣
-//   第一段 #xxx           = 指令名稱
+// 指令定義來自「指令」區塊的卡。卡片名稱就是指令格式，例如 #name [名字]
+// 同一個指令有好幾種寫法時，在「用法」欄位一行寫一種（冒號後面是說明）：
+//   #fade in [time:int=0]：淡入
+//   #fade default [color] [time:int=0]：淡到指定顏色
+// 打劇本時會依前面已經填的值，篩出還符合的寫法，再列出下一個位置可以填什麼（層數不限）
+//
+// 每一段的意思：
+//   #xxx                  = 指令名稱（每行的第一段）
 //   [名字]                = 參數。可以選的值依序找：
 //                             1. 同一張指令卡上有沒有叫「名字」的欄位：一行一個選項，「in：淡入」冒號後面是說明
 //                             2. 欄位範本裡「指令參數」設成「名字」的欄位（或卡片名稱）的內容
-//   in/out 或 in|out      = 固定選項，只能選其中一個（選項少的時候直接寫在格式裡）
+//   [time:int]            = 限定類型的參數：int 整數、float 小數、text 文字
+//   [time:int=0]、[note?] = 可以不填的參數（= 後面是不填時的預設值）
+//   in/out 或 in|out      = 固定選項，只能選其中一個
 //   其他文字              = 照抄的固定字
 // 指令要寫在一行的開頭（前面可以有空白），參數之間用空白分開
 import * as monaco from 'monaco-editor';
@@ -14,8 +22,10 @@ import { sectionMeta } from './sampleData';
 
 export const LANGUAGE_ID = 'vns';
 
+type ParamType = 'int' | 'float' | 'text';
+
 type Param =
-  | { kind: 'ref'; name: string } // [名字]
+  | { kind: 'ref'; name: string; type?: ParamType; optional: boolean; def?: string } // [名字]、[time:int=0]
   | { kind: 'choice'; options: string[] } // in|out
   | { kind: 'literal'; text: string }; // 固定字
 
@@ -25,11 +35,17 @@ interface Choice {
   detail: string;
 }
 
+// 指令的一種寫法（卡片名稱或「用法」欄位裡的一行）
+interface Usage {
+  params: Param[];
+  format: string; // 原本寫的格式，顯示在補齊清單旁邊
+  description: string;
+  ownOptions: Map<string, Choice[]>; // 指令卡上和參數同名的欄位列出的選項（參數名稱 → 選項）
+}
+
 interface Command {
   name: string; // 含 #，例如 #name
-  params: Param[];
-  ownOptions: Map<string, Choice[]>; // 指令卡上和參數同名的欄位列出的選項（參數名稱 → 選項）
-  format: string; // 原本寫的格式，顯示在補齊清單旁邊
+  usages: Usage[];
   description: string;
 }
 
@@ -46,16 +62,37 @@ let paramValues = new Map<string, ParamValue[]>(); // 參數名稱 → 可選的
 const hintsChanged = new monaco.Emitter<void>();
 
 const fieldOf = (card: Card, key: string) => card.fields.find((f) => f.key === key)?.value.trim() ?? '';
+const linesOf = (text: string) => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
 function parseParam(token: string): Param {
-  const ref = /^\[(.+)\]$/.exec(token);
-  if (ref) return { kind: 'ref', name: ref[1] };
+  const ref = /^\[([^\]:?=]+)(?::(int|float|text))?(\?)?(?:=([^\]]*))?\]$/.exec(token);
+  if (ref) {
+    return { kind: 'ref', name: ref[1], type: ref[2] as ParamType | undefined, optional: !!ref[3] || ref[4] !== undefined, def: ref[4] };
+  }
   if (/[|/]/.test(token)) return { kind: 'choice', options: token.split(/[|/]/).filter(Boolean) };
   return { kind: 'literal', text: token };
 }
 
-// 參數顯示在提示色塊裡的文字
-const paramLabel = (p: Param) => (p.kind === 'ref' ? p.name : p.kind === 'choice' ? p.options.join('/') : p.text);
+// 參數顯示在提示色塊裡的文字：可以不填的加上方括號
+function paramLabel(p: Param) {
+  if (p.kind === 'choice') return p.options.join('/');
+  if (p.kind === 'literal') return p.text;
+  if (p.def !== undefined) return `[${p.name}=${p.def}]`;
+  if (p.optional) return `[${p.name}?]`;
+  return p.type ? `${p.name}:${p.type}` : p.name;
+}
+
+// 一行用法拆成「格式」和「說明」：在方括號外面的第一個冒號（：或 :）切開
+function splitDescription(line: string): [string, string] {
+  let depth = 0;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '[') depth++;
+    else if (ch === ']') depth--;
+    else if (depth === 0 && (ch === '：' || ch === ':')) return [line.slice(0, i).trim(), line.slice(i + 1).trim()];
+  }
+  return [line.trim(), ''];
+}
 
 // 欄位內容裡一行一個選項，「in：淡入」或「in: 淡入」冒號後面是說明
 function parseOptions(text: string): Choice[] {
@@ -66,21 +103,35 @@ function parseOptions(text: string): Choice[] {
 }
 
 export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Schemas) {
-  // 指令清單：「格式」沒寫就用卡片名稱；不是 # 開頭的不算指令。同名指令只取第一個
-  const seen = new Set<string>();
-  commands = cards.commands.flatMap((card): Command[] => {
-    const format = fieldOf(card, '格式') || card.name.trim();
-    const [name, ...rest] = format.split(/\s+/);
-    if (!name?.startsWith('#') || name.length < 2 || seen.has(name)) return [];
-    seen.add(name);
-    const params = rest.map(parseParam);
-    const ownOptions = new Map<string, Choice[]>();
-    for (const p of params) {
-      const field = p.kind === 'ref' && card.fields.find((f) => f.key === p.name && f.value.trim());
-      if (p.kind === 'ref' && field) ownOptions.set(p.name, parseOptions(field.value));
+  // 指令清單：收集每張指令卡的所有寫法，同名的指令（就算在不同卡）合在一起
+  const byName = new Map<string, Command>();
+  for (const card of cards.commands) {
+    // 舊專案的「格式」欄位也算一種寫法
+    const lines = [...linesOf(fieldOf(card, '格式')), ...linesOf(fieldOf(card, '用法'))];
+    const title = card.name.trim();
+    // 卡片名稱：沒另外寫用法時就是唯一的寫法；有寫用法時，名稱只有帶參數（例如 #name [名字]）才算一種寫法
+    if (lines.length === 0 || /\s/.test(title)) lines.unshift(title);
+    const description = fieldOf(card, '說明');
+    for (const line of lines) {
+      const [format, desc] = splitDescription(line);
+      const [name, ...rest] = format.split(/\s+/);
+      if (!name?.startsWith('#') || name.length < 2) continue;
+      const params = rest.map(parseParam);
+      const ownOptions = new Map<string, Choice[]>();
+      for (const p of params) {
+        const field = p.kind === 'ref' && card.fields.find((f) => f.key === p.name && f.value.trim());
+        if (p.kind === 'ref' && field) ownOptions.set(p.name, parseOptions(field.value));
+      }
+      let cmd = byName.get(name);
+      if (!cmd) {
+        cmd = { name, usages: [], description };
+        byName.set(name, cmd);
+      }
+      if (!cmd.description) cmd.description = description;
+      if (!cmd.usages.some((u) => u.format === format)) cmd.usages.push({ params, format, description: desc, ownOptions });
     }
-    return [{ name, params, ownOptions, format, description: fieldOf(card, '說明') }];
-  });
+  }
+  commands = [...byName.values()];
 
   // 參數的可選值：每個區塊範本裡有設「指令參數」的欄位（含卡片名稱），收集所有卡的那個內容（空白的跳過、重複的只留一個）
   paramValues = new Map();
@@ -102,6 +153,7 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
     }
   }
   hintsChanged.fire();
+  for (const model of monaco.editor.getModels()) validate(model);
 }
 
 // 拆開一行指令：沒有寫指令就回傳 null
@@ -116,13 +168,70 @@ function parseLine(text: string) {
 
 const findCommand = (name: string) => commands.find((c) => c.name === name);
 
-// 某個參數可以選的項目：先看指令卡自己的同名欄位，沒有才用範本裡的參數值
-function paramChoices(cmd: Command, p: Param): Choice[] {
+// 這一段文字能不能填在這個參數的位置
+function accepts(p: Param, word: string) {
+  if (p.kind === 'literal') return word === p.text;
+  if (p.kind === 'choice') return p.options.includes(word);
+  if (p.type === 'int') return /^-?\d+$/.test(word);
+  if (p.type === 'float') return /^-?\d+(\.\d+)?$/.test(word);
+  return true;
+}
+
+// 依已經填的每一段，篩出還符合的寫法
+const matchUsages = (cmd: Command, words: string[]) =>
+  cmd.usages.filter((u) => words.every((w, i) => u.params[i] && accepts(u.params[i], w)));
+
+// 某個參數可以選的項目：先看指令卡自己的同名欄位，沒有才用範本裡的參數值，再沒有就給預設值
+function paramChoices(u: Usage, p: Param): Choice[] {
   if (p.kind === 'choice') return p.options.map((o) => ({ label: o, detail: '選項' }));
-  if (p.kind === 'literal') return [{ label: p.text, detail: '固定字' }];
-  const own = cmd.ownOptions.get(p.name);
+  if (p.kind === 'literal') return [{ label: p.text, detail: u.description || u.format }];
+  const own = u.ownOptions.get(p.name);
   if (own) return own;
-  return (paramValues.get(p.name) ?? []).map((v) => ({ label: v.value, detail: v.source }));
+  const values = (paramValues.get(p.name) ?? []).map((v) => ({ label: v.value, detail: v.source }));
+  if (values.length > 0) return values;
+  return p.def !== undefined ? [{ label: p.def, detail: '預設值' }] : [];
+}
+
+// 檢查參數類型：某一段不符合任何寫法，而且那個位置要求的都是數字時，畫紅色波浪線
+const TYPE_NAME: Record<ParamType, string> = { int: '整數', float: '數字', text: '文字' };
+
+function validate(model: monaco.editor.ITextModel) {
+  if (model.isDisposed()) return;
+  const markers: monaco.editor.IMarkerData[] = [];
+  if (model.getLanguageId() === LANGUAGE_ID) {
+    for (let n = 1; n <= model.getLineCount(); n++) {
+      const text = model.getLineContent(n);
+      const line = parseLine(text);
+      const cmd = line && findCommand(line.name);
+      if (!line || !cmd) continue;
+      // 找出每一段的位置（指令名稱後面開始）
+      const re = /\S+/g;
+      re.lastIndex = line.indent + line.name.length;
+      const parts: { word: string; start: number }[] = [];
+      for (let m = re.exec(text); m; m = re.exec(text)) parts.push({ word: m[0], start: m.index });
+      for (let i = 0; i < parts.length; i++) {
+        const prefix = parts.slice(0, i).map((p) => p.word);
+        const candidates = matchUsages(cmd, prefix).filter((u) => u.params[i]);
+        if (candidates.some((u) => accepts(u.params[i], parts[i].word))) continue;
+        const types = candidates.map((u) => {
+          const p = u.params[i];
+          return p.kind === 'ref' && (p.type === 'int' || p.type === 'float') ? p.type : null;
+        });
+        if (types.length > 0 && types.every(Boolean)) {
+          markers.push({
+            severity: monaco.MarkerSeverity.Error,
+            message: `這裡要填${TYPE_NAME[types[0]!]}`,
+            startLineNumber: n,
+            endLineNumber: n,
+            startColumn: parts[i].start + 1,
+            endColumn: parts[i].start + parts[i].word.length + 1,
+          });
+        }
+        break; // 後面的段落已經對不上任何寫法，不再檢查
+      }
+    }
+  }
+  monaco.editor.setModelMarkers(model, LANGUAGE_ID, markers);
 }
 
 let registered = false;
@@ -154,7 +263,7 @@ export function registerScriptLanguage() {
     colors: {},
   });
 
-  // 自動補齊：打 # 列出指令；指令後面打空白，列出這個位置的參數可以選什麼
+  // 自動補齊：打指令名稱時列出指令；指令後面打空白或打字，列出這個位置的參數可以選什麼
   monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
     triggerCharacters: ['#', ' '],
     provideCompletionItems(model, position) {
@@ -166,31 +275,45 @@ export function registerScriptLanguage() {
       if (line.rest === '') {
         const range = new monaco.Range(position.lineNumber, line.indent + 1, position.lineNumber, position.column);
         return {
-          suggestions: commands.map((c, i) => ({
-            label: c.name,
-            kind: monaco.languages.CompletionItemKind.Keyword,
-            detail: c.format,
-            documentation: c.description || undefined,
-            // 有參數的指令：補完自動空一格，並立刻再打開清單讓你選第一個參數
-            insertText: c.params.length > 0 ? `${c.name} ` : c.name,
-            command: c.params.length > 0 ? { id: 'editor.action.triggerSuggest', title: '' } : undefined,
-            range,
-            sortText: String(i).padStart(4, '0'),
-          })),
+          suggestions: commands.map((c, i) => {
+            const hasParams = c.usages.some((u) => u.params.length > 0);
+            return {
+              label: c.name,
+              kind: monaco.languages.CompletionItemKind.Keyword,
+              detail: c.usages.length > 1 ? `${c.usages[0].format}（共 ${c.usages.length} 種寫法）` : c.usages[0].format,
+              documentation: [c.description, ...c.usages.map((u) => (u.description ? `${u.format}：${u.description}` : u.format))]
+                .filter(Boolean)
+                .join('\n'),
+              // 有參數的指令：補完自動空一格，並立刻再打開清單讓你選第一個參數
+              insertText: hasParams ? `${c.name} ` : c.name,
+              command: hasParams ? { id: 'editor.action.triggerSuggest', title: '' } : undefined,
+              range,
+              sortText: String(i).padStart(4, '0'),
+            };
+          }),
         };
       }
 
-      // 在參數的位置：算出現在是第幾個參數，正在打的那段就是補齊範圍
+      // 在參數的位置：用前面已經填完的段落篩出符合的寫法，再合併它們在這個位置的選項
       const cmd = findCommand(line.name);
       if (!cmd) return { suggestions: [] };
       const typing = line.endsWithSpace ? '' : line.words[line.words.length - 1] ?? '';
-      const index = line.endsWithSpace ? line.words.length : line.words.length - 1;
-      const param = cmd.params[index];
-      if (!param) return { suggestions: [] };
-      const hasMore = index < cmd.params.length - 1;
+      const done = line.endsWithSpace ? line.words : line.words.slice(0, -1);
+      const index = done.length;
+      const merged = new Map<string, { choice: Choice; hasMore: boolean }>();
+      for (const u of matchUsages(cmd, done)) {
+        const p = u.params[index];
+        if (!p) continue;
+        const hasMore = u.params.length > index + 1;
+        for (const c of paramChoices(u, p)) {
+          const seen = merged.get(c.label);
+          if (seen) seen.hasMore ||= hasMore;
+          else merged.set(c.label, { choice: c, hasMore });
+        }
+      }
       const range = new monaco.Range(position.lineNumber, position.column - typing.length, position.lineNumber, position.column);
       return {
-        suggestions: paramChoices(cmd, param).map((c, i) => ({
+        suggestions: [...merged.values()].map(({ choice: c, hasMore }, i) => ({
           label: c.label,
           kind: monaco.languages.CompletionItemKind.Value,
           detail: c.detail,
@@ -204,6 +327,7 @@ export function registerScriptLanguage() {
   });
 
   // 參數提示：指令還缺哪些參數，就在那一行最後面顯示灰色小色塊（填完就消失）
+  // 還有好幾種寫法符合時：大家一樣的位置照常顯示，從開始不一樣的位置起顯示「a/b …」
   monaco.languages.registerInlayHintsProvider(LANGUAGE_ID, {
     onDidChangeInlayHints: hintsChanged.event,
     provideInlayHints(model, range) {
@@ -213,16 +337,42 @@ export function registerScriptLanguage() {
         const line = parseLine(text);
         const cmd = line && findCommand(line.name);
         if (!line || !cmd) continue;
-        // 正在打的最後一段（後面沒有空白）也算已經填了
-        const missing = cmd.params.slice(line.words.length);
-        if (missing.length === 0) continue;
+        // 正在打的最後一段（後面沒有空白）也算已經填了；它還沒打完而對不上時，只用前面的段落篩
+        let start = line.words.length;
+        let usages = matchUsages(cmd, line.words);
+        if (usages.length === 0 && !line.endsWithSpace) {
+          start--;
+          usages = matchUsages(cmd, line.words.slice(0, -1));
+        }
+        const labels: string[] = [];
+        for (let i = start; ; i++) {
+          const here = usages.filter((u) => u.params[i]);
+          if (here.length === 0) break;
+          const distinct = [...new Set(here.map((u) => paramLabel(u.params[i])))];
+          if (distinct.length > 1 || here.length < usages.length) {
+            labels.push(distinct.join('/'));
+            if (here.some((u) => u.params.length > i + 1)) labels.push('…');
+            break;
+          }
+          labels.push(distinct[0]);
+        }
+        if (labels.length === 0) continue;
         hints.push({
           position: { lineNumber: n, column: text.length + 1 },
-          label: missing.map(paramLabel).join('  '),
+          label: labels.join('  '),
           paddingLeft: !line.endsWithSpace,
         });
       }
       return { hints, dispose: () => {} };
     },
   });
+
+  // 類型檢查：劇本一打開、內容一改就重新檢查
+  const watch = (model: monaco.editor.ITextModel) => {
+    validate(model);
+    model.onDidChangeContent(() => validate(model));
+    model.onDidChangeLanguage(() => validate(model));
+  };
+  monaco.editor.getModels().forEach(watch);
+  monaco.editor.onDidCreateModel(watch);
 }

@@ -61,6 +61,7 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
     return (
       <CardEditor
         card={card}
+        isCommand={cardRef.section === 'commands'}
         lockedKeys={ctx.schemas[cardRef.section].fields.map((f) => f.key)}
         onChange={(patch) => ctx.onCardChange(cardRef.section, card.id, patch)}
       />

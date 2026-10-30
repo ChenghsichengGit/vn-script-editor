@@ -9,6 +9,10 @@
   --accent: #007acc;
   --text: #cccccc;
   --text-dim: #8b8b8b;
+  --text-placeholder: #6a6a6a; /* 沒填時的灰色提示字 */
+  --field-key: #7fb4e0; /* 欄位名稱：跟已填的文字、提示字都分得出來 */
+  --cmd-name: #c586c0; /* 指令名稱（跟劇本裡的 #指令 同色） */
+  --cmd-arg: #9cdcfe; /* 指令參數 */
   --border: #3c3c3c;
 }
 
@@ -198,7 +202,7 @@ body.dragging, body.dragging * { user-select: none; }
 .card-row { display: flex; align-items: flex-start; gap: 8px; min-height: 20px; line-height: 1.5; }
 .card-row.clickable { cursor: pointer; }
 .card-row.clickable:hover .card-key { color: var(--text); }
-.card-key { width: 64px; flex-shrink: 0; color: var(--text-dim); }
+.card-key { width: 64px; flex-shrink: 0; color: var(--field-key); font-weight: 600; }
 .card-fold .card-key { width: auto; }
 .card-value { flex: 1; min-width: 0; word-break: break-word; }
 .card-fold-value { padding: 2px 0 4px 14px; line-height: 1.6; color: var(--text); word-break: break-word; }
@@ -345,6 +349,9 @@ body.dragging, body.dragging * { user-select: none; }
   outline: none;
 }
 .card-editor input:focus, .card-editor textarea:focus { border-color: var(--accent); }
+.card-editor input::placeholder, .card-editor textarea::placeholder { color: var(--text-placeholder); font-style: italic; }
+/* 每列第一格是欄位名稱 */
+.card-editor-row > input:first-child { color: var(--field-key); font-weight: 600; }
 .card-editor textarea { resize: none; field-sizing: content; line-height: 1.5; min-height: 30px; }
 .card-editor .card-editor-name { font-size: 22px; font-weight: 600; background: none; padding-left: 0; }
 .card-editor-fields { display: flex; flex-direction: column; gap: 6px; }
@@ -477,5 +484,11 @@ body.dragging, body.dragging * { user-select: none; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(100, 100, 100, 0.7); }
 ::-webkit-scrollbar-thumb:active { background: rgba(191, 191, 191, 0.4); }
 
-/* 範本欄位的名稱：唯讀，顏色暗一點，看得出來不能改 */
-.card-editor input.locked { color: var(--text-dim); cursor: default; }
+/* 範本欄位的名稱：唯讀（顏色跟一般欄位名稱一樣，滑鼠游標不變成輸入游標） */
+.card-editor input.locked { cursor: default; }
+
+/* 指令卡的名稱 = 指令格式：等寬字、#指令和參數分別上色 */
+.cmd-format { font-family: 'Cascadia Code', 'Microsoft JhengHei UI', monospace; }
+.cmd-format .cmd-name { color: var(--cmd-name); font-weight: 600; }
+.cmd-format .cmd-arg { color: var(--cmd-arg); }
+.card-editor input.cmd-name { color: var(--cmd-name); }
