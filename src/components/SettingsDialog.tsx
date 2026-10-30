@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_FONT_FAMILY, LIMITS, resetSettings, updateSettings, useSettings } from '../settings';
 import './SettingsDialog.css';
 
@@ -75,6 +75,40 @@ function NumberField({
   );
 }
 
+// UI 大小的拉桿：拖曳中只更新旁邊的百分比，放開滑鼠（或放開方向鍵）才真的縮放
+// 一邊拖一邊縮放的話，拉桿自己也會跟著變大變小、從滑鼠底下跑掉，數值就會在兩格之間來回跳
+function ZoomSlider({ value }: { value: number }) {
+  const [draft, setDraft] = useState<number | null>(null); // 拖曳中還沒套用的值
+  const draftRef = useRef<number | null>(null);
+  draftRef.current = draft;
+
+  const commit = () => {
+    if (draftRef.current !== null) updateSettings({ uiZoom: draftRef.current });
+    setDraft(null);
+  };
+
+  const shown = draft ?? value;
+  return (
+    <>
+      <input
+        type="range"
+        className="settings-range"
+        min={LIMITS.uiZoom.min}
+        max={LIMITS.uiZoom.max}
+        step={LIMITS.uiZoom.step}
+        value={shown}
+        // 取到小數一位，避免浮點誤差（1.1000000000000001）
+        onChange={(e) => setDraft(Math.round(parseFloat(e.target.value) * 10) / 10)}
+        // 滑鼠可能在拉桿外面放開，所以聽整個視窗的放開事件
+        onPointerDown={() => window.addEventListener('pointerup', commit, { once: true })}
+        onKeyUp={commit}
+        onBlur={commit}
+      />
+      <span className="settings-value">{Math.round(shown * 100)}%</span>
+    </>
+  );
+}
+
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const s = useSettings();
 
@@ -109,17 +143,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
         <div className="settings-body">
           <div className="settings-group">外觀</div>
           <Row label="UI 大小" hint="整個程式一起放大縮小">
-            <input
-              type="range"
-              className="settings-range"
-              min={LIMITS.uiZoom.min}
-              max={LIMITS.uiZoom.max}
-              step={LIMITS.uiZoom.step}
-              value={s.uiZoom}
-              // 取到小數一位，避免浮點誤差（1.1000000000000001）
-              onChange={(e) => updateSettings({ uiZoom: Math.round(parseFloat(e.target.value) * 10) / 10 })}
-            />
-            <span className="settings-value">{Math.round(s.uiZoom * 100)}%</span>
+            <ZoomSlider value={s.uiZoom} />
           </Row>
 
           <div className="settings-group">劇本編輯器</div>
