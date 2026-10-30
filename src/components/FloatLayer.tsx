@@ -77,6 +77,7 @@ export default function FloatLayer({ panels, onChange, onFront, ...tree }: Props
           <div
             key={p.id}
             className="float-panel"
+            data-float={p.id}
             style={{ left: r.x, top: r.y, width: r.w, height: r.h, zIndex: p.z }}
             // 用 capture：點到裡面任何東西（包括會 stopPropagation 的）都先把面板移到最上層
             onMouseDownCapture={() => p.z !== top && onFront(p.id)}

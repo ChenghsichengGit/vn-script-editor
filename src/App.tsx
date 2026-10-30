@@ -3,9 +3,7 @@ import ActivityBar from './components/ActivityBar';
 import Sidebar from './components/Sidebar';
 import FloatLayer from './components/FloatLayer';
 import { MoveItem, folderKey, remapFolderKeys } from './components/SectionPanel';
-import EditorTabs from './components/EditorTabs';
-import ScriptEditor from './components/ScriptEditor';
-import CardEditor from './components/CardEditor';
+import EditorDock, { EditorDockHandle } from './components/EditorDock';
 import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId, parseCardTab } from './model';
@@ -68,8 +66,10 @@ export default function App() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set()); // 被摺起來的資料夾（所有區塊共用，key 含區塊名）
   const [project, setProject] = useState<{ store: ProjectStore; name: string } | null>(null); // null = 顯示開始畫面
   const [cards, setCards] = useState(emptyCards);
-  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  // 開了哪些分頁、分在哪些群組，都交給編輯區的 dockview 管（見 EditorDock）；App 只記「現在作用中的分頁」
+  // 它決定狀態列顯示什麼、側邊欄反白哪一項，由 EditorDock 在作用中的面板改變時通知
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  const dockRef = useRef<EditorDockHandle>(null);
   const [contents, setContents] = useState<Record<string, string>>({});
   // 檔案清單（只有檔名；文字內容在上面的 contents）。物件的順序就是加入的順序
   // folder = 所在子資料夾（'' = 根目錄）
@@ -94,8 +94,8 @@ export default function App() {
     });
 
   // 存檔是非同步的，跑的時候要讀「最新」的資料，所以每次畫面更新都把目前的狀態放進 ref
-  const latest = useRef({ project, files, contents, cards, dirty, openTabs, activeTab });
-  latest.current = { project, files, contents, cards, dirty, openTabs, activeTab };
+  const latest = useRef({ project, files, contents, cards, dirty, activeTab });
+  latest.current = { project, files, contents, cards, dirty, activeTab };
 
   const flush = async () => {
     const { project, files, contents, cards, dirty } = latest.current;
@@ -161,15 +161,16 @@ export default function App() {
 
   // ── 專案 ──────────────────────────────
 
-  // 從開始畫面打開專案：把資料夾讀到的內容放進各個狀態，並打開第一個劇本
+  // 從開始畫面打開專案：把資料夾讀到的內容放進各個狀態
+  // 要開哪些分頁由編輯區決定：還原這個專案上次的版面，沒有記錄就開第一個劇本
   const loadProject = (store: ProjectStore, data: ProjectData) => {
+    dockRef.current?.saveLayout(); // 從別的專案切過來時，先把舊專案的版面存起來
     const ids = Object.keys(data.files);
     setFiles(Object.fromEntries(ids.map((id) => [id, { name: data.files[id].name, folder: data.files[id].folder }])));
     setFolders(data.folders);
     setContents(Object.fromEntries(ids.map((id) => [id, data.files[id].content])));
     setCards(data.cards);
-    setOpenTabs(ids.slice(0, 1));
-    setActiveTab(ids[0] ?? null);
+    setActiveTab(null);
     setDirty(new Set());
     setSaveState('saved');
     setProject({ store, name: data.name });
@@ -189,12 +190,12 @@ export default function App() {
   const closeProject = async (): Promise<boolean> => {
     if (!(await flushBeforeLeave('有內容存檔失敗，確定要關閉專案嗎？'))) return false;
     setStartInCreate(false);
+    dockRef.current?.saveLayout(); // 編輯區即將卸載，先把版面存起來
     setProject(null);
     setFiles({});
     setFolders(emptyFolders);
     setContents({});
     setCards(emptyCards);
-    setOpenTabs([]);
     setActiveTab(null);
     setDirty(new Set());
     return true;
@@ -321,8 +322,14 @@ export default function App() {
     const float = layout.floating.find((f) => f.id === id);
     const layerRect = mainRef.current!.getBoundingClientRect();
     // 浮動面板：記住滑鼠抓在面板的哪個位置，移動時保持這個相對位置
-    const grabX = float ? startX - layerRect.left - float.x : 0;
-    const grabY = float ? startY - layerRect.top - float.y : 0;
+    // 視窗縮小時面板會被暫時縮小、推回畫面內（記住的座標和大小不變），所以位置和大小都以畫面上實際的為準
+    const shown = float
+      ? document.querySelector<HTMLElement>(`.float-panel[data-float="${id}"]`)?.getBoundingClientRect()
+      : undefined;
+    const floatW = shown?.width ?? float?.w ?? 0;
+    const floatH = shown?.height ?? float?.h ?? 0;
+    const grabX = float ? startX - (shown?.left ?? layerRect.left + float.x) : 0;
+    const grabY = float ? startY - (shown?.top ?? layerRect.top + float.y) : 0;
     let started = false;
     let hit: PanelHit | null = null;
 
@@ -334,9 +341,9 @@ export default function App() {
         hit = hitTestPanel(ev.clientX, ev.clientY, id, !float);
         if (float) {
           // 浮動面板：即時跟著滑鼠，限制在視窗內
-          const x = Math.min(Math.max(0, ev.clientX - layerRect.left - grabX), Math.max(0, layerRect.width - float.w));
-          const y = Math.min(Math.max(0, ev.clientY - layerRect.top - grabY), Math.max(0, layerRect.height - float.h));
-          patchFloat(id, { x, y });
+          const x = Math.min(Math.max(0, ev.clientX - layerRect.left - grabX), Math.max(0, layerRect.width - floatW));
+          const y = Math.min(Math.max(0, ev.clientY - layerRect.top - grabY), Math.max(0, layerRect.height - floatH));
+          patchFloat(id, { x, y, w: floatW, h: floatH }); // 一開始拖就把縮小後的大小定下來，面板才不會邊拖邊變大
         }
         setPanelDrag({ id, ghost: !float, x: ev.clientX, y: ev.clientY, hit });
       },
@@ -361,25 +368,11 @@ export default function App() {
 
   // ── 分頁 ──────────────────────────────
 
-  const openTab = (id: string) => {
-    if (!openTabs.includes(id)) setOpenTabs((tabs) => [...tabs, id]);
-    setActiveTab(id);
-  };
+  // 開啟分頁：已經開著就切過去（EditorDock 處理）
+  const openTab = (id: string) => dockRef.current?.open(id);
 
-  const closeTab = (id: string) => {
-    const next = openTabs.filter((t) => t !== id);
-    setOpenTabs(next);
-    if (activeTab === id) setActiveTab(next[next.length - 1] ?? null);
-  };
-
-  // 一次關掉好幾個分頁（刪除資料夾時用）。在 await 之後呼叫，所以讀 ref 裡最新的分頁狀態
-  const closeTabs = (ids: string[]) => {
-    const gone = new Set(ids);
-    const { openTabs: tabs, activeTab: active } = latest.current;
-    const next = tabs.filter((t) => !gone.has(t));
-    setOpenTabs(next);
-    if (active && gone.has(active)) setActiveTab(next[next.length - 1] ?? null);
-  };
+  // 關掉分頁（所有群組裡顯示它們的面板）。刪除檔案、卡片、資料夾時用
+  const closeTabs = (ids: string[]) => dockRef.current?.closeTabs(ids);
 
   // ── 名稱檢查 ──────────────────────────────
 
@@ -445,7 +438,7 @@ export default function App() {
       setCards((all) => ({ ...all, [section]: all[section].filter((c) => c.id !== id) }));
       unmarkDirty(cardTabId(section, id));
       project?.store.deleteCard(section, id).catch(reportError);
-      if (openTabs.includes(cardTabId(section, id))) closeTab(cardTabId(section, id));
+      closeTabs([cardTabId(section, id)]);
     },
   };
 
@@ -482,7 +475,7 @@ export default function App() {
       setContents((c) => Object.fromEntries(Object.entries(c).filter(([fileId]) => fileId !== id)));
       unmarkDirty(fileKey(id));
       project?.store.deleteFile(id).catch(reportError);
-      if (openTabs.includes(id)) closeTab(id);
+      closeTabs([id]);
     },
   };
 
@@ -635,31 +628,11 @@ export default function App() {
   const activeCardRef = activeTab ? parseCardTab(activeTab) : null;
   const activeCard = activeCardRef ? findCard(activeCardRef.section, activeCardRef.id) : undefined;
 
-  let content: React.ReactNode = <div className="empty">從左側開啟劇本或設定卡</div>;
   let status = { left: '沒有開啟的檔案', right: '' };
 
   if (activeCardRef && activeCard) {
-    // key：換成別張卡時，整個編輯頁重新建立，詳細內容編輯器才會載入新卡的內容
-    content = (
-      <CardEditor
-        key={activeTab}
-        card={activeCard}
-        onChange={(patch) => cardOps.update(activeCardRef.section, activeCard.id, patch)}
-      />
-    );
     status = { left: `${sectionMeta[activeCardRef.section].title}／${activeCard.name}`, right: `詳細內容 ${countChars(activeCard.detail)} 字` };
   } else if (activeTab && !activeCardRef && files[activeTab]) {
-    content = (
-      <ScriptEditor
-        fileId={activeTab}
-        initialText={contents[activeTab]}
-        onChange={(text) => {
-          setContents((c) => ({ ...c, [activeTab]: text }));
-          markDirty(fileKey(activeTab));
-        }}
-        onCursor={setCursor}
-      />
-    );
     status = {
       left: files[activeTab]?.name ?? '',
       right: `行 ${cursor.line}，欄 ${cursor.column}　｜　字數 ${countChars(contents[activeTab])}`,
@@ -700,18 +673,23 @@ export default function App() {
             <div className="splitter" onMouseDown={(e) => startWidthResize('left', e)} />
           </>
         )}
-        <EditorTabs
-          tabs={openTabs.map((id) => ({
-            id,
-            label: tabLabel(id),
-            dirty: dirty.has(parseCardTab(id) ? id : fileKey(id)),
-          }))}
-          activeTab={activeTab}
-          onSelect={setActiveTab}
-          onClose={closeTab}
-        >
-          {content}
-        </EditorTabs>
+        <EditorDock
+          key={project.store.root} // 換專案時整個編輯區重建，各自還原自己的版面
+          ref={dockRef}
+          rootPath={project.store.root}
+          files={files}
+          contents={contents}
+          cards={cards}
+          isDirty={(tabId) => dirty.has(parseCardTab(tabId) ? tabId : fileKey(tabId))}
+          tabLabel={tabLabel}
+          onFileChange={(id, text) => {
+            setContents((c) => ({ ...c, [id]: text }));
+            markDirty(fileKey(id));
+          }}
+          onCardChange={cardOps.update}
+          onCursor={setCursor}
+          onActiveTabChange={setActiveTab}
+        />
         {showRight && (
           <>
             <div className="splitter" onMouseDown={(e) => startWidthResize('right', e)} />

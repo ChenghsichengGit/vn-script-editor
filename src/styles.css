@@ -25,8 +25,9 @@ html, body, #root {
 }
 
 /* 整體：上面是主區域，下面固定一條狀態列 */
-.app { display: grid; grid-template-rows: 1fr 22px; height: 100%; }
-.main { display: flex; min-height: 0; position: relative; } /* position：浮動面板和放置提示以它為準 */
+.app { display: grid; grid-template-rows: 1fr 22px; grid-template-columns: minmax(0, 1fr); height: 100%; }
+/* overflow: hidden：視窗窄到連最小寬度都放不下時，寧可裁掉也不要出現水平捲軸 */
+.main { display: flex; min-height: 0; min-width: 0; position: relative; overflow: hidden; } /* position：浮動面板和放置提示以它為準 */
 
 /* 活動列 */
 .activity-bar {
@@ -50,7 +51,10 @@ html, body, #root {
 
 /* 側邊欄：區塊上下疊，展開的區塊依比例分高度 */
 .sidebar {
-  flex-shrink: 0;
+  /* 寬度是使用者拖出來的寬度（inline width，當作 flex-basis）。視窗太窄時，左右側邊欄按比例一起縮小，
+     最窄 120px；記住的寬度不變，視窗變寬就恢復。編輯區則保持最小寬度（見 .editor-area） */
+  flex: 0 1 auto;
+  min-width: 120px;
   background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
@@ -75,8 +79,23 @@ html, body, #root {
 .section-actions { display: flex; opacity: 0; }
 .section-header:hover .section-actions { opacity: 1; }
 .section-body { flex: 1; overflow-y: auto; padding-bottom: 6px; }
-.section-sash { height: 4px; flex-shrink: 0; margin: -1px 0; border-top: 1px solid var(--border); cursor: row-resize; position: relative; z-index: 1; }
-.section-sash:hover { background: var(--accent); border-color: var(--accent); }
+/* 調整大小的線：看起來只有 1px，但用 ::before 往兩側各多 5px 當「可抓取範圍」；
+   滑鼠停上去一下（0.15 秒）才用 ::after 亮出 3px 藍線，和 VS Code 一樣 */
+.section-sash { height: 1px; flex-shrink: 0; background: var(--border); position: relative; z-index: 5; }
+.section-sash::before { content: ''; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; cursor: row-resize; }
+.section-sash::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 3px;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s 0.15s;
+}
+.section-sash:hover::after, .section-sash:active::after { opacity: 1; }
 body.dragging, body.dragging * { user-select: none; }
 
 /* 拖曳搬移檔案／資料夾：目標資料夾（或區塊空白處 = 根目錄）加藍色框線與淡藍底 */
@@ -98,17 +117,18 @@ body.dragging, body.dragging * { user-select: none; }
 /* 標題列同時是視窗的標題列：可以按住拖動 */
 .section.floating .section-header { background: var(--bg-tab); cursor: move; }
 .float-handle { position: absolute; z-index: 2; }
-.float-handle.n, .float-handle.s { left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
-.float-handle.e, .float-handle.w { top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; }
-.float-handle.n { top: -3px; }
-.float-handle.s { bottom: -3px; }
-.float-handle.e { right: -3px; }
-.float-handle.w { left: -3px; }
-.float-handle.ne, .float-handle.nw, .float-handle.se, .float-handle.sw { width: 12px; height: 12px; }
-.float-handle.ne { top: -3px; right: -3px; cursor: nesw-resize; }
-.float-handle.nw { top: -3px; left: -3px; cursor: nwse-resize; }
-.float-handle.se { bottom: -3px; right: -3px; cursor: nwse-resize; }
-.float-handle.sw { bottom: -3px; left: -3px; cursor: nesw-resize; }
+/* 浮動視窗的邊緣：可抓取範圍 10px（一半在框內、一半在框外），角落 16px */
+.float-handle.n, .float-handle.s { left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
+.float-handle.e, .float-handle.w { top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
+.float-handle.n { top: -5px; }
+.float-handle.s { bottom: -5px; }
+.float-handle.e { right: -5px; }
+.float-handle.w { left: -5px; }
+.float-handle.ne, .float-handle.nw, .float-handle.se, .float-handle.sw { width: 16px; height: 16px; }
+.float-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.float-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.float-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.float-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
 
 /* 拖曳整個區塊時的提示（都是 fixed／不擋滑鼠） */
 .section-header { cursor: grab; }
@@ -223,29 +243,86 @@ body.dragging, body.dragging * { user-select: none; }
 }
 
 /* 可拖曳的分隔線 */
-.splitter { width: 4px; flex-shrink: 0; cursor: col-resize; background: var(--bg-sidebar); }
-.splitter:hover { background: var(--accent); }
-
-/* 編輯區 */
-.editor-area { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.tabs { display: flex; background: var(--bg-sidebar); height: 35px; flex-shrink: 0; overflow-x: auto; }
-.tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px 0 14px;
-  background: var(--bg-tab);
-  color: var(--text-dim);
-  border-right: 1px solid var(--bg-sidebar);
-  cursor: pointer;
-  white-space: nowrap;
+/* 側邊欄寬度線：同 .section-sash 的做法，只是方向是左右 */
+.splitter { width: 1px; flex-shrink: 0; background: var(--border); position: relative; z-index: 5; }
+.splitter::before { content: ''; position: absolute; top: 0; bottom: 0; left: -5px; right: -5px; cursor: col-resize; }
+.splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 3px;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s 0.15s;
 }
-.tab.active { background: var(--bg-editor); color: #fff; border-top: 1px solid var(--accent); }
-.tab-close { width: 18px; text-align: center; border-radius: 4px; opacity: 0; }
-.tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
-.tab-close:hover { background: var(--border); }
-.editor-content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.splitter:hover::after, .splitter:active::after { opacity: 1; }
+
+/* 編輯區：最小寬度 240px，空間不夠時先縮側邊欄（見 .sidebar） */
+.editor-area { flex: 1 1 0; min-width: 240px; display: flex; flex-direction: column; position: relative; }
+/* isolation：dockview 內部的 z-index（浮動群組、拖曳提示最高到 999）只在這一塊裡比，不會蓋過側邊欄浮動面板那一層（.float-layer） */
+.dock-host { flex: 1; min-height: 0; min-width: 0; position: relative; isolation: isolate; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--text-dim); }
+
+/* dockview（分頁群組）：以它的深色主題為底，換成這個編輯器的 VS Code 配色。
+   寫兩個 class 疊起來，優先權才會高過 dockview 自己的樣式表 */
+.dockview-theme-dark.dockview-theme-vn {
+  --dv-group-view-background-color: var(--bg-editor);
+  --dv-tabs-and-actions-container-background-color: var(--bg-sidebar);
+  --dv-tabs-and-actions-container-height: 35px;
+  --dv-tabs-and-actions-container-font-size: 13px;
+  /* 分頁：作用中的是編輯器底色，其餘是 --bg-tab；沒有焦點的群組文字比較暗 */
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg-editor);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-tab);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-editor);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-tab);
+  --dv-activegroup-visiblepanel-tab-color: #ffffff;
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text-dim);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-dim);
+  --dv-tab-divider-color: var(--bg-sidebar);
+  --dv-separator-border: var(--border);
+  --dv-icon-hover-background-color: var(--border);
+  /* 群組之間的分隔線：平常細細的一條，滑過去變藍色 */
+  --dv-sash-color: var(--border);
+  --dv-active-sash-color: var(--accent);
+  --dv-active-sash-transition-delay: 0.15s; /* 預設 0.5 秒才變藍，太慢 */
+  /* 拖曳分頁時的放置提示：半透明藍色，和區塊拖曳的提示一致 */
+  --dv-drag-over-background-color: rgba(0, 122, 204, 0.25);
+  --dv-drag-over-border-color: var(--accent);
+  --dv-edge-dock-indicator-color: var(--accent);
+  --dv-floating-border: 1px solid var(--border);
+  --dv-floating-box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --dv-floating-titlebar-background-color: var(--bg-tab);
+}
+/* 分割線的可抓取範圍：dockview 只在觸控螢幕才加寬，這裡讓滑鼠也一樣，左右（上下）各多 5px */
+.dockview-theme-vn .dv-split-view-container > .dv-sash-container > .dv-sash:not(.dv-disabled)::before {
+  content: '';
+  position: absolute;
+  background: transparent;
+}
+.dockview-theme-vn .dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash:not(.dv-disabled)::before {
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  right: -5px;
+}
+.dockview-theme-vn .dv-split-view-container.dv-vertical > .dv-sash-container > .dv-sash:not(.dv-disabled)::before {
+  left: 0;
+  right: 0;
+  top: -5px;
+  bottom: -5px;
+}
+/* 作用中的分頁：頂端一條藍線（沒有焦點的群組改成暗灰色），和 VS Code 一樣 */
+.dockview-theme-vn .dv-tab { padding: 0; }
+.dockview-theme-vn .dv-tab.dv-active-tab { box-shadow: inset 0 1px 0 var(--border); }
+.dockview-theme-vn .dv-groupview.dv-active-group .dv-tab.dv-active-tab { box-shadow: inset 0 1px 0 var(--accent); }
+.dockview-theme-vn .dv-default-tab { gap: 8px; padding: 0 6px 0 14px; }
+.dockview-theme-vn .dv-default-tab .dv-default-tab-content { flex-grow: 0; margin-right: 0; }
+.dockview-theme-vn .dv-default-tab .dv-default-tab-action { width: 18px; height: 18px; padding: 0; border-radius: 4px; font-size: 14px; line-height: 1; }
+.dockview-theme-vn .dv-watermark { background: var(--bg-editor); }
 
 /* 分頁裡的完整設定卡：左邊捲動內容，右邊目錄 */
 .card-editor { flex: 1; min-height: 0; display: flex; }
