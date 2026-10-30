@@ -443,9 +443,16 @@ export default function App() {
 
   // ── 設定卡 ──────────────────────────────
 
+  // 設定卡的名稱存在卡片內容裡，檔名只是把不能用的符號換成 _，所以名稱可以有 / | 這些符號（例如 #fade in/out）
+  // 只要檔名不會和同資料夾的其他項目撞名就好
+  const cardNameError = (section: CardSectionId, folder: string, name: string, id?: string) => {
+    if (name === '') return '請輸入名稱';
+    return takenNames(section, folder, { id }).has((sanitizeName(name) + '.md').toLowerCase()) ? '已經有同名的項目' : null;
+  };
+
   // 存欄位範本：先把改了名的欄位在每張卡上跟著改名，再讓每張卡都符合新範本（缺的補空白）
   // 有變動的卡標成「還沒存」，交給自動存檔寫回去；範本本身寫進 project.json
-  const saveSchema = (section: CardSectionId, edits: SchemaEdit[]) => {
+  const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[]) => {
     const schema = edits.map(({ key, param }) => (param ? { key, param } : { key }));
     const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
     const updated = new Map<string, Card>();
@@ -456,7 +463,7 @@ export default function App() {
     }
     setCards((all) => ({ ...all, [section]: all[section].map((c) => updated.get(c.id) ?? c) }));
     updated.forEach((_, id) => markDirty(cardTabId(section, id)));
-    const next = { ...schemas, [section]: schema };
+    const next = { ...schemas, [section]: nameParam ? { nameParam, fields: schema } : { fields: schema } };
     setSchemas(next);
     project?.store.saveSchemas(next).catch(reportError);
   };
@@ -467,10 +474,10 @@ export default function App() {
     open: (section, id) => openTab(cardTabId(section, id)),
     add: (section, folder, rawName) => {
       const name = rawName.trim();
-      const err = nameError(section, folder, name, name + '.md', '已經有同名的項目');
+      const err = cardNameError(section, folder, name);
       if (err) return err;
       // 新的卡一建立就帶著範本裡的欄位（內容空白）
-      const card: Card = { id: Date.now().toString(36), name, fields: applySchema([], schemas[section]), detail: '', folder };
+      const card: Card = { id: Date.now().toString(36), name, fields: applySchema([], schemas[section].fields), detail: '', folder };
       setCards((all) => ({ ...all, [section]: [...all[section], card] }));
       markDirty(cardTabId(section, card.id));
       openTab(cardTabId(section, card.id));
@@ -480,7 +487,7 @@ export default function App() {
       const card = findCard(section, id);
       const name = rawName.trim();
       if (!card || name === card.name) return null;
-      const err = nameError(section, card.folder ?? '', name, name + '.md', '已經有同名的項目', { id });
+      const err = cardNameError(section, card.folder ?? '', name, id);
       if (err) return err;
       cardOps.update(section, id, { name });
       return null;
@@ -797,8 +804,9 @@ export default function App() {
         <SchemaDialog
           key={schemaDialog}
           title={sectionMeta[schemaDialog].title}
-          fields={schemas[schemaDialog]}
-          onSave={(edits) => saveSchema(schemaDialog, edits)}
+          icon={sectionMeta[schemaDialog].icon}
+          schema={schemas[schemaDialog]}
+          onSave={(nameParam, edits) => saveSchema(schemaDialog, nameParam, edits)}
           onClose={() => setSchemaDialog(null)}
         />
       )}

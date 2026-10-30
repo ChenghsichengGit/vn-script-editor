@@ -28,15 +28,20 @@ export interface SchemaField {
   key: string;
   param?: string;
 }
-export type Schemas = Record<CardSectionId, SchemaField[]>;
+// 一個區塊的範本：nameParam = 卡片「名稱」本身也可以當指令參數（例如角色名稱 → [名字]）；fields = 一定要有的欄位
+export interface SectionSchema {
+  nameParam?: string;
+  fields: SchemaField[];
+}
+export type Schemas = Record<CardSectionId, SectionSchema>;
 // 欄位設定視窗交回來的結果：from = 這個欄位原本的名稱（新加的沒有），用來把舊卡片上的欄位跟著改名
 export type SchemaEdit = SchemaField & { from?: string };
 
 // 新專案（或舊專案沒有範本時）的預設範本：指令區塊固定有「格式」和「說明」
 export const defaultSchemas = (): Schemas => ({
-  characters: [],
-  world: [],
-  commands: [{ key: '格式' }, { key: '說明' }],
+  characters: { fields: [] },
+  world: { fields: [] },
+  commands: { fields: [{ key: '格式' }, { key: '說明' }] },
 });
 
 // 讓一張卡符合範本：範本欄位依範本順序排在最前面（已有的保留內容，缺的補空白），其他欄位接在後面

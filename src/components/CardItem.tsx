@@ -89,13 +89,11 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
               </div>
             ),
           )}
-          {/* 欄位下面接著顯示詳細內容 */}
-          {card.detail.trim() ? (
+          {/* 欄位下面接著顯示詳細內容（沒寫就不顯示） */}
+          {card.detail.trim() && (
             <div className="card-detail">
               <RichTextView markdown={card.detail} />
             </div>
-          ) : (
-            <div className="card-detail empty-detail">（尚無詳細內容，點 ✏️ 開始撰寫）</div>
           )}
         </div>
       )}

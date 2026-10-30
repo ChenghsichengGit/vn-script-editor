@@ -2,8 +2,10 @@
 //
 // 指令定義來自「指令」區塊的卡：「格式」欄位寫成 #name [名字]、#fade in|out 這樣
 //   第一段 #xxx           = 指令名稱
-//   [名字]                = 參數；有欄位範本把「指令參數」設成「名字」的話，就能從那些卡的欄位內容裡選
-//   in|out                = 固定選項，只能選其中一個
+//   [名字]                = 參數。可以選的值依序找：
+//                             1. 同一張指令卡上有沒有叫「名字」的欄位：一行一個選項，「in：淡入」冒號後面是說明
+//                             2. 欄位範本裡「指令參數」設成「名字」的欄位（或卡片名稱）的內容
+//   in/out 或 in|out      = 固定選項，只能選其中一個（選項少的時候直接寫在格式裡）
 //   其他文字              = 照抄的固定字
 // 指令要寫在一行的開頭（前面可以有空白），參數之間用空白分開
 import * as monaco from 'monaco-editor';
@@ -17,9 +19,16 @@ type Param =
   | { kind: 'choice'; options: string[] } // in|out
   | { kind: 'literal'; text: string }; // 固定字
 
+// 補齊清單裡的一個選項
+interface Choice {
+  label: string;
+  detail: string;
+}
+
 interface Command {
   name: string; // 含 #，例如 #name
   params: Param[];
+  ownOptions: Map<string, Choice[]>; // 指令卡上和參數同名的欄位列出的選項（參數名稱 → 選項）
   format: string; // 原本寫的格式，顯示在補齊清單旁邊
   description: string;
 }
@@ -41,12 +50,20 @@ const fieldOf = (card: Card, key: string) => card.fields.find((f) => f.key === k
 function parseParam(token: string): Param {
   const ref = /^\[(.+)\]$/.exec(token);
   if (ref) return { kind: 'ref', name: ref[1] };
-  if (token.includes('|')) return { kind: 'choice', options: token.split('|').filter(Boolean) };
+  if (/[|/]/.test(token)) return { kind: 'choice', options: token.split(/[|/]/).filter(Boolean) };
   return { kind: 'literal', text: token };
 }
 
 // 參數顯示在提示色塊裡的文字
-const paramLabel = (p: Param) => (p.kind === 'ref' ? p.name : p.kind === 'choice' ? p.options.join('|') : p.text);
+const paramLabel = (p: Param) => (p.kind === 'ref' ? p.name : p.kind === 'choice' ? p.options.join('/') : p.text);
+
+// 欄位內容裡一行一個選項，「in：淡入」或「in: 淡入」冒號後面是說明
+function parseOptions(text: string): Choice[] {
+  return text.split(/\r?\n/).flatMap((line) => {
+    const m = /^\s*([^：:]+?)\s*(?:[：:]\s*(.*))?$/.exec(line);
+    return m && m[1] ? [{ label: m[1], detail: m[2]?.trim() || '選項' }] : [];
+  });
+}
 
 export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Schemas) {
   // 指令清單：「格式」沒寫就用卡片名稱；不是 # 開頭的不算指令。同名指令只取第一個
@@ -56,22 +73,32 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
     const [name, ...rest] = format.split(/\s+/);
     if (!name?.startsWith('#') || name.length < 2 || seen.has(name)) return [];
     seen.add(name);
-    return [{ name, params: rest.map(parseParam), format, description: fieldOf(card, '說明') }];
+    const params = rest.map(parseParam);
+    const ownOptions = new Map<string, Choice[]>();
+    for (const p of params) {
+      const field = p.kind === 'ref' && card.fields.find((f) => f.key === p.name && f.value.trim());
+      if (p.kind === 'ref' && field) ownOptions.set(p.name, parseOptions(field.value));
+    }
+    return [{ name, params, ownOptions, format, description: fieldOf(card, '說明') }];
   });
 
-  // 參數的可選值：每個區塊範本裡有設「指令參數」的欄位，收集所有卡的那個欄位內容（空白的跳過、重複的只留一個）
+  // 參數的可選值：每個區塊範本裡有設「指令參數」的欄位（含卡片名稱），收集所有卡的那個內容（空白的跳過、重複的只留一個）
   paramValues = new Map();
-  for (const section of Object.keys(schemas) as CardSectionId[]) {
-    for (const field of schemas[section]) {
-      if (!field.param) continue;
-      const list = paramValues.get(field.param) ?? [];
-      for (const card of cards[section]) {
-        const value = fieldOf(card, field.key);
-        if (value && !list.some((v) => v.value === value)) {
-          list.push({ value, source: `${sectionMeta[section].title}／${card.name}` });
-        }
+  const collect = (param: string, section: CardSectionId, valueOf: (card: Card) => string) => {
+    const list = paramValues.get(param) ?? [];
+    for (const card of cards[section]) {
+      const value = valueOf(card);
+      if (value && !list.some((v) => v.value === value)) {
+        list.push({ value, source: `${sectionMeta[section].title}／${card.name}` });
       }
-      paramValues.set(field.param, list);
+    }
+    paramValues.set(param, list);
+  };
+  for (const section of Object.keys(schemas) as CardSectionId[]) {
+    const { nameParam, fields } = schemas[section];
+    if (nameParam) collect(nameParam, section, (card) => card.name.trim());
+    for (const field of fields) {
+      if (field.param) collect(field.param, section, (card) => fieldOf(card, field.key));
     }
   }
   hintsChanged.fire();
@@ -89,10 +116,12 @@ function parseLine(text: string) {
 
 const findCommand = (name: string) => commands.find((c) => c.name === name);
 
-// 某個參數可以選的項目
-function paramChoices(p: Param): { label: string; detail: string }[] {
+// 某個參數可以選的項目：先看指令卡自己的同名欄位，沒有才用範本裡的參數值
+function paramChoices(cmd: Command, p: Param): Choice[] {
   if (p.kind === 'choice') return p.options.map((o) => ({ label: o, detail: '選項' }));
   if (p.kind === 'literal') return [{ label: p.text, detail: '固定字' }];
+  const own = cmd.ownOptions.get(p.name);
+  if (own) return own;
   return (paramValues.get(p.name) ?? []).map((v) => ({ label: v.value, detail: v.source }));
 }
 
@@ -161,13 +190,14 @@ export function registerScriptLanguage() {
       const hasMore = index < cmd.params.length - 1;
       const range = new monaco.Range(position.lineNumber, position.column - typing.length, position.lineNumber, position.column);
       return {
-        suggestions: paramChoices(param).map((c) => ({
+        suggestions: paramChoices(cmd, param).map((c, i) => ({
           label: c.label,
           kind: monaco.languages.CompletionItemKind.Value,
           detail: c.detail,
           insertText: hasMore ? `${c.label} ` : c.label,
           command: hasMore ? { id: 'editor.action.triggerSuggest', title: '' } : undefined,
           range,
+          sortText: String(i).padStart(4, '0'), // 照欄位裡寫的順序排，不要被改成字母順序
         })),
       };
     },

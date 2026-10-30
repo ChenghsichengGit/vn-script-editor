@@ -24,14 +24,19 @@ export interface ProjectData {
 }
 
 // 把 project.json 裡的 schemas 整理成合法的範本：認不得的丟掉、同名欄位只留第一個；整個沒有就用預設
+// 舊格式（每個區塊直接是欄位陣列）也讀得懂，當成沒有設定名稱參數
 function normalizeSchemas(raw: unknown): Schemas {
   const out = defaultSchemas();
   if (!raw || typeof raw !== 'object') return out;
   for (const section of Object.keys(out) as CardSectionId[]) {
-    const list = (raw as Record<string, unknown>)[section];
+    const entry = (raw as Record<string, unknown>)[section] as Record<string, unknown> | unknown[] | undefined;
+    const list = Array.isArray(entry) ? entry : entry && typeof entry === 'object' ? entry.fields : undefined;
     if (!Array.isArray(list)) continue;
+    const nameParam = !Array.isArray(entry) && typeof entry?.nameParam === 'string' ? entry.nameParam.trim() : '';
     const seen = new Set<string>();
-    out[section] = list.flatMap((f): SchemaField[] => {
+    out[section] = { fields: [] };
+    if (nameParam) out[section].nameParam = nameParam;
+    out[section].fields = list.flatMap((f): SchemaField[] => {
       const key = typeof f?.key === 'string' ? f.key.trim() : '';
       if (!key || seen.has(key)) return [];
       seen.add(key);

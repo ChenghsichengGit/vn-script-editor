@@ -1,7 +1,7 @@
 /* 右鍵選單：浮在滑鼠位置的小選單 */
 .context-menu {
   position: fixed;
-  z-index: 1000;
+  z-index: 1100; /* 比對話框（1000）高，對話框裡也能用 */
   min-width: 140px;
   padding: 4px 0;
   background: var(--bg-sidebar);
@@ -17,6 +17,8 @@
   white-space: nowrap;
 }
 .context-menu-item:hover { background: var(--accent); color: #fff; }
+.context-menu-item.disabled { color: var(--text-dim); opacity: 0.6; cursor: default; }
+.context-menu-item.disabled:hover { background: none; color: var(--text-dim); }
 
 /* 檔名改名用的輸入框 */
 .rename-input {

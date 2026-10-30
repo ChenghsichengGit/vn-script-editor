@@ -4,6 +4,7 @@ import './ContextMenu.css';
 export interface ContextMenuItem {
   label: string;
   onClick: () => void;
+  disabled?: boolean; // 灰色、點了沒反應
 }
 
 interface Props {
@@ -33,7 +34,10 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.stopPropagation(); // 只關選單，不要連外面的對話框也一起關掉
+        onClose();
+      }
     };
     window.addEventListener('mousedown', onDown, true);
     window.addEventListener('keydown', onKey, true);
@@ -48,8 +52,9 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
       {items.map((item) => (
         <div
           key={item.label}
-          className="context-menu-item"
+          className={`context-menu-item${item.disabled ? ' disabled' : ''}`}
           onClick={() => {
+            if (item.disabled) return;
             onClose();
             item.onClick();
           }}
