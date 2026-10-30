@@ -95,6 +95,7 @@ async function buildMenu() {
         { label: '開啟專案資料夾…', accelerator: 'CmdOrCtrl+O', click: () => sendMenu({ type: 'open-project' }) },
         { label: '最近的專案', submenu: recentItems },
         { type: 'separator' },
+        { label: '關閉分頁', accelerator: 'CmdOrCtrl+W', click: () => sendMenu({ type: 'close-tab' }) },
         { label: '關閉專案', click: () => sendMenu({ type: 'close-project' }) },
         { type: 'separator' },
         { role: 'quit', label: '結束' },

@@ -51,6 +51,19 @@ export function applySchema(fields: Field[], schema: SchemaField[]): Field[] {
   return [...head, ...rest];
 }
 
+// 左側清單的自訂順序：區塊 → 資料夾（'' = 根目錄）→ 項目名稱（劇本是檔名、設定卡是卡片名稱）依序排列
+// 沒列在裡面的項目排在後面、照名稱排。存在 project.json
+export type ItemOrder = Partial<Record<SectionId, Record<string, string[]>>>;
+
+// 照自訂順序排：有在 list 裡的照 list 的順序，其他的接在後面照名稱排
+export function sortByOrder<T>(items: T[], nameOf: (item: T) => string, list: string[] | undefined): T[] {
+  const rank = (item: T) => {
+    const i = list ? list.indexOf(nameOf(item)) : -1;
+    return i < 0 ? Infinity : i;
+  };
+  return [...items].sort((a, b) => rank(a) - rank(b) || nameOf(a).localeCompare(nameOf(b), 'zh-Hant'));
+}
+
 // 檔案樹的一個節點。有 children 的可以摺疊；有 fileId 的點了會開分頁
 export interface TreeNode {
   label: string;

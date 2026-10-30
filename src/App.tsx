@@ -12,6 +12,7 @@ import {
   Card,
   CardOps,
   CardSectionId,
+  ItemOrder,
   SchemaEdit,
   Schemas,
   SectionId,
@@ -100,6 +101,8 @@ export default function App() {
   // 角色／世界觀／指令的欄位範本（存在 project.json），以及正在編輯哪一個區塊的範本
   const [schemas, setSchemas] = useState<Schemas>(defaultSchemas);
   const [schemaDialog, setSchemaDialog] = useState<CardSectionId | null>(null);
+  // 左側清單的自訂順序（存在 project.json）
+  const [order, setOrder] = useState<ItemOrder>({});
   // 卡片或範本一變，就把最新的指令清單和參數可選值交給劇本編輯器的補齊功能
   useEffect(() => setScriptData(cards, schemas), [cards, schemas]);
 
@@ -202,6 +205,7 @@ export default function App() {
     setContents(Object.fromEntries(ids.map((id) => [id, data.files[id].content])));
     setCards(data.cards);
     setSchemas(data.schemas);
+    setOrder(data.order);
     setActiveTab(null);
     setDirty(new Set());
     setSaveState('saved');
@@ -243,6 +247,10 @@ export default function App() {
   const onMenu = async (ev: MenuEvent) => {
     if (ev.type === 'open-settings') {
       setShowSettings(true);
+      return;
+    }
+    if (ev.type === 'close-tab') {
+      dockRef.current?.closeActive();
       return;
     }
     try {
@@ -490,6 +498,7 @@ export default function App() {
       const err = cardNameError(section, card.folder ?? '', name, id);
       if (err) return err;
       cardOps.update(section, id, { name });
+      renameInOrder(section, card.folder ?? '', card.name, name);
       return null;
     },
     update: (section, id, patch) => {
@@ -502,6 +511,31 @@ export default function App() {
       project?.store.deleteCard(section, id).catch(reportError);
       closeTabs([cardTabId(section, id)]);
     },
+  };
+
+  // ── 左側清單的自訂順序 ──────────────────────────────
+
+  // 某個資料夾裡的項目改成這個順序（拖曳排序、右鍵排序），並寫回 project.json
+  const reorder = (section: SectionId, folder: string, names: string[]) => {
+    const next: ItemOrder = { ...order, [section]: { ...order[section], [folder]: names } };
+    setOrder(next);
+    project?.store.saveOrder(next).catch(reportError);
+  };
+  // 項目改名：順序清單裡的名字跟著換
+  const renameInOrder = (section: SectionId, folder: string, from: string, to: string) => {
+    const list = order[section]?.[folder];
+    if (list?.includes(from)) reorder(section, folder, list.map((n) => (n === from ? to : n)));
+  };
+  // 資料夾改名：它和底下各層資料夾的順序清單跟著搬到新路徑
+  const renameFolderInOrder = (section: SectionId, oldPath: string, newPath: string) => {
+    const lists = order[section];
+    if (!lists) return;
+    const moved = Object.fromEntries(
+      Object.entries(lists).map(([f, names]) => [isInFolder(f, oldPath) ? newPath + f.slice(oldPath.length) : f, names]),
+    );
+    const next: ItemOrder = { ...order, [section]: moved };
+    setOrder(next);
+    project?.store.saveOrder(next).catch(reportError);
   };
 
   // ── 劇本檔案 ──────────────────────────────
@@ -530,6 +564,7 @@ export default function App() {
       if (err) return err;
       setFiles((all) => ({ ...all, [id]: { ...all[id], name } }));
       markDirty(fileKey(id));
+      renameInOrder('files', file.folder, file.name, name);
       return null;
     },
     remove: (id) => {
@@ -571,6 +606,7 @@ export default function App() {
         // 資料夾本身和裡面每個檔案／卡片的路徑都換成新的前綴
         const remap = (p: string) => (isInFolder(p, folder) ? newRel + p.slice(folder.length) : p);
         setFolders((f) => ({ ...f, [section]: f[section].map(remap) }));
+        renameFolderInOrder(section, folder, newRel);
         if (section === 'files') {
           setFiles((all) => Object.fromEntries(Object.entries(all).map(([id, f]) => [id, { ...f, folder: remap(f.folder) }])));
         } else {
@@ -729,6 +765,8 @@ export default function App() {
     collapsed,
     setCollapsed,
     onMove: moveItem,
+    order,
+    onReorder: reorder,
     onHeaderDrag: startPanelDrag,
     onEditSchema: setSchemaDialog,
   };

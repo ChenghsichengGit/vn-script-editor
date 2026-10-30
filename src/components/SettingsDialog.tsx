@@ -198,6 +198,9 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           <Row label="自動存檔" hint="關掉後只有按 Ctrl+S 才會存檔">
             <Toggle checked={s.autoSave} onChange={(v) => updateSettings({ autoSave: v })} />
           </Row>
+          <Row label="啟動時開啟上次的專案" hint="打開程式就直接回到上次的專案和分頁">
+            <Toggle checked={s.openLastProject} onChange={(v) => updateSettings({ openLastProject: v })} />
+          </Row>
         </div>
 
         <div className="settings-footer">

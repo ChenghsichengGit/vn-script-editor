@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getSettings } from '../settings';
 import {
   ProjectData,
   ProjectStore,
@@ -11,6 +12,9 @@ import {
 } from '../projectFiles';
 
 type Recent = { name: string; path: string };
+
+// 「啟動時開啟上次的專案」只在程式剛打開時做一次；之後關閉專案回到這個畫面時不會又自動打開
+let triedLastProject = false;
 type Opened = { store: ProjectStore; data: ProjectData };
 
 // 開始畫面：開啟專案資料夾、建立新專案、最近開過的專案
@@ -30,7 +34,15 @@ export default function WelcomeScreen({
   const [newName, setNewName] = useState('');
 
   useEffect(() => {
-    getRecentProjects().then(setRecent).catch(() => setRecent([]));
+    const first = !triedLastProject;
+    triedLastProject = true;
+    getRecentProjects()
+      .then((list) => {
+        setRecent(list);
+        // 最近的專案清單第一個就是上次開的
+        if (first && !startInCreateMode && getSettings().openLastProject && list[0]) void openRecent(list[0].path);
+      })
+      .catch(() => setRecent([]));
     if (startInCreateMode) startCreate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -9,10 +9,11 @@ import {
   IDockviewPanelHeaderProps,
   IDockviewPanelProps,
   ReactContextMenuItemConfig,
+  SerializedDockview,
   themeDark,
 } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
-import { Card, CardSectionId, Schemas, parseCardTab } from '../model';
+import { Card, CardSectionId, Schemas, cardTabId, parseCardTab } from '../model';
 import ScriptEditor from './ScriptEditor';
 import CardEditor from './CardEditor';
 
@@ -28,6 +29,32 @@ interface PanelParams {
 }
 const COMPONENT = 'editor';
 const layoutKey = (root: string) => `vn-editor-dock:${root}`;
+
+// 版面記錄裡的分頁改用路徑記：劇本和卡片的內部編號每次開專案都不一樣，直接記編號下次就對不上了
+// 例如 card:characters:lq3x5a0 → path:characters:主角/小明；分割出來的 `分頁id~2` 後面的 ~2 照留
+function tabPathKeys(files: Record<string, { name: string; folder: string }>, cards: Record<CardSectionId, Card[]>) {
+  const join = (folder: string | undefined, name: string) => (folder ? `${folder}/${name}` : name);
+  const keys = new Map<string, string>(); // 分頁 id → 路徑 key
+  for (const [id, f] of Object.entries(files)) keys.set(id, `path:files:${join(f.folder, f.name)}`);
+  for (const section of Object.keys(cards) as CardSectionId[]) {
+    for (const c of cards[section]) keys.set(cardTabId(section, c.id), `path:${section}:${join(c.folder, c.name)}`);
+  }
+  return keys;
+}
+
+// 把版面記錄（JSON）裡所有的字串照 map 換掉；字串可能帶著 ~2 這種分割編號
+function mapLayoutStrings(value: unknown, map: Map<string, string>): unknown {
+  if (typeof value === 'string') {
+    const m = /^(.*?)(~\d+)?$/.exec(value)!;
+    const hit = map.get(m[1]);
+    return hit ? hit + (m[2] ?? '') : value;
+  }
+  if (Array.isArray(value)) return value.map((v) => mapLayoutStrings(v, map));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [mapLayoutStrings(k, map) as string, mapLayoutStrings(v, map)]));
+  }
+  return value;
+}
 const SAVE_DELAY = 300; // 版面一有變動，停多久後才寫進 localStorage（毫秒）
 
 // 面板和分頁標籤都由 dockview 建立，拿不到 App 的資料；改用 context 把資料傳進去
@@ -180,6 +207,7 @@ export interface EditorDockHandle {
   open: (tabId: string) => void; // 開啟分頁；已經開著就直接切過去，不重複開
   closeTabs: (tabIds: string[]) => void; // 關掉這些分頁（所有群組裡顯示它們的面板）
   saveLayout: () => void; // 立刻把版面存起來（離開專案前呼叫）
+  closeActive: () => void; // 關掉目前作用中的分頁（Ctrl+W）；沒有分頁就什麼都不做
 }
 
 interface Props {
@@ -212,7 +240,8 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
     const api = apiRef.current;
     if (!api || !readyRef.current) return;
     try {
-      localStorage.setItem(layoutKey(propsRef.current.rootPath), JSON.stringify(api.toJSON()));
+      const { rootPath, files, cards } = propsRef.current;
+      localStorage.setItem(layoutKey(rootPath), JSON.stringify(mapLayoutStrings(api.toJSON(), tabPathKeys(files, cards))));
     } catch {
       /* 存不了就算了，不影響使用 */
     }
@@ -250,6 +279,7 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
       }
     },
     saveLayout: writeLayout,
+    closeActive: () => apiRef.current?.activePanel?.api.close(),
   }));
 
   // dockview 建好了：還原這個專案上次的版面；失敗或沒有記錄就開第一個劇本
@@ -265,7 +295,9 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
     try {
       const raw = localStorage.getItem(layoutKey(rootPath));
       if (raw) {
-        api.fromJSON(JSON.parse(raw));
+        // 路徑換回這次的內部編號（找不到的路徑保持原樣，下面會被當成「不存在」關掉）
+        const back = new Map([...tabPathKeys(files, cards)].map(([id, key]) => [key, id]));
+        api.fromJSON(mapLayoutStrings(JSON.parse(raw), back) as SerializedDockview);
         restored = true;
         // 檔案或卡片已經不存在（被刪、被改名搬走）的面板直接關掉；群組空了 dockview 會自己移除
         for (const p of [...api.panels]) {

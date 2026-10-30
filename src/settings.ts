@@ -11,6 +11,7 @@ export interface Settings {
   minimapScale: 1 | 2 | 3; // 小地圖的放大倍數（小／中／大）
   cardFontSize: number; // 設定卡編輯畫面的內文大小
   autoSave: boolean; // 關掉後只有 Ctrl+S 才存檔
+  openLastProject: boolean; // 程式啟動時直接開啟上次的專案
 }
 
 const KEY = 'vn-editor-settings';
@@ -26,6 +27,7 @@ export const defaultSettings: Settings = {
   minimapScale: 2,
   cardFontSize: 15,
   autoSave: true,
+  openLastProject: true,
 };
 
 // 每個數值的允許範圍：讀檔、設定視窗、Ctrl＋滾輪都用同一套
@@ -54,6 +56,7 @@ function normalize(raw: unknown): Settings {
     minimapScale: r.minimapScale === 1 || r.minimapScale === 2 || r.minimapScale === 3 ? r.minimapScale : d.minimapScale,
     cardFontSize: clamp('cardFontSize', r.cardFontSize, d.cardFontSize),
     autoSave: bool(r.autoSave, d.autoSave),
+    openLastProject: bool(r.openLastProject, d.openLastProject),
   };
 }
 

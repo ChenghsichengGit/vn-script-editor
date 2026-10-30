@@ -16,6 +16,7 @@ interface Props {
   onRename: (name: string) => string | null; // 回傳錯誤訊息（重名等）或 null
   onRenameClose: () => void;
   rowProps?: React.HTMLAttributes<HTMLDivElement>; // 標題列額外的屬性：拖曳搬移用（draggable、dragstart、dragover…）
+  rowClass?: string; // 標題列額外的 class：拖曳排序時畫上／下方的藍線
 }
 
 // 卡片名稱；指令卡的名稱是指令格式：第一段 #指令 和後面的參數分別上色
@@ -33,7 +34,7 @@ function CardName({ section, name }: { section: CardSectionId; name: string }) {
 
 // 側邊欄裡的一張設定卡（只能看，不能改）
 // 點整列：展開／收起（欄位和詳細內容）；✏️：在分頁開啟編輯；右鍵：選單（重新命名／刪除）
-export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps }: Props) {
+export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '' }: Props) {
   const [open, setOpen] = useState(false);
   const [openFields, setOpenFields] = useState<Set<number>>(new Set()); // 被點開的「收合欄位」
 
@@ -53,7 +54,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     <div className="card">
       <div
         {...rowProps}
-        className={`tree-row card-header${selected ? ' selected' : ''}`}
+        className={`tree-row card-header${selected ? ' selected' : ''}${rowClass}`}
         onClick={() => setOpen(!open)}
         style={{ paddingLeft: 6 + depth * 14 }}
         onContextMenu={(e) => {

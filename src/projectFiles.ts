@@ -7,7 +7,7 @@
 //   每個區塊底下可以有任意層的子資料夾；檔案／卡片屬於哪個資料夾由位置決定，不寫進 YAML
 
 import { dump, load } from 'js-yaml';
-import { Card, CardSectionId, Field, SchemaField, Schemas, SectionId, defaultSchemas } from './model';
+import { Card, CardSectionId, Field, ItemOrder, SchemaField, Schemas, SectionId, defaultSchemas } from './model';
 
 export interface ScriptFile {
   name: string; // 含副檔名，例如 "第一章.vns"
@@ -21,6 +21,22 @@ export interface ProjectData {
   cards: Record<CardSectionId, Card[]>; // card.id = 記憶體中的 id；card.folder = 所在子資料夾
   folders: Record<SectionId, string[]>; // 每個區塊裡所有的子資料夾（含空的、含巢狀的每一層），例如 "第一章"、"第一章/場景1"
   schemas: Schemas; // 每個設定卡區塊的欄位範本，取自 project.json
+  order: ItemOrder; // 左側清單的自訂順序，取自 project.json
+}
+
+// project.json 裡的 order：只留「區塊 → 資料夾 → 名稱陣列」這個形狀的部分
+function normalizeOrder(raw: unknown): ItemOrder {
+  const out: ItemOrder = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [section, folders] of Object.entries(raw as Record<string, unknown>)) {
+    if (!folders || typeof folders !== 'object') continue;
+    const clean: Record<string, string[]> = {};
+    for (const [folder, names] of Object.entries(folders as Record<string, unknown>)) {
+      if (Array.isArray(names)) clean[folder] = names.filter((n): n is string => typeof n === 'string');
+    }
+    out[section as SectionId] = clean;
+  }
+  return out;
 }
 
 // 把 project.json 裡的 schemas 整理成合法的範本：認不得的丟掉、同名欄位只留第一個；整個沒有就用預設
@@ -293,7 +309,7 @@ export class ProjectStore {
       }
     }
 
-    return { store, data: { name, files, cards, folders, schemas: normalizeSchemas(store.meta.schemas) } };
+    return { store, data: { name, files, cards, folders, schemas: normalizeSchemas(store.meta.schemas), order: normalizeOrder(store.meta.order) } };
   }
 
   static async create(root: string, name: string): Promise<{ store: ProjectStore; data: ProjectData }> {
@@ -309,6 +325,14 @@ export class ProjectStore {
   saveSchemas(schemas: Schemas): Promise<void> {
     return this.enqueue(async () => {
       this.meta = { ...this.meta, schemas };
+      await window.api.writeText(joinPath(this.root, 'project.json'), JSON.stringify(this.meta, null, 2) + '\n');
+    });
+  }
+
+  // 存左側清單的自訂順序：寫回 project.json（只換 order）
+  saveOrder(order: ItemOrder): Promise<void> {
+    return this.enqueue(async () => {
+      this.meta = { ...this.meta, order };
       await window.api.writeText(joinPath(this.root, 'project.json'), JSON.stringify(this.meta, null, 2) + '\n');
     });
   }
