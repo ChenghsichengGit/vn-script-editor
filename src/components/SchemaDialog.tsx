@@ -25,12 +25,15 @@ export default function SchemaDialog({
   title,
   icon,
   schema,
+  specialFields,
   onSave,
   onClose,
 }: {
   title: string;
   icon: string; // 區塊的圖示，放在「名稱」那一列
   schema: SectionSchema;
+  specialFields: { name: string; description: string }[]; // 這個區塊有特別用途的欄位名稱（指令的「用法」「說明」），新增時可以直接選
+
   onSave: (nameParam: string, fields: SchemaEdit[]) => void;
   onClose: () => void;
 }) {
@@ -61,9 +64,25 @@ export default function SchemaDialog({
       return next;
     });
 
-  const add = () => {
-    setRows((rs) => [...rs, { id: nextId, name: '', param: '' }]);
+  const add = (name: string) => {
+    setRows((rs) => [...rs, { id: nextId, name, param: '' }]);
     setNextId(nextId + 1);
+  };
+
+  const specialOf = (name: string) => specialFields.find((f) => f.name === name.trim())?.description;
+
+  // 「＋ 新增欄位」：有專用名稱的區塊先跳選單（已經有的變灰），其他直接加一個空白欄位
+  const openAddMenu = (e: React.MouseEvent) => {
+    if (specialFields.length === 0) return add('');
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({
+      x: box.left,
+      y: box.bottom + 2,
+      items: [
+        ...specialFields.map((f) => ({ label: f.name, disabled: rows.some((r) => r.name.trim() === f.name), onClick: () => add(f.name) })),
+        { label: '自訂欄位', onClick: () => add('') },
+      ],
+    });
   };
 
   // 選單出現在圖示正下方（按圖示）或滑鼠位置（按右鍵）；index = null 是「名稱」那一列，全部不能用
@@ -168,18 +187,21 @@ export default function SchemaDialog({
             </div>
 
             {rows.map((r, i) => (
-              <div className="schema-row" key={r.id} onContextMenu={(e) => openMenu(e, i)}>
+              <div className="schema-row" key={r.id} title={specialOf(r.name)} onContextMenu={(e) => openMenu(e, i)}>
                 <button type="button" className="schema-icon" title="上移、下移、刪除" onClick={(e) => openMenu(e, i)}>
                   {/* 加 ️ 才會畫成彩色圖示，不然在深色背景上看不到 */}
                   {'🏷️'}
                 </button>
-                <input
-                  type="text"
-                  className="schema-input schema-col"
-                  value={r.name}
-                  placeholder="欄位名稱"
-                  onChange={(e) => patch(r.id, { name: e.target.value })}
-                />
+                <span className="schema-col schema-name-cell">
+                  <input
+                    type="text"
+                    className="schema-input"
+                    value={r.name}
+                    placeholder="欄位名稱"
+                    onChange={(e) => patch(r.id, { name: e.target.value })}
+                  />
+                  {specialOf(r.name) && <span className="field-special">✦</span>}
+                </span>
                 <input
                   type="text"
                   className="schema-input schema-col"
@@ -191,7 +213,7 @@ export default function SchemaDialog({
             ))}
           </div>
 
-          <button type="button" className="schema-add" onClick={add}>
+          <button type="button" className="schema-add" onClick={openAddMenu}>
             ＋ 新增欄位
           </button>
 

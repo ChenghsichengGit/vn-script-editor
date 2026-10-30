@@ -21,7 +21,7 @@ import {
   parseCardTab,
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
-import { setScriptData } from './scriptLanguage';
+import { FIXED_COMMAND_FIELDS, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
   FLOAT_DEFAULT_H,
@@ -806,6 +806,7 @@ export default function App() {
           title={sectionMeta[schemaDialog].title}
           icon={sectionMeta[schemaDialog].icon}
           schema={schemas[schemaDialog]}
+          specialFields={schemaDialog === 'commands' ? FIXED_COMMAND_FIELDS : []}
           onSave={(nameParam, edits) => saveSchema(schemaDialog, nameParam, edits)}
           onClose={() => setSchemaDialog(null)}
         />

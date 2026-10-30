@@ -1,4 +1,4 @@
-// 劇本（.vns）的語言功能：指令上色、打指令時自動補齊、選參數、參數提示的灰色小色塊、參數類型錯誤的紅色波浪線
+// 劇本（.vns）的語言功能：指令上色、打指令時自動補齊、選參數、行尾的參數提示色塊、參數類型錯誤的紅色波浪線
 //
 // 指令定義來自「指令」區塊的卡。卡片名稱就是指令格式，例如 #name [名字]
 // 同一個指令有好幾種寫法時，在「用法」欄位一行寫一種（冒號後面是說明）：
@@ -58,8 +58,6 @@ interface ParamValue {
 // App 每次卡片或範本改變時呼叫 setScriptData 更新這兩份資料；補齊和提示每次都讀最新的
 let commands: Command[] = [];
 let paramValues = new Map<string, ParamValue[]>(); // 參數名稱 → 可選的值
-
-const hintsChanged = new monaco.Emitter<void>();
 
 const fieldOf = (card: Card, key: string) => card.fields.find((f) => f.key === key)?.value.trim() ?? '';
 const linesOf = (text: string) => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -152,8 +150,7 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
       if (field.param) collect(field.param, section, (card) => fieldOf(card, field.key));
     }
   }
-  hintsChanged.fire();
-  for (const model of monaco.editor.getModels()) validate(model);
+  for (const model of monaco.editor.getModels()) refresh(model);
 }
 
 // 拆開一行指令：沒有寫指令就回傳 null
@@ -196,7 +193,6 @@ function paramChoices(u: Usage, p: Param): Choice[] {
 const TYPE_NAME: Record<ParamType, string> = { int: '整數', float: '數字', text: '文字' };
 
 function validate(model: monaco.editor.ITextModel) {
-  if (model.isDisposed()) return;
   const markers: monaco.editor.IMarkerData[] = [];
   if (model.getLanguageId() === LANGUAGE_ID) {
     for (let n = 1; n <= model.getLineCount(); n++) {
@@ -232,6 +228,63 @@ function validate(model: monaco.editor.ITextModel) {
     }
   }
   monaco.editor.setModelMarkers(model, LANGUAGE_ID, markers);
+}
+
+// 參數提示：指令還缺哪些參數，就在那一行最後面畫灰色小色塊（填完就消失）
+// 還有好幾種寫法符合時：大家一樣的位置照常顯示，從開始不一樣的位置起顯示「a/b …」
+function missingLabel(text: string): { label: string; pad: boolean } | null {
+  const line = parseLine(text);
+  const cmd = line && findCommand(line.name);
+  if (!line || !cmd) return null;
+  // 正在打的最後一段（後面沒有空白）也算已經填了；它還沒打完而對不上時，只用前面的段落篩
+  let start = line.words.length;
+  let usages = matchUsages(cmd, line.words);
+  if (usages.length === 0 && !line.endsWithSpace) {
+    start--;
+    usages = matchUsages(cmd, line.words.slice(0, -1));
+  }
+  const labels: string[] = [];
+  for (let i = start; ; i++) {
+    const here = usages.filter((u) => u.params[i]);
+    if (here.length === 0) break;
+    const distinct = [...new Set(here.map((u) => paramLabel(u.params[i])))];
+    if (distinct.length > 1 || here.length < usages.length) {
+      labels.push(distinct.join('/'));
+      if (here.some((u) => u.params.length > i + 1)) labels.push('…');
+      break;
+    }
+    labels.push(distinct[0]);
+  }
+  return labels.length > 0 ? { label: labels.join('  '), pad: !line.endsWithSpace } : null;
+}
+
+// 每個劇本目前畫上去的提示色塊（下次重算時要先拿掉舊的）
+const hintIds = new WeakMap<monaco.editor.ITextModel, string[]>();
+
+function showHints(model: monaco.editor.ITextModel) {
+  const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+  if (model.getLanguageId() === LANGUAGE_ID) {
+    for (let n = 1; n <= model.getLineCount(); n++) {
+      const text = model.getLineContent(n);
+      const hint = missingLabel(text);
+      if (!hint) continue;
+      const end = text.length + 1;
+      decorations.push({
+        range: new monaco.Range(n, end, n, end),
+        options: {
+          showIfCollapsed: true,
+          after: { content: hint.label, inlineClassName: hint.pad ? 'vns-hint vns-hint-pad' : 'vns-hint' },
+        },
+      });
+    }
+  }
+  hintIds.set(model, model.deltaDecorations(hintIds.get(model) ?? [], decorations));
+}
+
+function refresh(model: monaco.editor.ITextModel) {
+  if (model.isDisposed()) return;
+  showHints(model);
+  validate(model);
 }
 
 let registered = false;
@@ -326,53 +379,37 @@ export function registerScriptLanguage() {
     },
   });
 
-  // 參數提示：指令還缺哪些參數，就在那一行最後面顯示灰色小色塊（填完就消失）
-  // 還有好幾種寫法符合時：大家一樣的位置照常顯示，從開始不一樣的位置起顯示「a/b …」
-  monaco.languages.registerInlayHintsProvider(LANGUAGE_ID, {
-    onDidChangeInlayHints: hintsChanged.event,
-    provideInlayHints(model, range) {
-      const hints: monaco.languages.InlayHint[] = [];
-      for (let n = range.startLineNumber; n <= range.endLineNumber; n++) {
-        const text = model.getLineContent(n);
-        const line = parseLine(text);
-        const cmd = line && findCommand(line.name);
-        if (!line || !cmd) continue;
-        // 正在打的最後一段（後面沒有空白）也算已經填了；它還沒打完而對不上時，只用前面的段落篩
-        let start = line.words.length;
-        let usages = matchUsages(cmd, line.words);
-        if (usages.length === 0 && !line.endsWithSpace) {
-          start--;
-          usages = matchUsages(cmd, line.words.slice(0, -1));
-        }
-        const labels: string[] = [];
-        for (let i = start; ; i++) {
-          const here = usages.filter((u) => u.params[i]);
-          if (here.length === 0) break;
-          const distinct = [...new Set(here.map((u) => paramLabel(u.params[i])))];
-          if (distinct.length > 1 || here.length < usages.length) {
-            labels.push(distinct.join('/'));
-            if (here.some((u) => u.params.length > i + 1)) labels.push('…');
-            break;
-          }
-          labels.push(distinct[0]);
-        }
-        if (labels.length === 0) continue;
-        hints.push({
-          position: { lineNumber: n, column: text.length + 1 },
-          label: labels.join('  '),
-          paddingLeft: !line.endsWithSpace,
-        });
-      }
-      return { hints, dispose: () => {} };
-    },
-  });
-
-  // 類型檢查：劇本一打開、內容一改就重新檢查
+  // 參數提示和類型檢查：劇本一打開、內容一改就立刻重算（在畫面更新之前，所以不會慢一步或跟著游標跑）
   const watch = (model: monaco.editor.ITextModel) => {
-    validate(model);
-    model.onDidChangeContent(() => validate(model));
-    model.onDidChangeLanguage(() => validate(model));
+    refresh(model);
+    model.onDidChangeContent(() => refresh(model));
+    model.onDidChangeLanguage(() => refresh(model));
   };
   monaco.editor.getModels().forEach(watch);
   monaco.editor.onDidCreateModel(watch);
+}
+
+// ── 指令卡上的專用欄位名稱 ──────────────────────────────
+// 名稱 → 作用說明。固定的有「用法」「說明」「格式」（舊版），另外格式裡的 [參數] 同名欄位 = 那個參數的選項清單
+export const FIXED_COMMAND_FIELDS: { name: string; description: string }[] = [
+  { name: '用法', description: '這個指令的各種寫法：一行寫一種，冒號後面是說明，例如\n#fade in [time:int=0]：淡入' },
+  { name: '說明', description: '這個指令是做什麼的：會顯示在劇本的補齊清單裡' },
+];
+const LEGACY_FORMAT = { name: '格式', description: '（舊版）指令格式；現在可以直接寫在卡片名稱，或寫在「用法」' };
+
+// 一張指令卡上，哪些欄位名稱有特別用途（含它格式裡用到的參數）
+export function commandSpecialFields(card: Card): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const f of [...FIXED_COMMAND_FIELDS, LEGACY_FORMAT]) out.set(f.name, f.description);
+  const lines = [card.name, ...linesOf(fieldOf(card, '格式')), ...linesOf(fieldOf(card, '用法'))];
+  for (const line of lines) {
+    const [format] = splitDescription(line);
+    for (const token of format.split(/\s+/).slice(1)) {
+      const p = parseParam(token);
+      if (p.kind === 'ref' && !out.has(p.name)) {
+        out.set(p.name, `參數 [${p.name}] 可以選的值：一行一個，冒號後面是說明，例如\nblack：黑色`);
+      }
+    }
+  }
+  return out;
 }

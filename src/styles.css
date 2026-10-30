@@ -11,6 +11,7 @@
   --text-dim: #8b8b8b;
   --text-placeholder: #6a6a6a; /* 沒填時的灰色提示字 */
   --field-key: #7fb4e0; /* 欄位名稱：跟已填的文字、提示字都分得出來 */
+  --field-key-locked: #e2c08d; /* 範本欄位的名稱（不能改） */
   --cmd-name: #c586c0; /* 指令名稱（跟劇本裡的 #指令 同色） */
   --cmd-arg: #9cdcfe; /* 指令參數 */
   --border: #3c3c3c;
@@ -350,8 +351,22 @@ body.dragging, body.dragging * { user-select: none; }
 }
 .card-editor input:focus, .card-editor textarea:focus { border-color: var(--accent); }
 .card-editor input::placeholder, .card-editor textarea::placeholder { color: var(--text-placeholder); font-style: italic; }
-/* 每列第一格是欄位名稱 */
-.card-editor-row > input:first-child { color: var(--field-key); font-weight: 600; }
+/* 每列第一格是欄位名稱：可以改的是淡藍色輸入框；範本欄位是金色純文字標籤（看起來就不能改） */
+.field-key-cell { position: relative; display: flex; }
+.field-key-cell input { flex: 1; min-width: 0; color: var(--field-key); font-weight: 600; padding-right: 20px; }
+.field-key-locked {
+  padding: 5px 0;
+  color: var(--field-key-locked);
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 專用欄位名稱（用法、說明、參數選項…）的記號；滑鼠移到這一列會顯示它的作用 */
+.field-special { color: var(--field-key-locked); font-size: 11px; margin-left: 4px; }
+.field-key-cell .field-special { position: absolute; right: 6px; top: 7px; pointer-events: none; }
 .card-editor textarea { resize: none; field-sizing: content; line-height: 1.5; min-height: 30px; }
 .card-editor .card-editor-name { font-size: 22px; font-weight: 600; background: none; padding-left: 0; }
 .card-editor-fields { display: flex; flex-direction: column; gap: 6px; }
@@ -484,11 +499,21 @@ body.dragging, body.dragging * { user-select: none; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(100, 100, 100, 0.7); }
 ::-webkit-scrollbar-thumb:active { background: rgba(191, 191, 191, 0.4); }
 
-/* 範本欄位的名稱：唯讀（顏色跟一般欄位名稱一樣，滑鼠游標不變成輸入游標） */
-.card-editor input.locked { cursor: default; }
 
 /* 指令卡的名稱 = 指令格式：等寬字、#指令和參數分別上色 */
 .cmd-format { font-family: 'Cascadia Code', 'Microsoft JhengHei UI', monospace; }
 .cmd-format .cmd-name { color: var(--cmd-name); font-weight: 600; }
 .cmd-format .cmd-arg { color: var(--cmd-arg); }
 .card-editor input.cmd-name { color: var(--cmd-name); }
+
+/* 劇本行尾的參數提示色塊（指令還缺哪些參數） */
+.monaco-editor .vns-hint {
+  color: #a0a0a0;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.9em;
+}
+.monaco-editor .vns-hint-pad { margin-left: 6px; }
+/* 補齊清單選中項目右邊的「展開說明」小箭頭：不顯示（要看說明可以按 Ctrl+Space） */
+.monaco-editor .suggest-widget .readMore { display: none !important; }

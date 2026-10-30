@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Card, Field } from '../model';
 import RichTextEditor, { useRichEditor } from './RichTextEditor';
 import Outline, { Heading } from './Outline';
+import ContextMenu, { ContextMenuItem } from './ContextMenu';
+import { commandSpecialFields } from '../scriptLanguage';
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
 // 側邊欄只是預覽，所有修改都在這裡做
@@ -25,6 +27,27 @@ export default function CardEditor({
 
   const setField = (i: number, patch: Partial<Field>) =>
     onChange({ fields: card.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
+  const addField = (key: string) => onChange({ fields: [...card.fields, { key, value: '' }] });
+
+  // 指令卡：有特別用途的欄位名稱（用法、說明、格式裡的參數…）→ 作用說明
+  const special = isCommand ? commandSpecialFields(card) : new Map<string, string>();
+  const [addMenu, setAddMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+
+  // 「＋ 新增欄位」：指令卡先跳選單選專用名稱（已經有的變灰），一般卡直接加一個空白欄位
+  const openAddMenu = (e: React.MouseEvent) => {
+    if (!isCommand) return addField('');
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const has = new Set(card.fields.map((f) => f.key));
+    const names = [...special.keys()].filter((n) => n !== '格式' || has.has('格式'));
+    setAddMenu({
+      x: box.left,
+      y: box.bottom + 2,
+      items: [
+        ...names.map((n) => ({ label: n, disabled: has.has(n), onClick: () => addField(n) })),
+        { label: '自訂欄位', onClick: () => addField('') },
+      ],
+    });
+  };
 
   // 文件一有變動，就重新收集所有標題
   useEffect(() => {
@@ -93,16 +116,23 @@ export default function CardEditor({
           <div className="card-editor-fields">
             {card.fields.map((f, i) => {
               const locked = lockedKeys.includes(f.key);
+              const use = special.get(f.key.trim());
+              // 滑鼠移到這一列時的說明：專用欄位的作用，加上範本欄位不能改名的提醒
+              const tip = [use, locked ? '（範本欄位：名稱要到區塊的「欄位設定」裡改）' : ''].filter(Boolean).join('\n\n');
               return (
-              <div className="card-editor-row" key={i}>
-                <input
-                  value={f.key}
-                  placeholder="欄位名稱"
-                  readOnly={locked}
-                  className={locked ? 'locked' : undefined}
-                  title={locked ? '範本欄位：名稱要到區塊的「欄位設定」裡改' : undefined}
-                  onChange={(e) => setField(i, { key: e.target.value })}
-                />
+              <div className="card-editor-row" key={i} title={tip || undefined}>
+                {locked ? (
+                  // 範本欄位的名稱：純文字標籤，看起來就不能改
+                  <div className="field-key-locked">
+                    🔒 {f.key}
+                    {use && <span className="field-special">✦</span>}
+                  </div>
+                ) : (
+                  <div className="field-key-cell">
+                    <input value={f.key} placeholder="欄位名稱" onChange={(e) => setField(i, { key: e.target.value })} />
+                    {use && <span className="field-special">✦</span>}
+                  </div>
+                )}
                 <textarea
                   rows={1}
                   value={f.value}
@@ -128,7 +158,7 @@ export default function CardEditor({
               </div>
               );
             })}
-            <button className="text-btn" onClick={() => onChange({ fields: [...card.fields, { key: '', value: '' }] })}>
+            <button className="text-btn" onClick={openAddMenu}>
               ＋ 新增欄位
             </button>
           </div>
@@ -138,6 +168,7 @@ export default function CardEditor({
         </div>
       </div>
       <Outline headings={headings} active={active} onJump={jump} />
+      {addMenu && <ContextMenu x={addMenu.x} y={addMenu.y} items={addMenu.items} onClose={() => setAddMenu(null)} />}
     </div>
   );
 }

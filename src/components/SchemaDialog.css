@@ -129,3 +129,8 @@ button.schema-icon:hover { background: var(--bg-selected); }
 .schema-btn:disabled { opacity: 0.4; cursor: default; }
 .schema-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .schema-btn-primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.15); }
+
+/* 欄位名稱格：專用名稱（用法、說明）在右邊加 ✦，滑鼠移到這一列會顯示它的作用 */
+.schema-name-cell { position: relative; display: flex; }
+.schema-name-cell .schema-input { flex: 1; min-width: 0; padding-right: 20px; }
+.schema-name-cell .field-special { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); pointer-events: none; }
