@@ -6,7 +6,7 @@ export const sectionMeta: Record<SectionId, { title: string; icon: string; newNa
   files: { title: '檔案', icon: '📄' },
   characters: { title: '角色', icon: '👤', newName: '新角色' },
   world: { title: '世界觀', icon: '🌍', newName: '新項目' },
-  commands: { title: '指令速查', icon: '⌘', newName: '新分類' },
+  commands: { title: '指令', icon: '⌘', newName: '#新指令' },
 };
 export const sectionOrder: SectionId[] = ['files', 'characters', 'world', 'commands'];
 

@@ -97,7 +97,7 @@ function splitDescription(line: string): [string, string] {
 function parseOptions(text: string): Choice[] {
   return text.split(/\r?\n/).flatMap((line) => {
     const m = /^\s*([^：:]+?)\s*(?:[：:]\s*(.*))?$/.exec(line);
-    return m && m[1] ? [{ label: m[1], detail: m[2]?.trim() || '選項' }] : [];
+    return m && m[1] ? [{ label: m[1], detail: m[2]?.trim() ?? '' }] : [];
   });
 }
 
@@ -189,7 +189,7 @@ const matchUsages = (cmd: Command, words: string[]) =>
 
 // 某個參數可以選的項目：先看指令卡自己的同名欄位，沒有才用範本裡的參數值，再沒有就給預設值
 function paramChoices(u: Usage, p: Param): Choice[] {
-  if (p.kind === 'choice') return p.options.map((o) => ({ label: o, detail: '選項' }));
+  if (p.kind === 'choice') return p.options.map((o) => ({ label: o, detail: '' }));
   if (p.kind === 'literal') return [{ label: p.text, detail: u.description || u.format }];
   const own = u.ownOptions.get(p.name);
   if (own) return own;
