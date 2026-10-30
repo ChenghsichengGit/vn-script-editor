@@ -74,6 +74,7 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
       onChange={(text) => ctx.onFileChange(tabId, text)}
       onCursor={ctx.onCursor}
       active={ctx.activePanelId === api.id}
+      fileName={ctx.files[tabId].name}
     />
   );
 }

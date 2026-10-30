@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { DEFAULT_FONT_FAMILY, getSettings, updateSettings, useSettings } from '../settings';
+import { LANGUAGE_ID, registerScriptLanguage } from '../scriptLanguage';
 
 interface Props {
   fileId: string;
@@ -8,6 +9,7 @@ interface Props {
   onChange: (text: string) => void;
   onCursor: (pos: { line: number; column: number }) => void;
   active: boolean; // 這個編輯器是不是目前作用中的面板；只有作用中的才回報游標位置給狀態列
+  fileName: string; // .vns 才用劇本語言（指令上色、補齊、提示），其他當純文字
 }
 
 // 劇本編輯器（Monaco，VS Code 的編輯器核心）
@@ -54,7 +56,9 @@ export default function ScriptEditor(props: Props) {
     <Editor
       path={props.fileId}
       defaultValue={props.initialText}
-      theme="vs-dark"
+      theme="vn-dark"
+      language={/\.vns$/i.test(props.fileName) ? LANGUAGE_ID : 'plaintext'}
+      beforeMount={registerScriptLanguage}
       keepCurrentModel
       onChange={(v) => props.onChange(v ?? '')}
       onMount={(editor, monaco) => {
@@ -89,6 +93,8 @@ export default function ScriptEditor(props: Props) {
         lineNumbersMinChars: 3,
         glyphMargin: false,
         lineDecorationsWidth: 6,
+        wordBasedSuggestions: 'off', // 不要把文章裡出現過的詞也塞進補齊清單，只留指令和參數
+        quickSuggestions: false, // 只有打 # 或指令後的空白才跳清單，平常打對白不會一直跳
         automaticLayout: true, // 容器大小改變時跟著重新排版（不然縮放後會變很窄、小地圖消失）
       }}
     />

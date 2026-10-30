@@ -21,6 +21,7 @@ import {
   parseCardTab,
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
+import { setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
   FLOAT_DEFAULT_H,
@@ -99,6 +100,8 @@ export default function App() {
   // 角色／世界觀／指令的欄位範本（存在 project.json），以及正在編輯哪一個區塊的範本
   const [schemas, setSchemas] = useState<Schemas>(defaultSchemas);
   const [schemaDialog, setSchemaDialog] = useState<CardSectionId | null>(null);
+  // 卡片或範本一變，就把最新的指令清單和參數可選值交給劇本編輯器的補齊功能
+  useEffect(() => setScriptData(cards, schemas), [cards, schemas]);
 
   // ── 存檔 ──────────────────────────────
   // 有改動的東西記在 dirty 清單；停止輸入 1 秒後（或按 Ctrl+S）把清單裡的東西寫回資料夾
