@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
+import { DEFAULT_FONT_FAMILY, getSettings, updateSettings, useSettings } from '../settings';
 
 interface Props {
   fileId: string;
@@ -20,6 +21,8 @@ export default function ScriptEditor(props: Props) {
   activeRef.current = props.active;
   const onCursorRef = useRef(props.onCursor);
   onCursorRef.current = props.onCursor;
+
+  const settings = useSettings();
 
   const report = () => {
     const pos = editorRef.current?.getPosition();
@@ -61,13 +64,26 @@ export default function ScriptEditor(props: Props) {
         // 游標移動：只有作用中的面板才回報（另一個畫面編輯同一份內容時，這邊的游標也會被推動，不能算）
         editor.onDidChangeCursorPosition(() => activeRef.current && report());
         if (activeRef.current) report();
+        // Ctrl＋滾輪：調整設定裡的「劇本文字大小」（所有劇本分頁一起變，也會記住）
+        // 用捕捉階段先攔下來，不讓編輯器把它當成一般的捲動
+        editor.getDomNode()?.addEventListener(
+          'wheel',
+          (e) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const { scriptFontSize } = getSettings();
+            updateSettings({ scriptFontSize: scriptFontSize + (e.deltaY < 0 ? 1 : -1) });
+          },
+          { capture: true, passive: false },
+        );
       }}
       options={{
-        fontFamily: "'Cascadia Code', 'Microsoft JhengHei UI', monospace",
-        fontSize: 15,
-        lineHeight: 26,
-        wordWrap: 'on',
-        minimap: { enabled: true },
+        fontFamily: settings.scriptFontFamily.trim() ? `${settings.scriptFontFamily}, ${DEFAULT_FONT_FAMILY}` : DEFAULT_FONT_FAMILY,
+        fontSize: settings.scriptFontSize,
+        lineHeight: Math.round(settings.scriptFontSize * 1.75), // 行距跟著字的大小等比例
+        wordWrap: settings.wordWrap ? 'on' : 'off',
+        minimap: { enabled: settings.minimap },
         automaticLayout: true, // 容器大小改變時跟著重新排版（不然縮放後會變很窄、小地圖消失）
       }}
     />

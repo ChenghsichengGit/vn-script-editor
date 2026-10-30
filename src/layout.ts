@@ -27,6 +27,7 @@ export interface Layout {
   floating: FloatPanel[];
   hidden: SectionId[]; // 被活動列關掉的區塊（不管它在左、右還是浮動）
   sizes: Partial<Record<SectionId, number>>; // 固定高度的區塊拖出來的高度
+  leftCollapsed: boolean; // 左側欄整排收起來（裡面的區塊、高度都照樣保留，打開時一模一樣）
 }
 
 export const LAYOUT_KEY = 'vn-editor-layout';
@@ -43,6 +44,7 @@ const defaultLayout = (): Layout => ({
   floating: [],
   hidden: [],
   sizes: {},
+  leftCollapsed: false,
 });
 
 const isSection = (x: unknown): x is SectionId => sectionOrder.includes(x as SectionId);
@@ -103,6 +105,7 @@ function normalizeLayout(raw: unknown): Layout {
     floating,
     hidden: [...new Set(Array.isArray(r.hidden) ? r.hidden.filter(isSection) : [])] as SectionId[],
     sizes,
+    leftCollapsed: r.leftCollapsed === true,
   };
 }
 

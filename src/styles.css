@@ -48,6 +48,8 @@ html, body, #root {
 }
 .activity-bar button:hover { opacity: 0.85; }
 .activity-bar button.active { opacity: 1; border-left-color: var(--text); }
+/* 收起／打開左側欄的按鈕：推到最下面 */
+.activity-bar button.activity-collapse { margin-top: auto; font-size: 20px; color: var(--text); }
 
 /* 側邊欄：區塊上下疊，展開的區塊依比例分高度 */
 .sidebar {
@@ -224,7 +226,7 @@ body.dragging, body.dragging * { user-select: none; }
 }
 .tree-row:hover { background: var(--bg-hover); }
 .tree-row.selected { background: var(--bg-selected); }
-.chevron { width: 14px; flex-shrink: 0; text-align: center; color: var(--text-dim); }
+.chevron { width: 18px; flex-shrink: 0; text-align: center; color: var(--text-dim); font-size: 18px; line-height: 1; }
 .tree-label { flex-shrink: 0; }
 /* 名稱前面的類型圖示：固定寬度，名稱才會對齊 */
 .tree-icon { width: 18px; flex-shrink: 0; margin-right: 4px; text-align: center; font-size: 12px; }
@@ -383,10 +385,11 @@ body.dragging, body.dragging * { user-select: none; }
 }
 .rich-toolbar button:hover { background: var(--bg-hover); color: var(--text); }
 .rich-toolbar button.on { color: var(--accent); border-color: var(--border); }
-.rich-content .tiptap { font-size: 15px; min-height: 200px; }
-.rich-content .tiptap h1 { font-size: 26px; margin: 1.1em 0 0.3em; }
-.rich-content .tiptap h2 { font-size: 21px; margin: 1em 0 0.3em; }
-.rich-content .tiptap h3 { font-size: 17px; margin: 0.9em 0 0.3em; }
+/* 內文大小由設定決定（App 設定 --card-font-size）；標題用 em，跟著內文等比例 */
+.rich-content .tiptap { font-size: var(--card-font-size, 15px); min-height: 200px; }
+.rich-content .tiptap h1 { font-size: 1.73em; margin: 1.1em 0 0.3em; }
+.rich-content .tiptap h2 { font-size: 1.4em; margin: 1em 0 0.3em; }
+.rich-content .tiptap h3 { font-size: 1.13em; margin: 0.9em 0 0.3em; }
 
 /* 右側目錄 */
 .outline {

@@ -10,8 +10,8 @@ import NameInput from './NameInput';
 const INDENT = 14; // 每深一層資料夾縮排多少像素
 const EXPAND_DELAY = 600; // 拖著東西停在摺起來的資料夾上多久（毫秒）就自動展開
 
-// 樹狀列的左邊距：資料夾和設定卡有 ▸ 箭頭；劇本檔案沒有，所以多推一個箭頭的寬度，讓檔名和資料夾名對齊
-const rowPad = (depth: number, hasChevron: boolean) => (hasChevron ? 6 : 22) + depth * INDENT;
+// 樹狀列的左邊距：資料夾和設定卡有 ▸ 箭頭；劇本檔案沒有，所以多推一個箭頭的寬度（18px），讓檔名和資料夾名對齊
+const rowPad = (depth: number, hasChevron: boolean) => (hasChevron ? 6 : 24) + depth * INDENT;
 const byName = (a: string, b: string) => a.localeCompare(b, 'zh-Hant');
 
 // 右鍵選單對準的目標

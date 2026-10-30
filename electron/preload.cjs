@@ -1,7 +1,7 @@
 // 預載腳本：在網頁與主程序之間搭橋，只開放必要的功能給 window.api
 // （contextIsolation 開啟，網頁拿不到 ipcRenderer 本身）
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 // 訂閱主程序送來的事件，回傳取消訂閱的函式
 function subscribe(channel, cb) {
@@ -31,4 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   onMenu: (cb) => subscribe('menu', cb),
   onAppClosing: (cb) => subscribe('app-closing', () => cb()),
   readyToClose: () => ipcRenderer.send('app:readyToClose'),
+
+  // 整個畫面的縮放（設定裡的「UI 大小」）
+  setZoom: (factor) => webFrame.setZoomFactor(factor),
 });

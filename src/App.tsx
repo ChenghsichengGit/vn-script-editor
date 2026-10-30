@@ -6,6 +6,8 @@ import { MoveItem, folderKey, remapFolderKeys } from './components/SectionPanel'
 import EditorDock, { EditorDockHandle } from './components/EditorDock';
 import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
+import SettingsDialog from './components/SettingsDialog';
+import { useSettings } from './settings';
 import { Card, CardOps, CardSectionId, SectionId, cardTabId, parseCardTab } from './model';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
@@ -62,7 +64,12 @@ export interface FolderOps {
 // App 是「總管」：所有狀態都存在這裡，子元件只負責顯示、把使用者的操作回報上來
 export default function App() {
   const [layout, setLayout] = useState<Layout>(loadLayout);
-  const [leftVisible, setLeftVisible] = useState(true); // Ctrl+B 開關的是左側欄
+  // 左側欄整排收起來了沒（Ctrl+B 或活動列最下面的按鈕）；記在版面裡，下次開啟維持原樣
+  const leftVisible = !layout.leftCollapsed;
+  const setLeftVisible = (v: boolean | ((visible: boolean) => boolean)) =>
+    setLayout((l) => ({ ...l, leftCollapsed: !(typeof v === 'function' ? v(!l.leftCollapsed) : v) }));
+  const settings = useSettings();
+  const [showSettings, setShowSettings] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set()); // 被摺起來的資料夾（所有區塊共用，key 含區塊名）
   const [project, setProject] = useState<{ store: ProjectStore; name: string } | null>(null); // null = 顯示開始畫面
   const [cards, setCards] = useState(emptyCards);
@@ -130,12 +137,18 @@ export default function App() {
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
-  // 自動存檔：任何內容一改，計時重新開始；停下來 1 秒就存
+  // 自動存檔：任何內容一改，計時重新開始；停下來 1 秒就存（設定裡關掉自動存檔就只靠 Ctrl+S，關視窗時仍會存）
   useEffect(() => {
-    if (dirty.size === 0) return;
+    if (dirty.size === 0 || !settings.autoSave) return;
     const timer = setTimeout(() => flushRef.current(), SAVE_DELAY);
     return () => clearTimeout(timer);
-  }, [dirty, contents, cards, files]);
+  }, [dirty, contents, cards, files, settings.autoSave]);
+
+  // 套用設定：UI 大小交給 Electron 縮放整個畫面；設定卡內文大小用 CSS 變數
+  useEffect(() => window.api.setZoom(settings.uiZoom), [settings.uiZoom]);
+  useEffect(() => {
+    document.documentElement.style.setProperty('--card-font-size', `${settings.cardFontSize}px`);
+  }, [settings.cardFontSize]);
 
   // 關閉視窗：主程序會先通知這裡，把沒存的存完（存失敗就問一下）再回報可以關了
   const closingRef = useRef(false);
@@ -209,6 +222,10 @@ export default function App() {
 
   // 原生選單送來的指令（用 ref 讓訂閱一次就好，執行時永遠是最新版）
   const onMenu = async (ev: MenuEvent) => {
+    if (ev.type === 'open-settings') {
+      setShowSettings(true);
+      return;
+    }
     try {
       if (ev.type === 'close-project') {
         await closeProject();
@@ -639,7 +656,17 @@ export default function App() {
     };
   }
 
-  if (!project) return <WelcomeScreen key={createKey} startInCreateMode={startInCreate} onOpen={loadProject} />;
+  // 設定視窗蓋在最上面；開始畫面也能開
+  const settingsDialog = showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />;
+
+  if (!project) {
+    return (
+      <>
+        <WelcomeScreen key={createKey} startInCreateMode={startInCreate} onOpen={loadProject} />
+        {settingsDialog}
+      </>
+    );
+  }
 
   const saveLabel =
     saveState === 'error' ? `⚠ 存檔失敗：${saveError}` : saveState === 'saving' ? '儲存中…' : dirty.size > 0 ? '尚未儲存' : '已儲存';
@@ -666,7 +693,12 @@ export default function App() {
   return (
     <div className="app">
       <div className="main" ref={mainRef}>
-        <ActivityBar active={activeSections} onToggle={toggleSection} />
+        <ActivityBar
+          active={activeSections}
+          onToggle={toggleSection}
+          leftOpen={leftVisible}
+          onToggleLeft={() => setLeftVisible((v) => !v)}
+        />
         {showLeft && (
           <>
             <Sidebar {...treeProps} side="left" sections={leftSections} layout={layout} onLayoutChange={onLayoutChange} />
@@ -720,6 +752,7 @@ export default function App() {
         left={`📁 ${project.name}　｜　${status.left}`}
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
       />
+      {settingsDialog}
     </div>
   );
 }

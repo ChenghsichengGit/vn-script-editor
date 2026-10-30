@@ -16,7 +16,8 @@ type MenuEvent =
   | { type: 'new-project' }
   | { type: 'open-project' }
   | { type: 'open-recent'; path: string }
-  | { type: 'close-project' };
+  | { type: 'close-project' }
+  | { type: 'open-settings' };
 
 interface ElectronApi {
   // 檔案操作：路徑必須在使用者開啟過的專案資料夾內，否則會丟錯
@@ -39,6 +40,8 @@ interface ElectronApi {
   onMenu(cb: (event: MenuEvent) => void): () => void;
   onAppClosing(cb: () => void): () => void;
   readyToClose(): void;
+
+  setZoom(factor: number): void; // 整個畫面的縮放，1 = 100%
 }
 
 interface Window {

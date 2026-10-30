@@ -100,7 +100,11 @@ async function buildMenu() {
         { role: 'quit', label: '結束' },
       ],
     },
-    // 只留「檔案」選單；Windows 上複製／貼上／復原的快捷鍵不需要「編輯」選單也能用
+    {
+      label: '設定',
+      submenu: [{ label: '設定…', accelerator: 'CmdOrCtrl+,', click: () => sendMenu({ type: 'open-settings' }) }],
+    },
+    // 沒有「編輯」選單；Windows 上複製／貼上／復原的快捷鍵不需要它也能用
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
