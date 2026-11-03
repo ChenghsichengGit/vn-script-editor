@@ -283,12 +283,17 @@ fn open_new_window(app: &AppHandle) -> tauri::Result<()> {
     let state = app.state::<AppState>();
     let label = format!("w{}", state.next_window.fetch_add(1, Ordering::SeqCst) + 1);
     WebviewWindowBuilder::new(app, label, WebviewUrl::default())
-        .title("VN Script Editor")
+        .title(window_title(app))
         .inner_size(1400.0, 900.0)
         .background_color(Color(0x1e, 0x1e, 0x1e, 0xff))
         .disable_drag_drop_handler() // 跟 tauri.conf.json 的 dragDropEnabled: false 一樣，不然畫面裡不能拖曳
         .build()?;
     Ok(())
+}
+
+// 視窗標題：程式名稱＋版本號（版本號取自 tauri.conf.json）
+fn window_title(app: &AppHandle) -> String {
+    format!("VN Script Editor {}", app.package_info().version)
 }
 
 // 把視窗叫到最前面（最小化的話先還原）
@@ -482,6 +487,9 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle();
             set_menu(handle, &read_recent(handle))?;
+            if let Some(w) = handle.get_webview_window("main") {
+                let _ = w.set_title(&window_title(handle));
+            }
             Ok(())
         })
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
