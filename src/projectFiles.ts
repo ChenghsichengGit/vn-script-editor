@@ -401,6 +401,25 @@ export class ProjectStore {
     });
   }
 
+  // 從硬碟讀回上次存的劇本（「不儲存」關分頁時用）；從沒存過回傳 null
+  readSavedFile(id: string): Promise<{ name: string; content: string } | null> {
+    return this.enqueue(async () => {
+      const loc = this.locs.files.get(id);
+      if (!loc) return null;
+      return { name: loc.name, content: await window.api.readText(joinPath(this.dirPath('files', loc.folder), loc.name)) };
+    });
+  }
+
+  // 從硬碟讀回上次存的設定卡；從沒存過回傳 null
+  readSavedCard(section: CardSectionId, id: string): Promise<Card | null> {
+    return this.enqueue(async () => {
+      const loc = this.locs[section].get(id);
+      if (!loc) return null;
+      const text = await window.api.readText(joinPath(this.dirPath(section, loc.folder), loc.name));
+      return { ...parseCard(id, loc.name, text), folder: loc.folder };
+    });
+  }
+
   deleteFile(id: string): Promise<void> {
     return this.enqueue(async () => {
       const old = this.locs.files.get(id);

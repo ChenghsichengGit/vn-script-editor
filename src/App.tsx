@@ -149,10 +149,11 @@ export default function App() {
   latest.current = { project, files, contents, cards, dirty, activeTab };
 
   // 存完回傳 null；有東西存失敗回傳錯誤訊息（那些東西會放回「還沒存」清單）
-  const flush = async (): Promise<string | null> => {
+  // only = 只存這幾個（關分頁時只存那一個）；沒給就全部存
+  const flush = async (only?: string[]): Promise<string | null> => {
     const { project, files, contents, cards, dirty } = latest.current;
-    if (!project || dirty.size === 0) return null;
-    const keys = [...dirty];
+    const keys = [...dirty].filter((k) => !only || only.includes(k));
+    if (!project || keys.length === 0) return null;
     // 先從清單拿掉；存檔途中又被修改的話，會再被加回來，下一輪再存
     setDirty((d) => new Set([...d].filter((k) => !keys.includes(k))));
     setSaveState('saving');
@@ -190,20 +191,73 @@ export default function App() {
 
   // 關閉程式時跳出的「要先儲存嗎？」視窗是否顯示中
   const [closePrompt, setClosePrompt] = useState(false);
+  // 關分頁時跳出的「要先儲存嗎？」視窗：哪個分頁，以及問完要通知 EditorDock 關不關
+  const [tabClose, setTabClose] = useState<{ tabId: string; resolve: (close: boolean) => void } | null>(null);
 
   // 自動存檔：任何內容一改，計時重新開始；停下來 1 秒就存（設定裡關掉自動存檔就只靠 Ctrl+S）
-  // 「要先儲存嗎？」視窗開著時暫停，不然選「不儲存」之前就已經被自動存進去了
+  // 「要先儲存嗎？」視窗（關程式或關分頁）開著時暫停，不然選「不儲存」之前就已經被自動存進去了
   useEffect(() => {
-    if (dirty.size === 0 || !settings.autoSave || closePrompt) return;
+    if (dirty.size === 0 || !settings.autoSave || closePrompt || tabClose) return;
     const timer = setTimeout(() => flushRef.current(), SAVE_DELAY);
     return () => clearTimeout(timer);
-  }, [dirty, contents, cards, files, settings.autoSave, closePrompt]);
+  }, [dirty, contents, cards, files, settings.autoSave, closePrompt, tabClose]);
 
   // 套用設定：UI 大小交給桌面程式縮放整個畫面；設定卡內文大小用 CSS 變數
   useEffect(() => window.api.setZoom(settings.uiZoom), [settings.uiZoom]);
   useEffect(() => {
     document.documentElement.style.setProperty('--card-font-size', `${settings.cardFontSize}px`);
   }, [settings.cardFontSize]);
+
+  // ── 關分頁時有沒存的內容：問「儲存／不儲存／取消」──
+  // EditorDock 關掉某個檔案的最後一個畫面前呼叫，回傳要不要關
+  const dirtyKeyOf = (tabId: string) => (parseCardTab(tabId) ? tabId : fileKey(tabId));
+  const confirmTabClose = (tabId: string) =>
+    latest.current.dirty.has(dirtyKeyOf(tabId))
+      ? new Promise<boolean>((resolve) => setTabClose({ tabId, resolve }))
+      : Promise.resolve(true);
+  // 「不儲存」：丟掉這次的修改，從硬碟讀回上次存的內容（從沒存過的就保持現在的樣子，只是不再標成還沒存）
+  const revertTab = async (tabId: string) => {
+    const store = latest.current.project?.store;
+    const ref = parseCardTab(tabId);
+    try {
+      if (store && ref) {
+        const saved = await store.readSavedCard(ref.section, ref.id);
+        if (saved) setCards((all) => ({ ...all, [ref.section]: all[ref.section].map((c) => (c.id === ref.id ? saved : c)) }));
+      } else if (store) {
+        const saved = await store.readSavedFile(tabId);
+        if (saved) {
+          setFiles((all) => ({ ...all, [tabId]: { ...all[tabId], name: saved.name } }));
+          setContents((c) => ({ ...c, [tabId]: saved.content }));
+        }
+      }
+    } catch (e) {
+      reportError(e);
+    }
+    unmarkDirty(dirtyKeyOf(tabId));
+  };
+  const tabCloseDialog = () =>
+    tabClose && (
+      <CloseDialog
+        message={`「${tabLabel(tabClose.tabId)}」有尚未儲存的變更，要先儲存嗎？`}
+        onSave={async () => {
+          const error = await flushRef.current([dirtyKeyOf(tabClose.tabId)]);
+          if (!error) {
+            tabClose.resolve(true);
+            setTabClose(null);
+          }
+          return error;
+        }}
+        onDiscard={async () => {
+          await revertTab(tabClose.tabId);
+          tabClose.resolve(true);
+          setTabClose(null);
+        }}
+        onCancel={() => {
+          tabClose.resolve(false);
+          setTabClose(null);
+        }}
+      />
+    );
 
   // 關閉視窗：主程式會先通知這裡。全部存好了就直接關；還有沒存的就跳出「儲存／不儲存／取消」視窗
   useEffect(() => {
@@ -977,6 +1031,7 @@ export default function App() {
           onCardChange={cardOps.update}
           onCursor={setCursor}
           onActiveTabChange={setActiveTab}
+          confirmClose={confirmTabClose}
           bottom={
             layout.problemsOpen && (
               <ProblemsPanel
@@ -1026,6 +1081,7 @@ export default function App() {
       />
       {settingsDialog}
       {closeDialog}
+      {tabCloseDialog()}
       {quickPickView}
       {schemaDialog && (
         <SchemaDialog

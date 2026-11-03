@@ -109,6 +109,13 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
   );
 }
 
+// 關分頁前先檢查：這是那個檔案的最後一個畫面、而且有沒存的內容，就先問要不要存（App 的 confirmClose）
+// 分頁標籤和右鍵選單（都在元件外面）從這裡呼叫；實作由 EditorDock 元件放進來
+let requestClose: (tabId: string | undefined, close: () => void) => Promise<boolean> = async (_tabId, close) => {
+  close();
+  return true;
+};
+
 // 分頁標籤：標題、還沒存檔的圓點、關閉鈕。沿用 dockview 預設分頁的 class，樣式和拖曳行為才會一致
 function EditorTab({ api, params }: IDockviewPanelHeaderProps<PanelParams>) {
   const ctx = useContext(EditorCtx)!;
@@ -120,7 +127,7 @@ function EditorTab({ api, params }: IDockviewPanelHeaderProps<PanelParams>) {
       onAuxClick={(e) => {
         if (e.button === 1) {
           e.preventDefault();
-          api.close();
+          void requestClose(tabId, () => api.close());
         }
       }}
     >
@@ -143,7 +150,7 @@ function EditorTab({ api, params }: IDockviewPanelHeaderProps<PanelParams>) {
         onPointerDown={(e) => e.preventDefault()} // 避免按 × 時被當成開始拖曳分頁
         onClick={(e) => {
           e.preventDefault();
-          api.close();
+          void requestClose(tabId, () => api.close());
         }}
       >
         ×
@@ -190,9 +197,14 @@ function tabMenu({ panel, group, api }: GetTabContextMenuItemsParams): (BuiltInC
   const tabId = tabIdOf(panel);
   const split = (direction: 'right' | 'below') => () =>
     tabId && addPanel(api, tabId, panel.title ?? '', { referencePanel: panel.id, direction });
-  const closeAll = (keep?: string) => () => group.panels.filter((p) => p.id !== keep).forEach((p) => p.api.close());
+  // 一個一個關；有一個選了「取消」就停下來
+  const closeAll = (keep?: string) => async () => {
+    for (const p of group.panels.filter((x) => x.id !== keep)) {
+      if (!(await requestClose(tabIdOf(p), () => p.api.close()))) return;
+    }
+  };
   return [
-    { label: '關閉', action: () => panel.api.close() },
+    { label: '關閉', action: () => void requestClose(tabId, () => panel.api.close()) },
     { label: '關閉其他', action: closeAll(panel.id), disabled: group.panels.length < 2 },
     { label: '關閉群組內全部', action: closeAll() },
     'separator',
@@ -231,6 +243,7 @@ interface Props {
   onCardChange: EditorCtxValue['onCardChange'];
   onCursor: EditorCtxValue['onCursor'];
   onActiveTabChange: (tabId: string | null) => void; // 作用中的面板換了（沒有任何面板時是 null）
+  confirmClose: (tabId: string) => Promise<boolean>; // 要關掉有沒存內容的分頁：問完回傳要不要關
   bottom?: React.ReactNode; // 編輯區下方的面板（問題面板）
 }
 
@@ -241,6 +254,15 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
   // dockview 的事件只訂閱一次，所以事件裡要用的東西都從 ref 讀最新的
   const propsRef = useRef(props);
   propsRef.current = props;
+
+  // 關分頁前的檢查（說明見上面的 requestClose）；同一個檔案還有別的畫面開著就不用問
+  requestClose = async (tabId, close) => {
+    const api = apiRef.current;
+    const last = !!tabId && !!api && panelsOf(api, tabId).length === 1;
+    if (last && !(await propsRef.current.confirmClose(tabId!))) return false;
+    close();
+    return true;
+  };
   const cleanups = useRef<(() => void)[]>([]);
 
   // ── 版面記憶（每個專案各一份）──
@@ -289,7 +311,10 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
       }
     },
     saveLayout: writeLayout,
-    closeActive: () => apiRef.current?.activePanel?.api.close(),
+    closeActive: () => {
+      const panel = apiRef.current?.activePanel;
+      if (panel) void requestClose(tabIdOf(panel), () => panel.api.close());
+    },
   }));
 
   // dockview 建好了：還原這個專案上次的版面；失敗或沒有記錄就開第一個劇本
