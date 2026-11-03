@@ -24,6 +24,7 @@ import {
 import SchemaDialog from './components/SchemaDialog';
 import CloseDialog from './components/CloseDialog';
 import Icon from './components/Icon';
+import QuickPick, { QuickPickItem } from './components/QuickPick';
 import { FIXED_COMMAND_FIELDS, migrateFormatField, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
@@ -164,6 +165,9 @@ export default function App() {
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
+  // Ctrl+P／Ctrl+Shift+P 的快速選單：null = 沒開；'' = 找檔案；'>' = 找功能
+  const [quickPick, setQuickPick] = useState<string | null>(null);
+
   // 關閉程式時跳出的「要先儲存嗎？」視窗是否顯示中
   const [closePrompt, setClosePrompt] = useState(false);
 
@@ -206,6 +210,13 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.metaKey) return;
       const key = e.key.toLowerCase();
+      // Ctrl+P：快速開啟；Ctrl+Shift+P：指令面板（同一個選單，開頭是 > 就是找功能）
+      if (key === 'p') {
+        e.preventDefault();
+        e.stopPropagation();
+        setQuickPick(e.shiftKey ? '>' : '');
+        return;
+      }
       // Ctrl+Shift+N：新視窗
       if (e.shiftKey) {
         if (key !== 'n') return;
@@ -803,12 +814,73 @@ export default function App() {
   // 設定視窗蓋在最上面；開始畫面也能開
   const settingsDialog = showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />;
 
+  // ── Ctrl+P 快速開啟／Ctrl+Shift+P 指令面板 ─────────
+  // 找檔案：所有劇本和設定卡；找功能：選單上的功能、新增○○（接著在同一個框裡打名稱）、各區塊的欄位設定
+  const where = (title: string, folder?: string) => (folder ? `${title}／${folder}` : title);
+  const quickFiles: QuickPickItem[] = project
+    ? [
+        ...Object.entries(files).map(([id, f]) => ({
+          id: `file:${id}`,
+          label: f.name,
+          detail: where('劇本', f.folder),
+          icon: fileIcon(f.name),
+          run: () => openTab(id),
+        })),
+        ...(Object.keys(cards) as CardSectionId[]).flatMap((section) =>
+          cards[section].map((c) => ({
+            id: cardTabId(section, c.id),
+            label: c.name || '（未命名）',
+            detail: where(sectionMeta[section].title, c.folder),
+            icon: sectionMeta[section].icon,
+            run: () => cardOps.open(section, c.id),
+          })),
+        ),
+      ]
+    : [];
+  const menu = (type: MenuEvent['type']) => () => void onMenuRef.current({ type } as MenuEvent);
+  const quickCommands: QuickPickItem[] = [
+    { id: 'new-window', label: '新視窗', keybinding: 'Ctrl+Shift+N', icon: 'add', run: () => void window.api.newWindow() },
+    { id: 'open-project', label: '開啟專案資料夾…', keybinding: 'Ctrl+O', icon: 'folder-opened', run: menu('open-project') },
+    { id: 'new-project', label: '新增專案…', icon: 'new-folder', run: menu('new-project') },
+    { id: 'settings', label: '設定…', keybinding: 'Ctrl+,', icon: 'settings-gear', run: () => setShowSettings(true) },
+    ...(project
+      ? [
+          { id: 'save', label: '全部存檔', keybinding: 'Ctrl+S', icon: 'save', run: () => void flushRef.current() },
+          { id: 'close-tab', label: '關閉分頁', keybinding: 'Ctrl+W', icon: 'close', run: menu('close-tab') },
+          { id: 'toggle-left', label: '收起／打開左側欄', keybinding: 'Ctrl+B', icon: 'layout-sidebar-left', run: () => setLeftVisible((v) => !v) },
+          {
+            id: 'new-script',
+            label: '新增劇本',
+            icon: fileIcon('.vns'),
+            run: () => ({ placeholder: '劇本檔名（沒寫副檔名會自動補 .vns）', submit: (name: string) => fileOps.add('', name) }),
+          },
+          ...(Object.keys(cards) as CardSectionId[]).map((section) => ({
+            id: `new-${section}`,
+            label: `新增${sectionMeta[section].title}`,
+            icon: sectionMeta[section].icon,
+            run: () => ({ placeholder: `${sectionMeta[section].title}的名稱`, submit: (name: string) => cardOps.add(section, '', name) }),
+          })),
+          ...(Object.keys(cards) as CardSectionId[]).map((section) => ({
+            id: `schema-${section}`,
+            label: `${sectionMeta[section].title}的欄位設定…`,
+            icon: 'list-tree',
+            run: () => setSchemaDialog(section),
+          })),
+          { id: 'close-project', label: '關閉專案', icon: 'root-folder', run: menu('close-project') },
+        ]
+      : []),
+  ];
+  const quickPickView = quickPick !== null && (
+    <QuickPick key={quickPick} initial={quickPick} files={quickFiles} commands={quickCommands} onClose={() => setQuickPick(null)} />
+  );
+
   if (!project) {
     return (
       <>
         <WelcomeScreen key={createKey} startInCreateMode={startInCreate} onOpen={loadProject} />
         {settingsDialog}
         {closeDialog}
+        {quickPickView}
       </>
     );
   }
@@ -904,6 +976,7 @@ export default function App() {
       />
       {settingsDialog}
       {closeDialog}
+      {quickPickView}
       {schemaDialog && (
         <SchemaDialog
           key={schemaDialog}

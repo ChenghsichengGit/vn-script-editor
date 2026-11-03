@@ -1,0 +1,35 @@
+/* VS Code 式的快速選單（Ctrl+P／Ctrl+Shift+P）：畫面上方中間 */
+.qp-backdrop { position: fixed; inset: 0; z-index: 1250; }
+.qp-panel {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 32px));
+  padding: 6px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+}
+.qp-input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-editor);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 5px 8px;
+  outline: none;
+}
+.qp-input::placeholder { color: var(--text-placeholder); }
+.qp-error { color: #f48771; font-size: 12px; padding: 6px 4px 0; }
+.qp-list { max-height: 420px; overflow-y: auto; margin-top: 4px; }
+.qp-empty { color: var(--text-dim); padding: 6px 8px; font-size: 13px; }
+.qp-item { display: flex; align-items: center; gap: 8px; padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 13px; line-height: 22px; }
+.qp-item.active { background: #04395e; }
+.qp-icon.codicon { font-size: 15px; flex-shrink: 0; }
+.qp-label { white-space: nowrap; }
+.qp-detail { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.qp-key { margin-left: auto; color: var(--text-dim); font-size: 12px; white-space: nowrap; flex-shrink: 0; }

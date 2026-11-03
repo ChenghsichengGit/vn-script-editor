@@ -33,3 +33,6 @@
 .codicon-symbol-event::before { content: "\ea86"; }
 .codicon-output::before { content: "\eb9d"; }
 .codicon-layout-panel::before { content: "\ebf2"; }
+.codicon-save::before { content: "\eb4b"; }
+.codicon-root-folder::before { content: "\eb46"; }
+.codicon-list-flat::before { content: "\eb84"; }
