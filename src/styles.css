@@ -538,3 +538,29 @@ body.dragging, body.dragging * { user-select: none; }
 /* 拖曳排序：放開後會插在這一列的上面或下面 */
 .tree-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* 關閉程式時「要先儲存嗎？」的視窗 */
+.close-backdrop { position: fixed; inset: 0; z-index: 1300; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; }
+.close-panel {
+  min-width: 360px;
+  padding: 20px 22px 16px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+.close-message { font-size: 14px; margin-bottom: 18px; }
+.close-error { color: #f48771; font-size: 12px; margin: -8px 0 14px; }
+.close-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.close-btn {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-tab);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 5px 16px;
+  cursor: pointer;
+}
+.close-btn:hover:not(:disabled) { background: var(--bg-hover); }
+.close-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.close-btn:disabled { opacity: 0.6; cursor: default; }

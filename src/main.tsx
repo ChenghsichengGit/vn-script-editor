@@ -1,3 +1,4 @@
+import './platform'; // 先接好 window.api（桌面程式的檔案、選單功能），後面的程式才能用
 import { createRoot } from 'react-dom/client';
 import { loader } from '@monaco-editor/react';
 import monaco from './monaco';

@@ -1,4 +1,4 @@
-// window.api 的型別：由 electron/preload.cjs 提供，所有路徑都是絕對路徑
+// window.api 的型別：由 src/platform.ts 提供（接到 src-tauri/src/lib.rs 的指令），所有路徑都是絕對路徑
 // 注意：此檔不可有 import / export，才會被當成全域宣告
 
 interface DirEntry {

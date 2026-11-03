@@ -22,6 +22,7 @@ import {
   parseCardTab,
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
+import CloseDialog from './components/CloseDialog';
 import { FIXED_COMMAND_FIELDS, migrateFormatField, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
@@ -125,9 +126,10 @@ export default function App() {
   const latest = useRef({ project, files, contents, cards, dirty, activeTab });
   latest.current = { project, files, contents, cards, dirty, activeTab };
 
-  const flush = async () => {
+  // 存完回傳 null；有東西存失敗回傳錯誤訊息（那些東西會放回「還沒存」清單）
+  const flush = async (): Promise<string | null> => {
     const { project, files, contents, cards, dirty } = latest.current;
-    if (!project || dirty.size === 0) return;
+    if (!project || dirty.size === 0) return null;
     const keys = [...dirty];
     // 先從清單拿掉；存檔途中又被修改的話，會再被加回來，下一輪再存
     setDirty((d) => new Set([...d].filter((k) => !keys.includes(k))));
@@ -148,43 +150,70 @@ export default function App() {
         }
       }
       setSaveState('saved');
+      return null;
     } catch (e) {
       // 存失敗：把這些東西放回「還沒存」清單，狀態列顯示錯誤
+      const message = e instanceof Error ? e.message : String(e);
       setDirty((d) => new Set([...d, ...keys]));
       setSaveState('error');
-      setSaveError(e instanceof Error ? e.message : String(e));
+      setSaveError(message);
+      return message;
     }
   };
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
-  // 自動存檔：任何內容一改，計時重新開始；停下來 1 秒就存（設定裡關掉自動存檔就只靠 Ctrl+S，關視窗時仍會存）
+  // 關閉程式時跳出的「要先儲存嗎？」視窗是否顯示中
+  const [closePrompt, setClosePrompt] = useState(false);
+
+  // 自動存檔：任何內容一改，計時重新開始；停下來 1 秒就存（設定裡關掉自動存檔就只靠 Ctrl+S）
+  // 「要先儲存嗎？」視窗開著時暫停，不然選「不儲存」之前就已經被自動存進去了
   useEffect(() => {
-    if (dirty.size === 0 || !settings.autoSave) return;
+    if (dirty.size === 0 || !settings.autoSave || closePrompt) return;
     const timer = setTimeout(() => flushRef.current(), SAVE_DELAY);
     return () => clearTimeout(timer);
-  }, [dirty, contents, cards, files, settings.autoSave]);
+  }, [dirty, contents, cards, files, settings.autoSave, closePrompt]);
 
-  // 套用設定：UI 大小交給 Electron 縮放整個畫面；設定卡內文大小用 CSS 變數
+  // 套用設定：UI 大小交給桌面程式縮放整個畫面；設定卡內文大小用 CSS 變數
   useEffect(() => window.api.setZoom(settings.uiZoom), [settings.uiZoom]);
   useEffect(() => {
     document.documentElement.style.setProperty('--card-font-size', `${settings.cardFontSize}px`);
   }, [settings.cardFontSize]);
 
-  // 關閉視窗：主程序會先通知這裡，把沒存的存完（存失敗就問一下）再回報可以關了
-  const closingRef = useRef(false);
+  // 關閉視窗：主程式會先通知這裡。全部存好了就直接關；還有沒存的就跳出「儲存／不儲存／取消」視窗
   useEffect(() => {
-    return window.api.onAppClosing(async () => {
-      if (closingRef.current) return; // 正在存檔中，不要重複處理
-      closingRef.current = true;
-      try {
-        await flushRef.current();
-        if (latest.current.dirty.size > 0 && !window.confirm('有內容存檔失敗，確定要關閉嗎？')) return;
-        window.api.readyToClose();
-      } finally {
-        closingRef.current = false;
-      }
+    return window.api.onAppClosing(() => {
+      if (latest.current.dirty.size === 0) window.api.readyToClose();
+      else setClosePrompt(true);
     });
+  }, []);
+  const closeDialog = closePrompt && (
+    <CloseDialog
+      onSave={async () => {
+        const error = await flushRef.current();
+        if (!error) window.api.readyToClose();
+        return error;
+      }}
+      onDiscard={() => window.api.readyToClose()}
+      onCancel={() => setClosePrompt(false)}
+    />
+  );
+
+  // 選單的快捷鍵由這裡偵測：游標在畫面裡時，按鍵會先被 WebView2 收走，桌面程式的選單收不到
+  // 用 capture：比劇本編輯器（Monaco）自己的快捷鍵先處理
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
+      const key = e.key.toLowerCase();
+      const ev: MenuEvent | null =
+        key === 'o' ? { type: 'open-project' } : key === 'w' ? { type: 'close-tab' } : key === ',' ? { type: 'open-settings' } : null;
+      if (!ev) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void onMenuRef.current(ev);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
   // 刪除檔案時直接呼叫，失敗就顯示在狀態列
@@ -762,6 +791,7 @@ export default function App() {
       <>
         <WelcomeScreen key={createKey} startInCreateMode={startInCreate} onOpen={loadProject} />
         {settingsDialog}
+        {closeDialog}
       </>
     );
   }
@@ -855,6 +885,7 @@ export default function App() {
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
       />
       {settingsDialog}
+      {closeDialog}
       {schemaDialog && (
         <SchemaDialog
           key={schemaDialog}
