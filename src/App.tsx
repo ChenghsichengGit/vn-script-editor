@@ -23,6 +23,7 @@ import {
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
 import CloseDialog from './components/CloseDialog';
+import UpdateDialog from './components/UpdateDialog';
 import Icon from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
 import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
@@ -1151,6 +1152,7 @@ export default function App() {
         <WelcomeScreen key={createKey} startInCreateMode={startInCreate} onOpen={loadProject} />
         {settingsDialog}
         {closeDialog}
+        <UpdateDialog beforeInstall={() => flushRef.current()} />
         {quickPickView}
       </>
     );
@@ -1266,6 +1268,7 @@ export default function App() {
       />
       {settingsDialog}
       {closeDialog}
+      <UpdateDialog beforeInstall={() => flushRef.current()} />
       {tabCloseDialog()}
       {conflictDialog}
       {quickPickView}

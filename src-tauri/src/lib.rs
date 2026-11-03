@@ -448,6 +448,9 @@ pub fn run() {
             let _ = open_new_window(app);
         }))
         .plugin(tauri_plugin_dialog::init())
+        // 自動更新：檢查 tauri.conf.json 裡 plugins.updater.endpoints 的網址有沒有新版本；process 用來更新完重新啟動
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState {
             roots: Mutex::new(HashSet::new()),
             recent_lock: Mutex::new(()),
