@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主視窗可以用的功能：收發事件（選單、關閉通知）。檔案操作都走自己寫的指令（lib.rs），不開放 Tauri 內建的檔案存取",
-  "windows": ["main"],
+  "description": "每個視窗可以用的功能：收發事件（選單、關閉通知）。檔案操作都走自己寫的指令（lib.rs），不開放 Tauri 內建的檔案存取",
+  "windows": ["*"],
   "permissions": ["core:default"]
 }

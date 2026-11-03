@@ -203,8 +203,16 @@ export default function App() {
   // 用 capture：比劇本編輯器（Monaco）自己的快捷鍵先處理
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
+      if (!e.ctrlKey || e.altKey || e.metaKey) return;
       const key = e.key.toLowerCase();
+      // Ctrl+Shift+N：新視窗
+      if (e.shiftKey) {
+        if (key !== 'n') return;
+        e.preventDefault();
+        e.stopPropagation();
+        void window.api.newWindow();
+        return;
+      }
       const ev: MenuEvent | null =
         key === 'o' ? { type: 'open-project' } : key === 'w' ? { type: 'close-tab' } : key === ',' ? { type: 'open-settings' } : null;
       if (!ev) return;
@@ -280,6 +288,7 @@ export default function App() {
     setCards(emptyCards);
     setActiveTab(null);
     setDirty(new Set());
+    void window.api.releaseProject(); // 別的視窗就可以開這個專案了
     return true;
   };
 
@@ -310,11 +319,12 @@ export default function App() {
       } else if (ev.type === 'open-project') {
         if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
         const root = await pickFolder();
-        if (root) await openOpened(await ProjectStore.open(root));
+        // 已經在別的視窗開著：跳到那個視窗，這個視窗維持原樣
+        if (root && (await window.api.claimProject(root))) await openOpened(await ProjectStore.open(root));
       } else if (ev.type === 'open-recent') {
         if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
         await openRecent(ev.path);
-        await openOpened(await ProjectStore.open(ev.path));
+        if (await window.api.claimProject(ev.path)) await openOpened(await ProjectStore.open(ev.path));
       }
     } catch (e) {
       window.alert(`發生錯誤：${e instanceof Error ? e.message : String(e)}`);

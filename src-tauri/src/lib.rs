@@ -8,16 +8,17 @@
 //   Mutex<T>                       ≈ lock(...) 保護的欄位；.lock().unwrap() 就是進入 lock 區塊
 //   ?                              ≈ 「失敗就直接把錯誤 return 出去」，省掉一堆 if (err) return err
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent, Wry};
+use tauri::window::Color;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry};
 use tauri_plugin_dialog::DialogExt;
 
 // ───────────────────────── 共用狀態 ─────────────────────────
@@ -27,8 +28,12 @@ struct AppState {
     roots: Mutex<HashSet<PathBuf>>,
     // 最近的專案清單是「讀 → 改 → 寫」好幾步，用這把鎖避免兩次呼叫互相覆蓋
     recent_lock: Mutex<()>,
-    // 關閉視窗的流程：先通知畫面把沒存的存完，畫面回報 ready 後才真的關
-    close_confirmed: AtomicBool,
+    // 關閉視窗的流程：先通知畫面把沒存的存完，畫面回報 ready 後才真的關；這裡記著「已經確認可以關」的視窗
+    close_confirmed: Mutex<HashSet<String>>,
+    // 每個視窗開著哪個專案（視窗的 label → 專案資料夾）：同一個專案不能在兩個視窗同時開
+    open_projects: Mutex<HashMap<String, PathBuf>>,
+    // 新視窗的編號（label 用 w1、w2…；第一個視窗是 main）
+    next_window: AtomicUsize,
 }
 
 // ───────────────────────── 路徑檢查 ─────────────────────────
@@ -267,12 +272,70 @@ fn project_allow_root(app: AppHandle, state: State<AppState>, path: String) -> b
     true
 }
 
+// ───────────────────────── 多個視窗（跟 VS Code 一樣） ─────────────────────────
+// 可以開很多個視窗，各開各的專案；同一個專案已經在別的視窗開著時，改成跳到那個視窗
+
+// 開一個新視窗（從開始畫面開始）
+fn open_new_window(app: &AppHandle) -> tauri::Result<()> {
+    let state = app.state::<AppState>();
+    let label = format!("w{}", state.next_window.fetch_add(1, Ordering::SeqCst) + 1);
+    WebviewWindowBuilder::new(app, label, WebviewUrl::default())
+        .title("VN Script Editor")
+        .inner_size(1400.0, 900.0)
+        .background_color(Color(0x1e, 0x1e, 0x1e, 0xff))
+        .disable_drag_drop_handler() // 跟 tauri.conf.json 的 dragDropEnabled: false 一樣，不然畫面裡不能拖曳
+        .build()?;
+    Ok(())
+}
+
+// 把視窗叫到最前面（最小化的話先還原）
+fn bring_to_front(window: &WebviewWindow) {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+// async：在 Windows 上，從同步的指令裡建立視窗會卡住
+#[tauri::command]
+async fn window_new(app: AppHandle) -> Result<(), String> {
+    open_new_window(&app).map_err(|e| e.to_string())
+}
+
+// 這個視窗要開某個專案：別的視窗已經開著它，就把那個視窗叫到前面並回傳 false（這個視窗不要開）；
+// 否則記下「這個視窗開著這個專案」並回傳 true
+#[tauri::command]
+fn project_claim(app: AppHandle, window: WebviewWindow, state: State<AppState>, path: String) -> bool {
+    let p = normalize(Path::new(&path));
+    let mut open = state.open_projects.lock().unwrap();
+    let other = open.iter().find(|(label, root)| label.as_str() != window.label() && same_path(root, &p)).map(|(label, _)| label.clone());
+    if let Some(label) = other {
+        if let Some(w) = app.get_webview_window(&label) {
+            bring_to_front(&w);
+            return false;
+        }
+    }
+    open.insert(window.label().to_string(), p);
+    true
+}
+
+// 這個視窗關掉了專案（回到開始畫面）
+#[tauri::command]
+fn project_release(window: WebviewWindow, state: State<AppState>) {
+    state.open_projects.lock().unwrap().remove(window.label());
+}
+
+// 目前作用中的視窗（選單事件要送給它）；都沒有焦點時隨便挑一個
+fn focused_window(app: &AppHandle) -> Option<WebviewWindow> {
+    let windows = app.webview_windows();
+    windows.values().find(|w| w.is_focused().unwrap_or(false)).or_else(|| windows.values().next()).cloned()
+}
+
 // ───────────────────────── 視窗：關閉流程、縮放 ─────────────────────────
 
 // 畫面存完檔後呼叫，才真的關掉視窗
 #[tauri::command]
 fn app_ready_to_close(window: WebviewWindow, state: State<AppState>) -> Result<(), String> {
-    state.close_confirmed.store(true, Ordering::SeqCst);
+    state.close_confirmed.lock().unwrap().insert(window.label().to_string());
     window.close().map_err(|e| e.to_string())
 }
 
@@ -299,6 +362,8 @@ fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<W
     }
 
     let file = SubmenuBuilder::new(app, "檔案")
+        .item(&MenuItemBuilder::with_id("new-window", "新視窗\tCtrl+Shift+N").build(app)?)
+        .separator()
         .item(&MenuItemBuilder::with_id("new-project", "新增專案…").build(app)?)
         .item(&MenuItemBuilder::with_id("open-project", "開啟專案資料夾…\tCtrl+O").build(app)?)
         .item(&recent_menu.build()?)
@@ -323,17 +388,24 @@ fn set_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<()> {
 
 fn on_menu(app: &AppHandle, id: &str) {
     if id == "quit" {
-        // 跟按視窗右上角的 × 一樣：走關閉流程（先存檔）
-        if let Some(w) = app.get_webview_window("main") {
+        // 結束：每個視窗都跟按右上角的 × 一樣，走關閉流程（有沒存的會先問）
+        for w in app.webview_windows().values() {
             let _ = w.close();
         }
+        return;
+    }
+    if id == "new-window" {
+        let _ = open_new_window(app);
         return;
     }
     let payload = match id.strip_prefix("recent:") {
         Some(path) => json!({ "type": "open-recent", "path": path }),
         None => json!({ "type": id }),
     };
-    let _ = app.emit("menu", payload);
+    // 選單是所有視窗共用的，只送給目前作用中的那個視窗
+    if let Some(w) = focused_window(app) {
+        let _ = app.emit_to(w.label(), "menu", payload);
+    }
 }
 
 // ───────────────────────── 啟動 ─────────────────────────
@@ -341,11 +413,18 @@ fn on_menu(app: &AppHandle, id: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 程式已經開著時再啟動一次（例如再雙擊捷徑）：不另外開一個程式，改成在原本的程式裡多開一個視窗
+        // （這個外掛要放在最前面）
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let _ = open_new_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             roots: Mutex::new(HashSet::new()),
             recent_lock: Mutex::new(()),
-            close_confirmed: AtomicBool::new(false),
+            close_confirmed: Mutex::new(HashSet::new()),
+            open_projects: Mutex::new(HashMap::new()),
+            next_window: AtomicUsize::new(0),
         })
         .invoke_handler(tauri::generate_handler![
             fs_list_dir,
@@ -360,6 +439,9 @@ pub fn run() {
             project_remember,
             project_forget,
             project_allow_root,
+            project_claim,
+            project_release,
+            window_new,
             app_ready_to_close,
             set_zoom,
         ])
@@ -372,11 +454,21 @@ pub fn run() {
         .on_window_event(|window, event| {
             // 按關閉：還沒確認就先擋下來，通知畫面去存檔；畫面存完會呼叫 app_ready_to_close
             // 畫面決定不關（存檔失敗、使用者取消）時，之後再按關閉會重新通知一次
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if !window.state::<AppState>().close_confirmed.load(Ordering::SeqCst) {
-                    api.prevent_close();
-                    let _ = window.emit("app-closing", ());
+            let state = window.state::<AppState>();
+            let label = window.label().to_string();
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    if !state.close_confirmed.lock().unwrap().contains(&label) {
+                        api.prevent_close();
+                        let _ = window.emit_to(label.as_str(), "app-closing", ());
+                    }
                 }
+                // 視窗真的關掉了：它開著的專案讓出來，別的視窗就可以開
+                WindowEvent::Destroyed => {
+                    state.close_confirmed.lock().unwrap().remove(&label);
+                    state.open_projects.lock().unwrap().remove(&label);
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())

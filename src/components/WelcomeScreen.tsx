@@ -40,7 +40,10 @@ export default function WelcomeScreen({
       .then((list) => {
         setRecent(list);
         // 最近的專案清單第一個就是上次開的
-        if (first && !startInCreateMode && getSettings().openLastProject && list[0]) void openRecent(list[0].path);
+        // 只有程式的第一個視窗會這樣做；之後開的新視窗都從開始畫面開始
+        if (first && window.api.isFirstWindow && !startInCreateMode && getSettings().openLastProject && list[0]) {
+          void openRecent(list[0].path);
+        }
       })
       .catch(() => setRecent([]));
     if (startInCreateMode) startCreate();
@@ -67,13 +70,15 @@ export default function WelcomeScreen({
   const openFolder = () =>
     run(async () => {
       const dir = await pickFolder();
-      return dir ? ProjectStore.open(dir) : null;
+      // 已經在別的視窗開著：跳到那個視窗，這裡不開
+      return dir && (await window.api.claimProject(dir)) ? ProjectStore.open(dir) : null;
     });
 
   const openRecent = (path: string) =>
     run(async () => {
       // 先請主程式允許存取這個資料夾（資料夾不見了會丟錯）
       await allowRecent(path);
+      if (!(await window.api.claimProject(path))) return null; // 已經在別的視窗開著
       return ProjectStore.open(path);
     });
 
@@ -90,7 +95,11 @@ export default function WelcomeScreen({
     }
   };
 
-  const confirmCreate = () => run(() => ProjectStore.create(creating!, newName.trim() || baseName(creating!)));
+  const confirmCreate = () =>
+    run(async () => {
+      await window.api.claimProject(creating!);
+      return ProjectStore.create(creating!, newName.trim() || baseName(creating!));
+    });
 
   const removeRecent = async (path: string) => {
     await forgetProject(path);
