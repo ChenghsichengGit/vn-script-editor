@@ -1,0 +1,2 @@
+# Windows 的批次檔一定要用 CRLF 換行，不然中文那幾行會被切斷、一執行就閃退
+*.bat text eol=crlf
