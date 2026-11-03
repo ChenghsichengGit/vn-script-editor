@@ -4,6 +4,7 @@ import RichTextEditor, { useRichEditor } from './RichTextEditor';
 import Outline, { Heading } from './Outline';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import SuggestInput from './SuggestInput';
+import Icon from './Icon';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
@@ -185,13 +186,13 @@ export default function CardEditor({
                 {locked ? (
                   // 範本欄位的名稱：純文字標籤，看起來就不能改
                   <div className="field-key-locked">
-                    🔒 {f.key}
-                    {use && <span className="field-special">✦</span>}
+                    <Icon icon="lock" className="field-lock" /> {f.key}
+                    {use && <Icon icon="sparkle" className="field-special" />}
                   </div>
                 ) : (
                   <div className="field-key-cell">
                     <input value={f.key} placeholder="欄位名稱" onChange={(e) => setField(i, { key: e.target.value })} />
-                    {use && <span className="field-special">✦</span>}
+                    {use && <Icon icon="sparkle" className="field-special" />}
                   </div>
                 )}
                 {isCommand && f.key.trim() === '用法' ? (
@@ -209,7 +210,7 @@ export default function CardEditor({
                   title="開啟後，側邊欄只顯示欄位名稱，點了才展開"
                   onClick={() => setField(i, { collapsed: !f.collapsed })}
                 >
-                  {f.collapsed ? '▸ 收合' : '▾ 展開'}
+                  <Icon icon={f.collapsed ? 'chevron-right' : 'chevron-down'} /> {f.collapsed ? '收合' : '展開'}
                 </button>
                 <button
                   className="icon-btn"

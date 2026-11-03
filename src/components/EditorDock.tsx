@@ -16,6 +16,7 @@ import 'dockview-react/dist/styles/dockview.css';
 import { Card, CardSectionId, Schemas, cardTabId, parseCardTab } from '../model';
 import ScriptEditor from './ScriptEditor';
 import CardEditor from './CardEditor';
+import Icon, { IconDef } from './Icon';
 
 // 編輯區：用 dockview 做 VS Code 式的分頁群組
 // 分頁可以拖曳排序、拖到別的群組、拖到群組邊緣分割（左右或上下並排），也可以拉成浮動視窗
@@ -67,6 +68,7 @@ interface EditorCtxValue {
   activePanelId: string | null; // 目前作用中的面板（狀態列和游標追蹤都跟著它）
   isDirty: (tabId: string) => boolean;
   tabLabel: (tabId: string) => string;
+  tabIcon: (tabId: string) => IconDef | null;
   onFileChange: (id: string, text: string) => void;
   onCardChange: (section: CardSectionId, id: string, patch: Partial<Card>) => void;
   onCursor: (pos: { line: number; column: number }) => void;
@@ -122,7 +124,13 @@ function EditorTab({ api, params }: IDockviewPanelHeaderProps<PanelParams>) {
         }
       }}
     >
-      <span className="dv-default-tab-content">{ctx.tabLabel(tabId)}</span>
+      <span className="dv-default-tab-content">
+        {(() => {
+          const icon = ctx.tabIcon(tabId);
+          return icon && <Icon icon={icon} className="tab-icon" />;
+        })()}
+        {ctx.tabLabel(tabId)}
+      </span>
       {ctx.isDirty(tabId) && (
         <span className="tab-dirty" title="尚未儲存">
           ●
@@ -218,6 +226,7 @@ interface Props {
   schemas: EditorCtxValue['schemas'];
   isDirty: EditorCtxValue['isDirty'];
   tabLabel: EditorCtxValue['tabLabel'];
+  tabIcon: EditorCtxValue['tabIcon'];
   onFileChange: EditorCtxValue['onFileChange'];
   onCardChange: EditorCtxValue['onCardChange'];
   onCursor: EditorCtxValue['onCursor'];
@@ -350,6 +359,7 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
     activePanelId,
     isDirty: props.isDirty,
     tabLabel: props.tabLabel,
+    tabIcon: props.tabIcon,
     onFileChange: props.onFileChange,
     onCardChange: props.onCardChange,
     onCursor: props.onCursor,

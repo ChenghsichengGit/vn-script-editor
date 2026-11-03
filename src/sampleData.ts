@@ -1,21 +1,22 @@
 // 假資料：之後會改成從專案資料夾讀取，現在先寫死在這裡
 import { Card, CardSectionId, SectionId } from './model';
+import type { IconDef } from './components/Icon';
 
-// 四個區塊的標題、圖示，以及按＋時新卡片的預設名稱
-export const sectionMeta: Record<SectionId, { title: string; icon: string; newName?: string }> = {
-  files: { title: '檔案', icon: '📄' },
-  characters: { title: '角色', icon: '👤', newName: '新角色' },
-  world: { title: '世界觀', icon: '🌍', newName: '新項目' },
-  commands: { title: '指令', icon: '⌘', newName: '#新指令' },
+// 四個區塊的標題、圖示（VS Code 的線條圖示＋顏色），以及按＋時新卡片的預設名稱
+export const sectionMeta: Record<SectionId, { title: string; icon: IconDef; newName?: string }> = {
+  files: { title: '檔案', icon: { name: 'files', color: '#75beff' } },
+  characters: { title: '角色', icon: { name: 'person', color: '#89d185' }, newName: '新角色' },
+  world: { title: '世界觀', icon: { name: 'globe', color: '#4ec9b0' }, newName: '新項目' },
+  commands: { title: '指令', icon: { name: 'terminal', color: '#c586c0' }, newName: '#新指令' },
 };
 export const sectionOrder: SectionId[] = ['files', 'characters', 'world', 'commands'];
 
 // 劇本區塊裡的檔案：依副檔名決定圖示
-export function fileIcon(name: string): string {
+export function fileIcon(name: string): IconDef {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
-  if (ext === 'vns') return '🎬';
-  if (ext === 'md') return '📝';
-  return '📄';
+  if (ext === 'vns') return { name: 'file-code', color: '#75beff' };
+  if (ext === 'md') return { name: 'markdown', color: '#519aba' };
+  return { name: 'file' };
 }
 
 // 劇本檔案的初始資料：id → 檔名和內容（執行時由 App 的 state 管理，可新增／改名／刪除）

@@ -3,6 +3,7 @@ import { Card, CardOps, CardSectionId } from '../model';
 import { sectionMeta } from '../sampleData';
 import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
+import Icon from './Icon';
 
 interface Props {
   section: CardSectionId;
@@ -33,7 +34,7 @@ function CardName({ section, name }: { section: CardSectionId; name: string }) {
 }
 
 // 側邊欄裡的一張設定卡（只能看，不能改）
-// 點整列：展開／收起（欄位和詳細內容）；✏️：在分頁開啟編輯；右鍵：選單（重新命名／刪除）
+// 點整列：展開／收起（欄位和詳細內容）；鉛筆圖示：在分頁開啟編輯；右鍵：選單（重新命名／刪除）
 export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '' }: Props) {
   const [open, setOpen] = useState(false);
   const [openFields, setOpenFields] = useState<Set<number>>(new Set()); // 被點開的「收合欄位」
@@ -62,8 +63,8 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           onMenu(e);
         }}
       >
-        <span className="chevron">{open ? '▾' : '▸'}</span>
-        <span className="tree-icon">{sectionMeta[section].icon}</span>
+        <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
+        <Icon icon={sectionMeta[section].icon} className="tree-icon" />
         {renaming ? (
           <NameInput initial={card.name} onSubmit={onRename} onClose={onRenameClose} />
         ) : (
@@ -78,7 +79,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
               ops.open(section, card.id);
             }}
           >
-            ✏️
+            <Icon icon="edit" />
           </button>
         )}
       </div>
@@ -91,7 +92,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
               <div key={i} className="card-fold">
                 <div className="card-row clickable" onClick={() => toggleField(i)}>
                   <span className="card-key">
-                    {openFields.has(i) ? '▾' : '▸'} {f.key}
+                    <Icon icon={openFields.has(i) ? 'chevron-down' : 'chevron-right'} className="fold-chevron" /> {f.key}
                   </span>
                 </div>
                 {openFields.has(i) && <div className="card-fold-value">{f.value}</div>}

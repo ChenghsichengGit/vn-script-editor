@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getSettings } from '../settings';
+import Icon from './Icon';
 import {
   ProjectData,
   ProjectStore,
@@ -134,7 +135,7 @@ export default function WelcomeScreen({
         ) : (
           <div className="welcome-actions">
             <button className="primary" disabled={busy} onClick={openFolder}>
-              📂 開啟專案資料夾
+              <Icon icon="folder-opened" /> 開啟專案資料夾
             </button>
             <button disabled={busy} onClick={startCreate}>
               ＋ 建立新專案

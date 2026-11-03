@@ -564,3 +564,15 @@ body.dragging, body.dragging * { user-select: none; }
 .close-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .close-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .close-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* VS Code 線條圖示（codicon）在各處的大小：Monaco 的樣式預設 16px，這裡依位置調整 */
+.activity-bar .codicon { font-size: 24px; }
+.tree-row .codicon.chevron { font-size: 16px; }
+.tree-row .codicon.tree-icon { font-size: 15px; }
+.codicon.tab-icon { font-size: 14px; margin-right: 6px; vertical-align: -2px; }
+.codicon.field-lock { font-size: 13px; vertical-align: -2px; }
+.codicon.field-special { font-size: 12px; }
+.codicon.fold-chevron { font-size: 12px; vertical-align: -1px; }
+.fold-toggle .codicon { font-size: 12px; vertical-align: -2px; }
+.icon-btn .codicon { font-size: 16px; }
+.welcome button .codicon, .drag-ghost .codicon { vertical-align: -3px; margin-right: 4px; }

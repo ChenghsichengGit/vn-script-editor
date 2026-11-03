@@ -6,6 +6,7 @@ import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFile
 import CardItem from './CardItem';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import NameInput from './NameInput';
+import Icon from './Icon';
 
 const INDENT = 14; // 每深一層資料夾縮排多少像素
 const EXPAND_DELAY = 600; // 拖著東西停在摺起來的資料夾上多久（毫秒）就自動展開
@@ -352,8 +353,8 @@ export default function SectionPanel(props: Props) {
       const chevron = what === 'folder' || section !== 'files'; // 劇本檔案的列沒有箭頭
       return (
         <div className="tree-row" style={{ paddingLeft: rowPad(depth, chevron) }}>
-          {chevron && <span className="chevron">▸</span>}
-          <span className="tree-icon">{what === 'folder' ? '📁' : section === 'files' ? '🎬' : meta.icon}</span>
+          {chevron && <Icon icon="chevron-right" className="chevron" />}
+          <Icon icon={what === 'folder' ? 'folder' : section === 'files' ? fileIcon('.vns') : meta.icon} className="tree-icon" />
           <NameInput
             onSubmit={(name) => {
               if (what === 'folder') return props.folderOps.create(section, folder, name);
@@ -386,7 +387,7 @@ export default function SectionPanel(props: Props) {
               {...dragSource({ kind: 'file', id: fileId }, file.name)}
               {...itemDropTarget(folder, fileId, file.name, names)}
             >
-              <span className="tree-icon">{fileIcon(file.name)}</span>
+              <Icon icon={fileIcon(file.name)} className="tree-icon" />
               {renaming ? (
                 <NameInput
                   initial={file.name}
@@ -442,8 +443,8 @@ export default function SectionPanel(props: Props) {
                 {...dragSource({ kind: 'folder', folder: sub }, folderBase(sub))}
                 {...dropTarget(sub, true)}
               >
-                <span className="chevron">{open ? '▾' : '▸'}</span>
-                <span className="tree-icon">{open ? '📂' : '📁'}</span>
+                <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
+                <Icon icon={open ? 'folder-opened' : 'folder'} className="tree-icon" />
                 {renaming ? (
                   <NameInput
                     initial={folderBase(sub)}
@@ -491,18 +492,18 @@ export default function SectionPanel(props: Props) {
               title={bulk.show ? '全部收起' : '全部展開'}
               onClick={() => setBulk({ show: !bulk.show, tick: bulk.tick + 1 })}
             >
-              {bulk.show ? '⊟' : '⊞'}
+              <Icon icon={bulk.show ? 'collapse-all' : 'expand-all'} />
             </button>
           )}
           <button
-            className="icon-btn wide"
+            className="icon-btn"
             title={id === 'files' ? '新增檔案' : `新增${meta.title}`}
             onClick={() => startCreate('', 'item')}
           >
-            {id === 'files' ? '📄' : meta.icon}＋
+            <Icon icon="new-file" />
           </button>
-          <button className="icon-btn wide" title="新增資料夾" onClick={() => startCreate('', 'folder')}>
-            📁＋
+          <button className="icon-btn" title="新增資料夾" onClick={() => startCreate('', 'folder')}>
+            <Icon icon="new-folder" />
           </button>
         </span>
       </div>

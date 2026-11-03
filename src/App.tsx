@@ -23,6 +23,7 @@ import {
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
 import CloseDialog from './components/CloseDialog';
+import Icon from './components/Icon';
 import { FIXED_COMMAND_FIELDS, migrateFormatField, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
@@ -775,8 +776,14 @@ export default function App() {
 
   const tabLabel = (tabId: string) => {
     const ref = parseCardTab(tabId);
-    if (!ref) return files[tabId] ? `${fileIcon(files[tabId].name)} ${files[tabId].name}` : '';
-    return `${sectionMeta[ref.section].icon} ${findCard(ref.section, ref.id)?.name || '（未命名）'}`;
+    if (!ref) return files[tabId]?.name ?? '';
+    return findCard(ref.section, ref.id)?.name || '（未命名）';
+  };
+  // 分頁名稱前面的圖示：劇本照副檔名，設定卡用區塊的圖示
+  const tabIcon = (tabId: string) => {
+    const ref = parseCardTab(tabId);
+    if (!ref) return files[tabId] ? fileIcon(files[tabId].name) : null;
+    return sectionMeta[ref.section].icon;
   };
 
   const activeCardRef = activeTab ? parseCardTab(activeTab) : null;
@@ -856,6 +863,7 @@ export default function App() {
           schemas={schemas}
           isDirty={(tabId) => dirty.has(parseCardTab(tabId) ? tabId : fileKey(tabId))}
           tabLabel={tabLabel}
+          tabIcon={tabIcon}
           onFileChange={(id, text) => {
             setContents((c) => ({ ...c, [id]: text }));
             markDirty(fileKey(id));
@@ -887,11 +895,11 @@ export default function App() {
       )}
       {panelDrag?.ghost && (
         <div className="drag-ghost" style={{ left: panelDrag.x + 12, top: panelDrag.y + 8 }}>
-          {sectionMeta[panelDrag.id].icon} {sectionMeta[panelDrag.id].title}
+          <Icon icon={sectionMeta[panelDrag.id].icon} /> {sectionMeta[panelDrag.id].title}
         </div>
       )}
       <StatusBar
-        left={`📁 ${project.name}　｜　${status.left}`}
+        left={`${project.name}　｜　${status.left}`}
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
       />
       {settingsDialog}

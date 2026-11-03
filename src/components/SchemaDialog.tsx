@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SchemaEdit, SectionSchema } from '../model';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import SuggestInput from './SuggestInput';
+import Icon, { IconDef } from './Icon';
 import { definedParams, usedParams } from '../scriptLanguage';
 import './SchemaDialog.css';
 
@@ -32,7 +33,7 @@ export default function SchemaDialog({
   onClose,
 }: {
   title: string;
-  icon: string; // 區塊的圖示，放在「名稱」那一列
+  icon: IconDef; // 區塊的圖示，放在「名稱」那一列
   schema: SectionSchema;
   specialFields: { name: string; description: string }[]; // 這個區塊有特別用途的欄位名稱（指令的「用法」「說明」），新增時可以直接選
 
@@ -191,7 +192,7 @@ export default function SchemaDialog({
             {/* 固定的「名稱」列：卡片名稱本身，不能改名、移動或刪除，只能設參數 */}
             <div className="schema-row" onContextMenu={(e) => openMenu(e, null)}>
               <button type="button" className="schema-icon" title="名稱這一列不能移動或刪除" onClick={(e) => openMenu(e, null)}>
-                {icon}
+                <Icon icon={icon} />
               </button>
               <span className="schema-col schema-fixed">名稱</span>
               <span className="schema-col schema-name-cell">
@@ -210,8 +211,7 @@ export default function SchemaDialog({
             {rows.map((r, i) => (
               <div className="schema-row" key={r.id} title={specialOf(r.name)} onContextMenu={(e) => openMenu(e, i)}>
                 <button type="button" className="schema-icon" title="上移、下移、刪除" onClick={(e) => openMenu(e, i)}>
-                  {/* 加 ️ 才會畫成彩色圖示，不然在深色背景上看不到 */}
-                  {'🏷️'}
+                  <Icon icon="tag" />
                 </button>
                 <span className="schema-col schema-name-cell">
                   <input
@@ -221,7 +221,7 @@ export default function SchemaDialog({
                     placeholder="欄位名稱"
                     onChange={(e) => patch(r.id, { name: e.target.value })}
                   />
-                  {specialOf(r.name) && <span className="field-special">✦</span>}
+                  {specialOf(r.name) && <Icon icon="sparkle" className="field-special" />}
                 </span>
                 <span className="schema-col schema-name-cell">
                   <SuggestInput
