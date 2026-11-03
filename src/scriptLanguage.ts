@@ -17,7 +17,7 @@
 //   其他文字              = 照抄的固定字
 // 指令要寫在一行的開頭（前面可以有空白），參數之間用空白分開
 // // 到行尾是註解：綠色，指令會忽略它（Ctrl+/ 可以整行加上或拿掉）
-import * as monaco from 'monaco-editor';
+import monaco from './monaco';
 import { Card, CardSectionId, Schemas } from './model';
 import { sectionMeta } from './sampleData';
 
