@@ -17,6 +17,7 @@
 //   其他文字              = 照抄的固定字
 // 指令要寫在一行的開頭（前面可以有空白），參數之間用空白分開
 // // 到行尾是註解：綠色，指令會忽略它（Ctrl+/ 可以整行加上或拿掉）
+// //# 大標題、//## 中標題、//### 小標題：也是註解（不會輸出），用來分段；劇本右邊的大綱會列出來
 import monaco from './monaco';
 import { Card, CardSectionId, Schemas } from './model';
 import { sectionMeta } from './sampleData';
@@ -309,6 +310,31 @@ function missingLabel(text: string): { label: string; more: number } | null {
   return { label: rests[0], more: rests.length - 1 };
 }
 
+// ── 標題（//# 大標題、//## 中標題、//### 小標題） ──────────────────────────────
+
+const HEADING = /^\s*\/\/(#{1,3})(?!#)\s*(.*)$/;
+
+// 這一行是第幾級標題（1～3），不是標題回傳 0
+export function headingLevel(line: string): number {
+  return HEADING.exec(line)?.[1].length ?? 0;
+}
+
+// 一份劇本裡所有的標題：pos = 第幾行（從 1 開始）
+export function scriptHeadings(lines: string[]): { level: number; text: string; pos: number }[] {
+  return lines.flatMap((line, i) => {
+    const m = HEADING.exec(line);
+    return m ? [{ level: m[1].length, text: m[2].trim(), pos: i + 1 }] : [];
+  });
+}
+
+// 把一行改成第 level 級標題（0 = 取消標題，變回一般文字）；本來是標題的先拿掉原本的符號
+export function setHeadingLevel(line: string, level: number): string {
+  const m = HEADING.exec(line);
+  const indent = /^\s*/.exec(line)![0];
+  const text = m ? m[2] : line.trim();
+  return level === 0 ? indent + text : `${indent}//${'#'.repeat(level)} ${text}`;
+}
+
 // 每個劇本目前畫上去的提示色塊（下次重算時要先拿掉舊的）
 const hintIds = new WeakMap<monaco.editor.ITextModel, string[]>();
 
@@ -338,6 +364,12 @@ function showHints(model: monaco.editor.ITextModel) {
   if (model.getLanguageId() === LANGUAGE_ID) {
     for (let n = 1; n <= model.getLineCount(); n++) {
       const full = model.getLineContent(n);
+      // 標題那一行整行加一點底色
+      const level = headingLevel(full);
+      if (level) {
+        decorations.push({ range: new monaco.Range(n, 1, n, 1), options: { isWholeLine: true, className: `vns-h${level}-line` } });
+        continue;
+      }
       const text = codeOf(full); // 有註解時，提示畫在註解前面
       const hint = missingLabel(text);
       if (!hint) continue;
@@ -376,6 +408,9 @@ export function registerScriptLanguage() {
     tokenizer: {
       root: [
         // 每行從開頭比對：// 到行尾是註解；開頭是 #xxx 就拆成「空白／指令／參數」（參數到 // 為止）；其他是一般文字（也是到 // 為止）
+        [/\s*\/\/###(?!#).*/, 'heading3'],
+        [/\s*\/\/##(?!#).*/, 'heading2'],
+        [/\s*\/\/#(?!#).*/, 'heading1'],
         [/\/\/.*/, 'comment'],
         [/(\s*)(#(?:[^\s/]|\/(?!\/))*)((?:[^/]|\/(?!\/))*)/, ['', 'command', 'argument']],
         [/(?:[^/]|\/(?!\/))+/, ''],
@@ -389,6 +424,9 @@ export function registerScriptLanguage() {
       { token: 'command', foreground: 'C586C0', fontStyle: 'bold' },
       { token: 'argument', foreground: '9CDCFE' },
       { token: 'comment', foreground: '6A9955' },
+      { token: 'heading1', foreground: 'E2C08D', fontStyle: 'bold' },
+      { token: 'heading2', foreground: '7FB4E0', fontStyle: 'bold' },
+      { token: 'heading3', foreground: 'C8C8C8', fontStyle: 'bold' },
     ],
     colors: {},
   });
