@@ -1,5 +1,5 @@
 // Tauri 主程式：建立視窗、原生選單、提供檔案讀寫給畫面（網頁端）使用
-// 取代原本的 electron/main.cjs，功能一模一樣；畫面那邊透過 src/platform.ts 呼叫這裡的指令
+// 取代原本的 Electron 主程式，功能一樣；畫面那邊透過 src/platform.ts 呼叫這裡的指令
 //
 // 給熟 C# 的人看的對照：
 //   #[tauri::command] fn xxx(...)  ≈ 一個可以從畫面呼叫的 public 方法（像 Web API 的 Controller action）

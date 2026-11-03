@@ -1,5 +1,5 @@
 // 畫面和桌面程式（Tauri，src-tauri/src/lib.rs）之間的橋：把 window.api 的每個功能接到 Rust 那邊的指令
-// 畫面其他地方都只用 window.api（型別在 electron-api.d.ts），不直接碰 Tauri；之後換平台只要改這個檔
+// 畫面其他地方都只用 window.api（型別在 api.d.ts），不直接碰 Tauri；之後換平台只要改這個檔
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 

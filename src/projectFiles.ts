@@ -1,4 +1,4 @@
-// 專案資料夾的讀寫：透過 Electron 的 window.api（主程序用 Node 的 fs）存取使用者硬碟上的資料夾
+// 專案資料夾的讀寫：透過 window.api（src/platform.ts → Tauri 主程式）存取使用者硬碟上的資料夾
 //
 // 資料夾結構：
 //   <project>/project.json   {"name": "...", "version": 1, "schemas": {角色/世界觀/指令的欄位範本}}
@@ -64,7 +64,7 @@ function normalizeSchemas(raw: unknown): Schemas {
 }
 
 // ───────────────────────── 路徑 ─────────────────────────
-// 一律用 "/" 接路徑（Windows 也認得），主程序收到後會 resolve 成正規的絕對路徑
+// 一律用 "/" 接路徑（Windows 也認得），主程式收到後會 resolve 成正規的絕對路徑
 
 export function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/[\\/]+$/, ''), ...parts].join('/');
@@ -77,7 +77,7 @@ export function baseName(p: string): string {
 }
 
 // ───────────────────────── 資料夾選取與最近的專案 ─────────────────────────
-// 最近的專案清單存在主程序的 userData/recent.json，這裡只是轉接
+// 最近的專案清單存在主程式的應用程式資料夾（recent.json），這裡只是轉接
 
 // 開啟系統的資料夾選擇視窗；使用者取消時回傳 null
 export function pickFolder(): Promise<string | null> {
@@ -96,7 +96,7 @@ export function forgetProject(path: string): Promise<void> {
   return window.api.forgetProject(path);
 }
 
-// 重新開啟最近的專案前，要先請主程序允許存取那個資料夾（資料夾不見了就丟錯）
+// 重新開啟最近的專案前，要先請主程式允許存取那個資料夾（資料夾不見了就丟錯）
 export async function openRecent(path: string): Promise<void> {
   if (!(await window.api.allowRoot(path))) {
     throw new Error(`找不到資料夾「${path}」，可能已被移動或刪除`);

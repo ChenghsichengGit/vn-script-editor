@@ -20,7 +20,7 @@ type MenuEvent =
   | { type: 'open-settings' }
   | { type: 'close-tab' };
 
-interface ElectronApi {
+interface AppApi {
   // 檔案操作：路徑必須在使用者開啟過的專案資料夾內，否則會丟錯
   listDir(path: string): Promise<DirEntry[]>;
   readText(path: string): Promise<string>;
@@ -46,5 +46,5 @@ interface ElectronApi {
 }
 
 interface Window {
-  api: ElectronApi;
+  api: AppApi;
 }

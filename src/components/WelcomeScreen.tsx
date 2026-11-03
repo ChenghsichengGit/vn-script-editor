@@ -72,7 +72,7 @@ export default function WelcomeScreen({
 
   const openRecent = (path: string) =>
     run(async () => {
-      // 先請主程序允許存取這個資料夾（資料夾不見了會丟錯）
+      // 先請主程式允許存取這個資料夾（資料夾不見了會丟錯）
       await allowRecent(path);
       return ProjectStore.open(path);
     });
