@@ -25,7 +25,8 @@ import SchemaDialog from './components/SchemaDialog';
 import CloseDialog from './components/CloseDialog';
 import Icon from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
-import { FIXED_COMMAND_FIELDS, migrateFormatField, setScriptData } from './scriptLanguage';
+import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
+import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
   FLOAT_DEFAULT_H,
@@ -108,6 +109,25 @@ export default function App() {
   const [order, setOrder] = useState<ItemOrder>({});
   // 卡片或範本一變，就把最新的指令清單和參數可選值交給劇本編輯器的補齊功能
   useEffect(() => setScriptData(cards, schemas), [cards, schemas]);
+
+  // 問題面板：檢查所有 .vns 劇本（含沒打開的）。打字時不要每個字都重算，停 0.3 秒才算
+  // 放在 setScriptData 後面：指令清單更新完才檢查
+  const [problems, setProblems] = useState<ProblemGroup[]>([]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const groups: ProblemGroup[] = [];
+      for (const [fileId, f] of Object.entries(files)) {
+        if (!/\.vns$/i.test(f.name)) continue;
+        const lines = (contents[fileId] ?? '').split(/\r?\n/);
+        const found = checkScript(lines);
+        if (found.length > 0) groups.push({ fileId, name: f.name, folder: f.folder, lines, problems: found });
+      }
+      groups.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+      setProblems(groups);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [files, contents, cards, schemas]);
+  const problemCount = problems.reduce((n, g) => n + g.problems.length, 0);
 
   // ── 存檔 ──────────────────────────────
   // 有改動的東西記在 dirty 清單；停止輸入 1 秒後（或按 Ctrl+S）把清單裡的東西寫回資料夾
@@ -210,6 +230,13 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.metaKey) return;
       const key = e.key.toLowerCase();
+      // Ctrl+Shift+M：打開／收起問題面板
+      if (e.shiftKey && key === 'm') {
+        e.preventDefault();
+        e.stopPropagation();
+        setLayout((l) => ({ ...l, problemsOpen: !l.problemsOpen }));
+        return;
+      }
       // Ctrl+P：快速開啟；Ctrl+Shift+P：指令面板（同一個選單，開頭是 > 就是找功能）
       if (key === 'p') {
         e.preventDefault();
@@ -849,6 +876,13 @@ export default function App() {
           { id: 'close-tab', label: '關閉分頁', keybinding: 'Ctrl+W', icon: 'close', run: menu('close-tab') },
           { id: 'toggle-left', label: '收起／打開左側欄', keybinding: 'Ctrl+B', icon: 'layout-sidebar-left', run: () => setLeftVisible((v) => !v) },
           {
+            id: 'toggle-problems',
+            label: '打開／收起問題面板',
+            keybinding: 'Ctrl+Shift+M',
+            icon: 'error',
+            run: () => setLayout((l) => ({ ...l, problemsOpen: !l.problemsOpen })),
+          },
+          {
             id: 'new-script',
             label: '新增劇本',
             icon: fileIcon('.vns'),
@@ -943,6 +977,20 @@ export default function App() {
           onCardChange={cardOps.update}
           onCursor={setCursor}
           onActiveTabChange={setActiveTab}
+          bottom={
+            layout.problemsOpen && (
+              <ProblemsPanel
+                groups={problems}
+                height={layout.problemsHeight}
+                onResize={(h) => setLayout((l) => ({ ...l, problemsHeight: h }))}
+                onJump={(fileId, line, column) => {
+                  openTab(fileId);
+                  revealInEditor(fileId, line, column);
+                }}
+                onClose={() => setLayout((l) => ({ ...l, problemsOpen: false }))}
+              />
+            )
+          }
         />
         {showRight && (
           <>
@@ -971,6 +1019,8 @@ export default function App() {
         </div>
       )}
       <StatusBar
+        problems={problemCount}
+        onProblems={() => setLayout((l) => ({ ...l, problemsOpen: !l.problemsOpen }))}
         left={`${project.name}　｜　${status.left}`}
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
       />

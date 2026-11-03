@@ -28,6 +28,8 @@ export interface Layout {
   hidden: SectionId[]; // 被活動列關掉的區塊（不管它在左、右還是浮動）
   sizes: Partial<Record<SectionId, number>>; // 固定高度的區塊拖出來的高度
   leftCollapsed: boolean; // 左側欄整排收起來（裡面的區塊、高度都照樣保留，打開時一模一樣）
+  problemsOpen: boolean; // 編輯區下方的問題面板（Ctrl+Shift+M）
+  problemsHeight: number;
 }
 
 export const LAYOUT_KEY = 'vn-editor-layout';
@@ -45,6 +47,8 @@ const defaultLayout = (): Layout => ({
   hidden: [],
   sizes: {},
   leftCollapsed: false,
+  problemsOpen: false,
+  problemsHeight: 180,
 });
 
 const isSection = (x: unknown): x is SectionId => sectionOrder.includes(x as SectionId);
@@ -106,6 +110,8 @@ function normalizeLayout(raw: unknown): Layout {
     hidden: [...new Set(Array.isArray(r.hidden) ? r.hidden.filter(isSection) : [])] as SectionId[],
     sizes,
     leftCollapsed: r.leftCollapsed === true,
+    problemsOpen: r.problemsOpen === true,
+    problemsHeight: Math.min(600, Math.max(80, num(r.problemsHeight, 180))),
   };
 }
 

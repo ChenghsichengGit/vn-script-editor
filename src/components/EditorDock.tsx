@@ -231,6 +231,7 @@ interface Props {
   onCardChange: EditorCtxValue['onCardChange'];
   onCursor: EditorCtxValue['onCursor'];
   onActiveTabChange: (tabId: string | null) => void; // 作用中的面板換了（沒有任何面板時是 null）
+  bottom?: React.ReactNode; // 編輯區下方的面板（問題面板）
 }
 
 const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props, ref) {
@@ -380,6 +381,7 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
           />
         </div>
       </EditorCtx.Provider>
+      {props.bottom}
     </section>
   );
 });

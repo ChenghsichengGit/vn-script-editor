@@ -215,28 +215,31 @@ function paramChoices(u: Usage, p: Param): Choice[] {
 // 檢查參數，有問題就畫紅色波浪線：
 //   某一段對不上任何寫法（固定字、選項填錯、類型不對、多填）→ 那一段標「參數錯誤」
 //   全部填對了但還缺必填的參數 → 指令名稱標「缺少參數」
-function validate(model: monaco.editor.ITextModel) {
-  const markers: monaco.editor.IMarkerData[] = [];
-  if (model.getLanguageId() === LANGUAGE_ID) {
-    for (let n = 1; n <= model.getLineCount(); n++) {
-      const text = codeOf(model.getLineContent(n));
+// 一個問題（紅色波浪線）：第幾行（從 1 開始）、從第幾欄到第幾欄
+export interface ScriptProblem {
+  line: number;
+  startColumn: number;
+  endColumn: number;
+  message: string;
+}
+
+// 檢查一份劇本的每一行；編輯器的紅線和問題面板都用這個（問題面板連沒打開的劇本也檢查）
+export function checkScript(lines: string[]): ScriptProblem[] {
+  const problems: ScriptProblem[] = [];
+  lines.forEach((raw, index) => {
+    const n = index + 1;
+    {
+      const text = codeOf(raw);
       const line = parseLine(text);
       const cmd = line && findCommand(line.name);
-      if (!line || !cmd) continue;
+      if (!line || !cmd) return;
       // 找出每一段的位置（指令名稱後面開始）
       const re = /\S+/g;
       re.lastIndex = line.indent + line.name.length;
       const parts: { word: string; start: number }[] = [];
       for (let m = re.exec(text); m; m = re.exec(text)) parts.push({ word: m[0], start: m.index });
       const mark = (message: string, start: number, length: number) =>
-        markers.push({
-          severity: monaco.MarkerSeverity.Error,
-          message,
-          startLineNumber: n,
-          endLineNumber: n,
-          startColumn: start + 1,
-          endColumn: start + length + 1,
-        });
+        problems.push({ line: n, startColumn: start + 1, endColumn: start + length + 1, message });
       let wrong = false;
       for (let i = 0; i < parts.length; i++) {
         const prefix = parts.slice(0, i).map((p) => p.word);
@@ -245,7 +248,7 @@ function validate(model: monaco.editor.ITextModel) {
         wrong = true;
         break; // 後面的段落已經對不上任何寫法，不再檢查
       }
-      if (wrong) continue;
+      if (wrong) return;
       // 有沒有一種寫法，剩下沒填的參數都是可以不填的
       const words = parts.map((p) => p.word);
       const complete = matchUsages(cmd, words).some((u) =>
@@ -253,8 +256,38 @@ function validate(model: monaco.editor.ITextModel) {
       );
       if (!complete) mark('缺少參數', line.indent, line.name.length);
     }
+  });
+  return problems;
+}
+
+function validate(model: monaco.editor.ITextModel) {
+  const problems = model.getLanguageId() === LANGUAGE_ID ? checkScript(model.getLinesContent()) : [];
+  monaco.editor.setModelMarkers(
+    model,
+    LANGUAGE_ID,
+    problems.map((p) => ({
+      severity: monaco.MarkerSeverity.Error,
+      message: p.message,
+      startLineNumber: p.line,
+      endLineNumber: p.line,
+      startColumn: p.startColumn,
+      endColumn: p.endColumn,
+    })),
+  );
+}
+
+// 跳到某個劇本的某一行：找到顯示這個檔案的編輯器（剛開分頁時編輯器還沒建好，就等一下再找）
+export function revealInEditor(fileId: string, line: number, column: number, tries = 30) {
+  const editor = monaco.editor
+    .getEditors()
+    .find((e) => e.getModel()?.uri.path.replace(/^\//, '') === fileId && e.getContainerDomNode().offsetParent !== null);
+  if (!editor) {
+    if (tries > 0) setTimeout(() => revealInEditor(fileId, line, column, tries - 1), 50);
+    return;
   }
-  monaco.editor.setModelMarkers(model, LANGUAGE_ID, markers);
+  editor.setPosition({ lineNumber: line, column });
+  editor.revealLineInCenterIfOutsideViewport(line);
+  editor.focus();
 }
 
 // 參數提示：指令還缺哪些參數，就在那一行最後面畫灰色小色塊（填完就消失）
