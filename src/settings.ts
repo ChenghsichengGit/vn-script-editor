@@ -12,6 +12,8 @@ export interface Settings {
   cardFontSize: number; // 設定卡編輯畫面的內文大小
   autoSave: boolean; // 關掉後只有 Ctrl+S 才存檔
   openLastProject: boolean; // 程式啟動時直接開啟上次的專案
+  aiPlayback: boolean; // 外部（例如 AI）改了檔案時：切到那個分頁、播放打字效果
+  aiSpeed: 'slow' | 'normal' | 'fast'; // 打字效果的速度
 }
 
 const KEY = 'vn-editor-settings';
@@ -28,6 +30,8 @@ export const defaultSettings: Settings = {
   cardFontSize: 15,
   autoSave: true,
   openLastProject: true,
+  aiPlayback: true,
+  aiSpeed: 'normal',
 };
 
 // 每個數值的允許範圍：讀檔、設定視窗、Ctrl＋滾輪都用同一套
@@ -57,6 +61,8 @@ function normalize(raw: unknown): Settings {
     cardFontSize: clamp('cardFontSize', r.cardFontSize, d.cardFontSize),
     autoSave: bool(r.autoSave, d.autoSave),
     openLastProject: bool(r.openLastProject, d.openLastProject),
+    aiPlayback: bool(r.aiPlayback, d.aiPlayback),
+    aiSpeed: r.aiSpeed === 'slow' || r.aiSpeed === 'normal' || r.aiSpeed === 'fast' ? r.aiSpeed : d.aiSpeed,
   };
 }
 

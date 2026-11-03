@@ -201,6 +201,23 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           <Row label="啟動時開啟上次的專案" hint="打開程式就直接回到上次的專案和分頁">
             <Toggle checked={s.openLastProject} onChange={(v) => updateSettings({ openLastProject: v })} />
           </Row>
+          <Row label="外部修改時播放打字效果" hint="AI 等在程式外面改了檔案：切到那個分頁，把改動一個字一個字打出來（按任何鍵可以跳過）">
+            {/* 速度：慢／中／快；關掉打字效果時不能選 */}
+            <div className="settings-segment">
+              {(['slow', 'normal', 'fast'] as const).map((v, i) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={s.aiSpeed === v ? 'on' : ''}
+                  disabled={!s.aiPlayback}
+                  onClick={() => updateSettings({ aiSpeed: v })}
+                >
+                  {['慢', '中', '快'][i]}
+                </button>
+              ))}
+            </div>
+            <Toggle checked={s.aiPlayback} onChange={(v) => updateSettings({ aiPlayback: v })} />
+          </Row>
         </div>
 
         <div className="settings-footer">

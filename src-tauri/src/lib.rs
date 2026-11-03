@@ -14,6 +14,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -34,6 +35,8 @@ struct AppState {
     open_projects: Mutex<HashMap<String, PathBuf>>,
     // 新視窗的編號（label 用 w1、w2…；第一個視窗是 main）
     next_window: AtomicUsize,
+    // 每個視窗監看自己開著的專案資料夾（視窗的 label → 監看器；拿掉就停止監看）
+    watchers: Mutex<HashMap<String, RecommendedWatcher>>,
 }
 
 // ───────────────────────── 路徑檢查 ─────────────────────────
@@ -322,6 +325,32 @@ fn project_claim(app: AppHandle, window: WebviewWindow, state: State<AppState>, 
 #[tauri::command]
 fn project_release(window: WebviewWindow, state: State<AppState>) {
     state.open_projects.lock().unwrap().remove(window.label());
+    state.watchers.lock().unwrap().remove(window.label());
+}
+
+// ───────────────────────── 監看專案資料夾（外部改動，例如 AI 改了檔案） ─────────────────────────
+// 資料夾裡有東西被新增、修改、刪除，就送「fs-change」事件（內容是改到的路徑）給這個視窗
+// 畫面收到後會重新讀取，比對出哪些是別人改的（自己存檔造成的會被認出來略過）
+
+#[tauri::command]
+fn project_watch(app: AppHandle, window: WebviewWindow, state: State<AppState>, path: String) -> Result<(), String> {
+    let root = guard(&state, &path)?;
+    let label = window.label().to_string();
+    let target = label.clone();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        let Ok(event) = res else { return };
+        // 只在意內容有變的事件（新增、修改、刪除、改名）；單純讀取不算
+        if matches!(event.kind, notify::EventKind::Access(_)) {
+            return;
+        }
+        let paths: Vec<String> = event.paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        let _ = app.emit_to(target.as_str(), "fs-change", paths);
+    })
+    .map_err(|e| e.to_string())?;
+    watcher.watch(&root, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
+    // 同一個視窗換專案時，舊的監看器會被換掉（丟掉就停止監看）
+    state.watchers.lock().unwrap().insert(label, watcher);
+    Ok(())
 }
 
 // 目前作用中的視窗（選單事件要送給它）；都沒有焦點時隨便挑一個
@@ -425,6 +454,7 @@ pub fn run() {
             close_confirmed: Mutex::new(HashSet::new()),
             open_projects: Mutex::new(HashMap::new()),
             next_window: AtomicUsize::new(0),
+            watchers: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             fs_list_dir,
@@ -441,6 +471,7 @@ pub fn run() {
             project_allow_root,
             project_claim,
             project_release,
+            project_watch,
             window_new,
             app_ready_to_close,
             set_zoom,
@@ -467,6 +498,7 @@ pub fn run() {
                 WindowEvent::Destroyed => {
                     state.close_confirmed.lock().unwrap().remove(&label);
                     state.open_projects.lock().unwrap().remove(&label);
+                    state.watchers.lock().unwrap().remove(&label);
                 }
                 _ => {}
             }

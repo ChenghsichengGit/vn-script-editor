@@ -15,11 +15,13 @@ export default function CardEditor({
   card,
   isCommand,
   lockedKeys,
+  flashKeys,
   onChange,
 }: {
   card: Card;
   isCommand: boolean;
   lockedKeys: string[];
+  flashKeys?: string[]; // 剛被外部（AI）改過的欄位，亮一下；'__name' = 名稱、'__detail' = 詳細內容
   onChange: (patch: Partial<Card>) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -159,7 +161,7 @@ export default function CardEditor({
 
   return (
     // spellCheck 關掉：瀏覽器的英文拼字檢查會在 time:int 這種字底下畫紅線，跟劇本的錯誤提示搞混
-    <div className="card-editor" spellCheck={false}>
+    <div className={`card-editor${flashKeys?.includes('__name') ? ' ai-flash-name' : ''}${flashKeys?.includes('__detail') ? ' ai-flash-detail' : ''}`} spellCheck={false}>
       <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="card-editor-inner">
           {isCommand ? (
@@ -182,7 +184,7 @@ export default function CardEditor({
               // 滑鼠移到這一列時的說明：專用欄位的作用，加上範本欄位不能改名的提醒
               const tip = [use, locked ? '（範本欄位：名稱要到區塊的「欄位設定」裡改）' : ''].filter(Boolean).join('\n\n');
               return (
-              <div className="card-editor-row" key={i} title={tip || undefined}>
+              <div className={`card-editor-row${flashKeys?.includes(f.key) ? ' ai-flash' : ''}`} key={i} title={tip || undefined}>
                 {locked ? (
                   // 範本欄位的名稱：純文字標籤，看起來就不能改
                   <div className="field-key-locked">

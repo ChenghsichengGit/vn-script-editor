@@ -608,3 +608,14 @@ body.dragging, body.dragging * { user-select: none; }
 .monaco-editor .vns-h1-line { background: rgba(226, 192, 141, 0.12); }
 .monaco-editor .vns-h2-line { background: rgba(127, 180, 224, 0.09); }
 .monaco-editor .vns-h3-line { background: rgba(255, 255, 255, 0.04); }
+
+/* 外部改動（AI）的打字效果：要刪掉的先標紅；打完的行亮一下再淡掉 */
+.monaco-editor .vns-ai-delete { background: rgba(244, 71, 71, 0.35); }
+.monaco-editor .vns-ai-changed { background: rgba(80, 160, 255, 0.22); transition: background 1.2s; }
+.monaco-editor .vns-ai-changed.vns-ai-fade { background: transparent; }
+
+/* 設定卡被外部（AI）改過：改到的欄位、名稱、詳細內容亮一下 */
+@keyframes ai-flash { from { background: rgba(80, 160, 255, 0.28); } to { background: transparent; } }
+.card-editor-row.ai-flash { animation: ai-flash 1.8s ease-out; border-radius: 4px; }
+.card-editor.ai-flash-name .card-editor-name { animation: ai-flash 1.8s ease-out; border-radius: 4px; }
+.card-editor.ai-flash-detail .rich-content { animation: ai-flash 1.8s ease-out; border-radius: 4px; }

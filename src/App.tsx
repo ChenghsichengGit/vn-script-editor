@@ -7,7 +7,7 @@ import EditorDock, { EditorDockHandle } from './components/EditorDock';
 import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import SettingsDialog from './components/SettingsDialog';
-import { useSettings } from './settings';
+import { getSettings, useSettings } from './settings';
 import {
   Card,
   CardOps,
@@ -26,6 +26,10 @@ import CloseDialog from './components/CloseDialog';
 import Icon from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
 import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
+import { playEdit, waitForEditor } from './aiPlayback';
+import monaco from './monaco';
+import type { DiskChanges } from './projectFiles';
+import { AI_GUIDE_NAME, buildAiGuide } from './aiGuide';
 import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
@@ -129,6 +133,19 @@ export default function App() {
   }, [files, contents, cards, schemas]);
   const problemCount = problems.reduce((n, g) => n + g.problems.length, 0);
 
+  // 專案資料夾最上層的「AI說明.md」：指令或欄位設定一改，停 2 秒就重新產生（內容一樣就不寫）
+  const guideRef = useRef<{ root: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!project) return;
+    const timer = setTimeout(() => {
+      const text = buildAiGuide(project.name, cards, schemas);
+      if (guideRef.current?.root === project.store.root && guideRef.current.text === text) return;
+      guideRef.current = { root: project.store.root, text };
+      window.api.writeText(`${project.store.root}/${AI_GUIDE_NAME}`, text).catch(reportError);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [project, cards.commands, schemas]);
+
   // ── 存檔 ──────────────────────────────
   // 有改動的東西記在 dirty 清單；停止輸入 1 秒後（或按 Ctrl+S）把清單裡的東西寫回資料夾
 
@@ -193,14 +210,16 @@ export default function App() {
   const [closePrompt, setClosePrompt] = useState(false);
   // 關分頁時跳出的「要先儲存嗎？」視窗：哪個分頁，以及問完要通知 EditorDock 關不關
   const [tabClose, setTabClose] = useState<{ tabId: string; resolve: (close: boolean) => void } | null>(null);
+  // 外部（AI）改了檔案、你這邊也有沒存的修改時，問要用哪一邊的版本
+  const [conflict, setConflict] = useState<{ label: string; resolve: (takeTheirs: boolean) => void } | null>(null);
 
   // 自動存檔：任何內容一改，計時重新開始；停下來 1 秒就存（設定裡關掉自動存檔就只靠 Ctrl+S）
-  // 「要先儲存嗎？」視窗（關程式或關分頁）開著時暫停，不然選「不儲存」之前就已經被自動存進去了
+  // 問「要先儲存嗎？」（關程式或關分頁）或「要用哪一邊的版本？」（外部修改）時暫停，不然還沒選就已經被自動存進去了
   useEffect(() => {
-    if (dirty.size === 0 || !settings.autoSave || closePrompt || tabClose) return;
+    if (dirty.size === 0 || !settings.autoSave || closePrompt || tabClose || conflict) return;
     const timer = setTimeout(() => flushRef.current(), SAVE_DELAY);
     return () => clearTimeout(timer);
-  }, [dirty, contents, cards, files, settings.autoSave, closePrompt, tabClose]);
+  }, [dirty, contents, cards, files, settings.autoSave, closePrompt, tabClose, conflict]);
 
   // 套用設定：UI 大小交給桌面程式縮放整個畫面；設定卡內文大小用 CSS 變數
   useEffect(() => window.api.setZoom(settings.uiZoom), [settings.uiZoom]);
@@ -258,6 +277,168 @@ export default function App() {
         }}
       />
     );
+
+  // ── 外部改動（例如 AI 在程式外面改了檔案）─────────
+  // 資料夾一有變動，停 0.3 秒（同一次改好幾個檔案時合在一起）就重新讀硬碟，比對出被外部改過的東西
+  // 開了「打字效果」：一個一個切到那個分頁，把改動打出來；設定卡則是切過去、改到的欄位亮一下
+  // 你這邊也有還沒存的修改時，先問要用哪一邊的版本
+
+  // 正在播放打字效果的劇本：這段期間編輯器的改動不算「還沒存」（內容跟硬碟一樣）
+  const playingRef = useRef(new Set<string>());
+  const [flash, setFlash] = useState<{ tabId: string; keys: string[] } | null>(null);
+  const askConflict = (label: string) => new Promise<boolean>((resolve) => setConflict({ label, resolve }));
+
+  // 劇本開著（有編輯器在用）的話，內容要直接改編輯器的，不然畫面不會變
+  const setModelText = (fileId: string, text: string) => {
+    const model = monaco.editor.getModels().find((m) => m.uri.path.replace(/^\//, '') === fileId);
+    if (model && model.getValue() !== text) {
+      model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => null);
+      model.pushStackElement();
+    }
+  };
+
+  // 一個劇本被外部改了（或新增）：切過去播放打字效果，或直接套用
+  const applyFile = async (id: string, text: string) => {
+    const { aiPlayback, aiSpeed } = getSettings();
+    if (aiPlayback) {
+      openTab(id);
+      const editor = await waitForEditor(id);
+      if (editor) {
+        playingRef.current.add(id);
+        try {
+          await playEdit(editor, editor.getValue(), text, aiSpeed);
+        } finally {
+          playingRef.current.delete(id);
+        }
+      }
+    } else setModelText(id, text);
+    setContents((c) => ({ ...c, [id]: text }));
+  };
+
+  // 一張設定卡被外部改了（或新增）：換成新內容，切過去讓改到的欄位亮一下
+  const applyCard = async (section: CardSectionId, card: Card, isNew: boolean) => {
+    const before = latest.current.cards[section].find((c) => c.id === card.id);
+    setCards((all) => ({
+      ...all,
+      [section]: isNew ? [...all[section], card] : all[section].map((c) => (c.id === card.id ? card : c)),
+    }));
+    if (!getSettings().aiPlayback) return;
+    const keys = card.fields
+      .filter((f) => before?.fields.find((b) => b.key === f.key)?.value !== f.value)
+      .map((f) => f.key);
+    if (!before || before.name !== card.name) keys.push('__name');
+    if (!before || before.detail !== card.detail) keys.push('__detail');
+    const tabId = cardTabId(section, card.id);
+    openTab(tabId);
+    setFlash({ tabId, keys });
+    await new Promise((r) => setTimeout(r, 1800));
+    setFlash((f) => (f?.tabId === tabId ? null : f));
+  };
+
+  // 把讀到的差別一項一項套用（同一時間只跑一輪；跑的時候又有變動，跑完再跑一輪）
+  const applyChanges = async (ch: DiskChanges) => {
+    const { dirty } = latest.current;
+    setFolders(ch.folders);
+    if (ch.meta) {
+      setSchemas(ch.meta.schemas);
+      setOrder(ch.meta.order);
+    }
+    // 刪掉的：從清單拿掉，開著的分頁直接關（不問）
+    const gone = [...ch.files.removed, ...(Object.keys(ch.cards) as CardSectionId[]).flatMap((s) => ch.cards[s].removed.map((id) => cardTabId(s, id)))];
+    if (gone.length > 0) {
+      setFiles((all) => Object.fromEntries(Object.entries(all).filter(([id]) => !ch.files.removed.includes(id))));
+      setCards((all) => {
+        const next = { ...all };
+        for (const s of Object.keys(ch.cards) as CardSectionId[]) next[s] = all[s].filter((c) => !ch.cards[s].removed.includes(c.id));
+        return next;
+      });
+      closeTabs(gone);
+      for (const id of ch.files.removed) unmarkDirty(fileKey(id));
+      for (const s of Object.keys(ch.cards) as CardSectionId[]) for (const id of ch.cards[s].removed) unmarkDirty(cardTabId(s, id));
+    }
+    // 新增的劇本：先放一個空白的進清單，再把內容打出來
+    for (const f of ch.files.added) {
+      setFiles((all) => ({ ...all, [f.id]: { name: f.name, folder: f.folder } }));
+      setContents((c) => ({ ...c, [f.id]: '' }));
+      await applyFile(f.id, f.content);
+    }
+    for (const f of ch.files.changed) {
+      if (dirty.has(fileKey(f.id))) {
+        if (!(await askConflict(f.name))) continue; // 保留我的版本：下次存檔會蓋過去
+        unmarkDirty(fileKey(f.id));
+      }
+      await applyFile(f.id, f.content);
+    }
+    for (const section of Object.keys(ch.cards) as CardSectionId[]) {
+      for (const card of ch.cards[section].added) await applyCard(section, card, true);
+      for (const card of ch.cards[section].changed) {
+        if (dirty.has(cardTabId(section, card.id))) {
+          if (!(await askConflict(card.name))) continue;
+          unmarkDirty(cardTabId(section, card.id));
+        }
+        await applyCard(section, card, false);
+      }
+    }
+  };
+
+  const syncing = useRef<{ running: boolean; again: boolean }>({ running: false, again: false });
+  const syncFromDisk = async () => {
+    const store = latest.current.project?.store;
+    if (!store) return;
+    if (syncing.current.running) {
+      syncing.current.again = true;
+      return;
+    }
+    syncing.current.running = true;
+    try {
+      do {
+        syncing.current.again = false;
+        await applyChanges(await store.syncFromDisk());
+      } while (syncing.current.again);
+    } catch (e) {
+      reportError(e);
+    } finally {
+      syncing.current.running = false;
+    }
+  };
+  const syncRef = useRef(syncFromDisk);
+  syncRef.current = syncFromDisk;
+  useEffect(() => {
+    let timer: number | undefined;
+    return window.api.onFsChange(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void syncRef.current(), 300);
+    });
+  }, []);
+  const conflictDialog = conflict && (
+    <div className="close-backdrop">
+      <div className="close-panel" role="dialog" aria-label="外部修改">
+        <div className="close-message">「{conflict.label}」在程式外面被修改了，但你這邊也有還沒存的修改。要用哪一邊的版本？</div>
+        <div className="close-buttons">
+          <button
+            type="button"
+            className="close-btn primary"
+            onClick={() => {
+              conflict.resolve(true);
+              setConflict(null);
+            }}
+          >
+            用外面改的版本
+          </button>
+          <button
+            type="button"
+            className="close-btn"
+            onClick={() => {
+              conflict.resolve(false);
+              setConflict(null);
+            }}
+          >
+            保留我的版本
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // 關閉視窗：主程式會先通知這裡。全部存好了就直接關；還有沒存的就跳出「儲存／不儲存／取消」視窗
   useEffect(() => {
@@ -357,6 +538,8 @@ export default function App() {
     setDirty(new Set(migrated));
     setSaveState('saved');
     setProject({ store, name: data.name });
+    // 監看專案資料夾：外部（例如 AI）改了檔案就讀進來
+    window.api.watchProject(store.root).catch(reportError);
   };
 
   // 開始畫面要不要直接進入「建立新專案」；createKey 每次加一，讓開始畫面重新建立
@@ -1026,12 +1209,14 @@ export default function App() {
           tabIcon={tabIcon}
           onFileChange={(id, text) => {
             setContents((c) => ({ ...c, [id]: text }));
-            markDirty(fileKey(id));
+            // 播放外部改動的打字效果時，內容其實跟硬碟一樣，不算還沒存
+            if (!playingRef.current.has(id)) markDirty(fileKey(id));
           }}
           onCardChange={cardOps.update}
           onCursor={setCursor}
           onActiveTabChange={setActiveTab}
           confirmClose={confirmTabClose}
+          flash={flash}
           bottom={
             layout.problemsOpen && (
               <ProblemsPanel
@@ -1082,6 +1267,7 @@ export default function App() {
       {settingsDialog}
       {closeDialog}
       {tabCloseDialog()}
+      {conflictDialog}
       {quickPickView}
       {schemaDialog && (
         <SchemaDialog

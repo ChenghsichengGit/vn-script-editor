@@ -61,6 +61,7 @@ const SAVE_DELAY = 300; // 版面一有變動，停多久後才寫進 localStora
 // 面板和分頁標籤都由 dockview 建立，拿不到 App 的資料；改用 context 把資料傳進去
 // （dockview-react 用 portal 畫面板，所以 context 傳得進來）
 interface EditorCtxValue {
+  flash: { tabId: string; keys: string[] } | null; // 剛被外部改過的設定卡和欄位（亮一下）
   files: Record<string, { name: string; folder: string }>;
   contents: Record<string, string>;
   cards: Record<CardSectionId, Card[]>;
@@ -92,6 +93,7 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
         card={card}
         isCommand={cardRef.section === 'commands'}
         lockedKeys={ctx.schemas[cardRef.section].fields.map((f) => f.key)}
+        flashKeys={ctx.flash?.tabId === tabId ? ctx.flash.keys : undefined}
         onChange={(patch) => ctx.onCardChange(cardRef.section, card.id, patch)}
       />
     );
@@ -244,6 +246,7 @@ interface Props {
   onCursor: EditorCtxValue['onCursor'];
   onActiveTabChange: (tabId: string | null) => void; // 作用中的面板換了（沒有任何面板時是 null）
   confirmClose: (tabId: string) => Promise<boolean>; // 要關掉有沒存內容的分頁：問完回傳要不要關
+  flash: EditorCtxValue['flash'];
   bottom?: React.ReactNode; // 編輯區下方的面板（問題面板）
 }
 
@@ -384,6 +387,7 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
     schemas: props.schemas,
     activePanelId,
     isDirty: props.isDirty,
+    flash: props.flash,
     tabLabel: props.tabLabel,
     tabIcon: props.tabIcon,
     onFileChange: props.onFileChange,

@@ -39,6 +39,9 @@ interface AppApi {
   // 開專案前呼叫：同一個專案已經在別的視窗開著時，會跳到那個視窗並回傳 false（這個視窗就不要開）
   claimProject(path: string): Promise<boolean>;
   releaseProject(): Promise<void>; // 這個視窗關掉了專案（回到開始畫面）
+  // 監看專案資料夾：裡面有東西被新增、修改、刪除（例如 AI 改了檔案），就呼叫 onFsChange（內容是改到的路徑）
+  watchProject(path: string): Promise<void>;
+  onFsChange(cb: (paths: string[]) => void): () => void;
 
   // 視窗：可以開很多個（跟 VS Code 一樣）；第一個視窗才會自動開啟上次的專案
   newWindow(): Promise<void>;

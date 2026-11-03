@@ -244,6 +244,14 @@ interface Loc {
   name: string;
 }
 
+// 重新讀硬碟後，和上次知道的內容比出來的差別（外部改動，例如 AI 改了檔案）
+export interface DiskChanges {
+  files: { changed: (ScriptFile & { id: string })[]; added: (ScriptFile & { id: string })[]; removed: string[] };
+  cards: Record<CardSectionId, { changed: Card[]; added: Card[]; removed: string[] }>;
+  folders: ProjectData['folders'];
+  meta: { schemas: Schemas; order: ItemOrder } | null; // project.json 有變才有
+}
+
 // ───────────────────────── ProjectStore ─────────────────────────
 
 export class ProjectStore {
@@ -256,6 +264,16 @@ export class ProjectStore {
     world: new Map(),
     commands: new Map(),
   };
+
+  // 每個 id 目前在硬碟上的內容（讀進來或寫出去時記下）：重新讀硬碟時，內容跟這裡不一樣 = 被外部改了
+  // 自己存檔時也會更新這裡，所以存檔觸發的監看通知會被認出來略過
+  private known: Record<SectionId, Map<string, string>> = {
+    files: new Map(),
+    characters: new Map(),
+    world: new Map(),
+    commands: new Map(),
+  };
+  private knownMeta = '';
 
   // 所有寫入都排進同一條佇列，自動存檔連續觸發時不會讓寫入與刪除交錯
   private queue: Promise<unknown> = Promise.resolve();
@@ -278,7 +296,8 @@ export class ProjectStore {
     // 專案名稱：project.json 的 name，讀不到就用資料夾名稱
     let name = baseName(root);
     try {
-      const meta = JSON.parse(await window.api.readText(joinPath(root, 'project.json')));
+      store.knownMeta = await window.api.readText(joinPath(root, 'project.json'));
+      const meta = JSON.parse(store.knownMeta);
       if (meta && typeof meta === 'object' && !Array.isArray(meta)) store.meta = meta;
       if (meta && typeof meta.name === 'string' && meta.name.trim() !== '') name = meta.name;
     } catch {
@@ -295,6 +314,7 @@ export class ProjectStore {
       const id = newId();
       files[id] = { name: f.name, content: f.text, folder: f.folder };
       store.locs.files.set(id, { folder: f.folder, name: f.name });
+      store.known.files.set(id, f.text);
     }
 
     // 三種設定卡
@@ -306,6 +326,7 @@ export class ProjectStore {
         const id = newId();
         cards[section].push({ ...parseCard(id, f.name, f.text), folder: f.folder });
         store.locs[section].set(id, { folder: f.folder, name: f.name });
+        store.known[section].set(id, f.text);
       }
     }
 
@@ -325,7 +346,7 @@ export class ProjectStore {
   saveSchemas(schemas: Schemas): Promise<void> {
     return this.enqueue(async () => {
       this.meta = { ...this.meta, schemas };
-      await window.api.writeText(joinPath(this.root, 'project.json'), JSON.stringify(this.meta, null, 2) + '\n');
+      await this.writeMeta();
     });
   }
 
@@ -333,7 +354,89 @@ export class ProjectStore {
   saveOrder(order: ItemOrder): Promise<void> {
     return this.enqueue(async () => {
       this.meta = { ...this.meta, order };
-      await window.api.writeText(joinPath(this.root, 'project.json'), JSON.stringify(this.meta, null, 2) + '\n');
+      await this.writeMeta();
+    });
+  }
+
+  private async writeMeta() {
+    this.knownMeta = JSON.stringify(this.meta, null, 2) + '\n';
+    await window.api.writeText(joinPath(this.root, 'project.json'), this.knownMeta);
+  }
+
+  // 重新讀整個專案資料夾，和上次知道的內容比對，回傳被外部改過的東西（監看到資料夾有變動時呼叫）
+  // 排進存檔佇列：不會跟正在進行的存檔交錯
+  syncFromDisk(): Promise<DiskChanges> {
+    return this.enqueue(async () => {
+      const changes: DiskChanges = {
+        files: { changed: [], added: [], removed: [] },
+        cards: {
+          characters: { changed: [], added: [], removed: [] },
+          world: { changed: [], added: [], removed: [] },
+          commands: { changed: [], added: [], removed: [] },
+        },
+        folders: { files: [], characters: [], world: [], commands: [] },
+        meta: null,
+      };
+      const key = (folder: string, name: string) => `${folder}/${name}`.toLowerCase();
+
+      // 一個區塊：用「資料夾＋檔名」找回原本的 id；內容跟上次知道的不一樣就是被改了
+      const syncSection = async (section: SectionId, accept: (name: string) => boolean) => {
+        const tree = await scanTree(joinPath(this.root, sectionDir(section)), accept);
+        changes.folders[section] = tree.folders;
+        const byPath = new Map([...this.locs[section]].map(([id, loc]) => [key(loc.folder, loc.name), id]));
+        const seen = new Set<string>();
+        const result: { id: string; folder: string; name: string; text: string; isNew: boolean }[] = [];
+        for (const f of tree.files) {
+          let id = byPath.get(key(f.folder, f.name));
+          const isNew = id === undefined;
+          if (id === undefined) {
+            id = newId();
+            this.locs[section].set(id, { folder: f.folder, name: f.name });
+          }
+          seen.add(id);
+          if (!isNew && this.known[section].get(id) === f.text) continue; // 沒變
+          this.known[section].set(id, f.text);
+          result.push({ id, folder: f.folder, name: f.name, text: f.text, isNew });
+        }
+        const removed = [...this.locs[section].keys()].filter((id) => !seen.has(id));
+        for (const id of removed) {
+          this.locs[section].delete(id);
+          this.known[section].delete(id);
+        }
+        return { result, removed };
+      };
+
+      const scripts = await syncSection('files', (n) => SCRIPT_EXT.test(n));
+      for (const f of scripts.result) {
+        const item = { id: f.id, name: f.name, folder: f.folder, content: f.text };
+        (f.isNew ? changes.files.added : changes.files.changed).push(item);
+      }
+      changes.files.removed = scripts.removed;
+
+      for (const section of SECTIONS) {
+        const synced = await syncSection(section, (n) => /\.md$/i.test(n));
+        for (const f of synced.result) {
+          const card = { ...parseCard(f.id, f.name, f.text), folder: f.folder };
+          (f.isNew ? changes.cards[section].added : changes.cards[section].changed).push(card);
+        }
+        changes.cards[section].removed = synced.removed;
+      }
+
+      // project.json（欄位設定、清單順序）
+      try {
+        const text = await window.api.readText(joinPath(this.root, 'project.json'));
+        if (text !== this.knownMeta) {
+          this.knownMeta = text;
+          const meta = JSON.parse(text);
+          if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+            this.meta = meta;
+            changes.meta = { schemas: normalizeSchemas(meta.schemas), order: normalizeOrder(meta.order) };
+          }
+        }
+      } catch {
+        // 讀不到或格式壞掉：先不理它，下次改好了再讀
+      }
+      return changes;
     });
   }
 
@@ -372,6 +475,7 @@ export class ProjectStore {
     const old = locs.get(id);
     const newPath = joinPath(this.dirPath(section, folder), newName);
 
+    this.known[section].set(id, text);
     if (old === undefined || (old.folder === folder && old.name === newName)) {
       await window.api.writeText(newPath, text);
       locs.set(id, { folder, name: newName });

@@ -39,6 +39,8 @@ window.api = {
   allowRoot: (path) => invoke('project_allow_root', { path }),
   claimProject: (path) => invoke('project_claim', { path }),
   releaseProject: () => invoke('project_release'),
+  watchProject: (path) => invoke('project_watch', { path }),
+  onFsChange: (cb) => subscribe<string[]>('fs-change', cb),
 
   // 視窗
   newWindow: () => invoke('window_new'),
