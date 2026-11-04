@@ -460,6 +460,9 @@ pub fn run() {
             let _ = open_new_window(app);
         }))
         .plugin(tauri_plugin_dialog::init())
+        // 記住每個視窗的位置、大小、是否最大化（依視窗 label：main、w1、w2…），下次開同一個視窗時還原
+        // 上次的位置在已經拔掉的螢幕上時，外掛會自己拉回看得到的地方
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         // 自動更新：檢查 tauri.conf.json 裡 plugins.updater.endpoints 的網址有沒有新版本；process 用來更新完重新啟動
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
