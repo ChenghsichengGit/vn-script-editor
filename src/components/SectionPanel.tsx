@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { FileOps, FolderOps } from '../App';
-import { Card, CardOps, CardSectionId, ItemOrder, SectionId, cardTabId, folderOrderKey, orderEntries } from '../model';
+import { Card, CardOps, CardSectionId, ItemOrder, Schemas, SectionId, cardTabId, folderOrderKey, orderEntries } from '../model';
 import { fileIcon, sectionMeta } from '../sampleData';
 import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
@@ -67,6 +67,7 @@ export interface TreeProps {
   onReorder: (section: SectionId, folder: string, names: string[]) => void; // 某個資料夾裡的項目改成這個順序
   onHeaderDrag: (id: SectionId, e: React.MouseEvent) => void; // 按住標題列開始搬動整個區塊
   onEditSchema: (section: CardSectionId) => void; // 打開某個設定卡區塊的「欄位設定」
+  schemas: Schemas; // 欄位範本：設定卡展開時，欄位名稱前面畫範本設定的圖示
 }
 
 interface Props extends TreeProps {
@@ -473,6 +474,7 @@ export default function SectionPanel(props: Props) {
         onRenameClose={() => setEditing(null)}
         rowProps={{ ...dragSource({ kind: 'card', id: card.id }, card.name), ...rowDropTarget(folder, card.id, card.name) }}
         rowClass={lineClass(card.id)}
+        schemaFields={props.schemas[section as CardSectionId].fields}
       />
     );
 

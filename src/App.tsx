@@ -1004,7 +1004,8 @@ export default function App() {
   // 存欄位範本：先把改了名的欄位在每張卡上跟著改名，再讓每張卡都符合新範本（缺的補空白）
   // 有變動的卡標成「還沒存」，交給自動存檔寫回去；範本本身寫進 project.json
   const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[]) => {
-    const schema = edits.map(({ key, param }) => (param ? { key, param } : { key }));
+    // from 只是用來改名的，不存進範本；沒填的 param／icon／color 不寫出去
+    const schema = edits.map(({ key, param, icon, color }) => ({ key, ...(param && { param }), ...(icon && { icon }), ...(icon && color && { color }) }));
     const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
     const updated = new Map<string, Card>();
     for (const c of cards[section]) {
@@ -1420,6 +1421,7 @@ export default function App() {
     onReorder: reorder,
     onHeaderDrag: startPanelDrag,
     onEditSchema: setSchemaDialog,
+    schemas,
   };
   const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
   // 拖曳整個區塊時，沒有顯示側邊欄的那一邊要先露出一條窄窄的「放這裡」區域

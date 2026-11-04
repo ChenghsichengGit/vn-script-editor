@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, Field } from '../model';
+import { Card, Field, SchemaField } from '../model';
+import { fieldIconDef } from '../fieldIcons';
 import RichTextEditor, { useRichEditor } from './RichTextEditor';
 import Outline, { Heading } from './Outline';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
@@ -9,18 +10,18 @@ import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../s
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
 // 側邊欄只是預覽，所有修改都在這裡做
-// lockedKeys = 這個區塊欄位範本裡的欄位：名稱不能改、不能刪（要改請到「欄位設定」）
+// schemaFields = 這個區塊的欄位範本：裡面的欄位名稱不能改、不能刪（要改請到「欄位設定」），名稱前面畫範本設定的圖示（沒設就畫鎖頭）
 // isCommand = 指令卡：名稱就是指令格式，用等寬字和指令的顏色顯示
 export default function CardEditor({
   card,
   isCommand,
-  lockedKeys,
+  schemaFields,
   flashKeys,
   onChange,
 }: {
   card: Card;
   isCommand: boolean;
-  lockedKeys: string[];
+  schemaFields: SchemaField[];
   flashKeys?: string[]; // 剛被外部（AI）改過的欄位，亮一下；'__name' = 名稱、'__detail' = 詳細內容
   onChange: (patch: Partial<Card>) => void;
 }) {
@@ -179,7 +180,9 @@ export default function CardEditor({
 
           <div className="card-editor-fields">
             {card.fields.map((f, i) => {
-              const locked = lockedKeys.includes(f.key);
+              const schemaField = schemaFields.find((s) => s.key === f.key);
+              const locked = !!schemaField;
+              const iconDef = fieldIconDef(schemaField);
               const use = special.get(f.key.trim());
               // 滑鼠移到這一列時的說明：專用欄位的作用，加上範本欄位不能改名的提醒
               const tip = [use, locked ? '（範本欄位：名稱要到區塊的「欄位設定」裡改）' : ''].filter(Boolean).join('\n\n');
@@ -188,7 +191,7 @@ export default function CardEditor({
                 {locked ? (
                   // 範本欄位的名稱：純文字標籤，看起來就不能改
                   <div className="field-key-locked">
-                    <Icon icon="lock" className="field-lock" /> {f.key}
+                    {iconDef ? <Icon icon={iconDef} className="field-icon" /> : <Icon icon="lock" className="field-lock" />} {f.key}
                     {use && <Icon icon="sparkle" className="field-special" />}
                   </div>
                 ) : (

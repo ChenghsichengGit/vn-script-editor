@@ -45,6 +45,15 @@
   --icon-characters: #89d185;
   --icon-world: #4ec9b0;
   --icon-commands: #c586c0;
+  /* 欄位圖示可以選的顏色（src/fieldIcons.ts） */
+  --pal-red: #f48771;
+  --pal-orange: #e8a35c;
+  --pal-yellow: #e2c08d;
+  --pal-green: #89d185;
+  --pal-teal: #4ec9b0;
+  --pal-blue: #75beff;
+  --pal-purple: #c586c0;
+  --pal-gray: #9d9d9d;
 }
 
 /* 淺色主題（參考 VS Code 的 Light） */
@@ -90,6 +99,14 @@
   --icon-characters: #388a34;
   --icon-world: #16825d;
   --icon-commands: #9b3bb3;
+  --pal-red: #c72e0f;
+  --pal-orange: #b85c00;
+  --pal-yellow: #946c00;
+  --pal-green: #388a34;
+  --pal-teal: #16825d;
+  --pal-blue: #0066bf;
+  --pal-purple: #9b3bb3;
+  --pal-gray: #6f6f6f;
 }
 
 /* 高對比主題（參考 VS Code 的 High Contrast）：黑底、亮色邊框、字最亮 */
@@ -130,6 +147,14 @@
   --h1-line: rgba(255, 215, 0, 0.18);
   --h2-line: rgba(156, 220, 254, 0.14);
   --h3-line: rgba(255, 255, 255, 0.1);
+  --pal-red: #ff8c8c;
+  --pal-orange: #ffb86c;
+  --pal-yellow: #ffd700;
+  --pal-green: #8ae28a;
+  --pal-teal: #5fe0c8;
+  --pal-blue: #9cdcfe;
+  --pal-purple: #e4a0ff;
+  --pal-gray: #d0d0d0;
 }
 
 * { box-sizing: border-box; }
@@ -687,6 +712,8 @@ body.dragging, body.dragging * { user-select: none; }
 .tree-row .codicon.tree-icon { font-size: 15px; }
 .codicon.tab-icon { font-size: 14px; margin-right: 6px; vertical-align: -2px; }
 .codicon.field-lock { font-size: 13px; vertical-align: -2px; }
+/* 欄位名稱前面、欄位設定裡選的圖示（側邊欄的設定卡、卡片分頁） */
+.codicon.field-icon { font-size: 13px; vertical-align: -2px; margin-right: 3px; font-weight: normal; }
 .codicon.field-special { font-size: 12px; }
 .codicon.fold-chevron { font-size: 12px; vertical-align: -1px; }
 .fold-toggle .codicon { font-size: 12px; vertical-align: -2px; }

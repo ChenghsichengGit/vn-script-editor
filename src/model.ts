@@ -27,6 +27,8 @@ export interface Card {
 export interface SchemaField {
   key: string;
   param?: string;
+  icon?: string; // 欄位名稱前面的圖示（codicon 名稱，可選的列在 fieldIcons.ts）；沒有 = 不畫
+  color?: string; // 圖示顏色的名稱（red、blue…）；沒有 = 跟文字同色
 }
 // 一個區塊的範本：nameParam = 卡片「名稱」本身也可以當指令參數（例如角色名稱 → [名字]）；fields = 一定要有的欄位
 export interface SectionSchema {

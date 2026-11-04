@@ -8,6 +8,7 @@
 
 import { dump, load } from 'js-yaml';
 import { Card, CardSectionId, Field, ItemOrder, SchemaField, Schemas, SectionId, defaultSchemas } from './model';
+import { cleanFieldColor, cleanFieldIcon } from './fieldIcons';
 
 export interface ScriptFile {
   name: string; // 含副檔名，例如 "第一章.vns"
@@ -57,7 +58,9 @@ function normalizeSchemas(raw: unknown): Schemas {
       if (!key || seen.has(key)) return [];
       seen.add(key);
       const param = typeof f.param === 'string' && f.param.trim() ? f.param.trim() : undefined;
-      return [param ? { key, param } : { key }];
+      const icon = cleanFieldIcon(f.icon);
+      const color = icon ? cleanFieldColor(f.color) : undefined;
+      return [{ key, ...(param && { param }), ...(icon && { icon }), ...(color && { color }) }];
     });
   }
   return out;
