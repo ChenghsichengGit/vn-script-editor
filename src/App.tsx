@@ -463,9 +463,24 @@ export default function App() {
   // 選單的快捷鍵由這裡偵測：游標在畫面裡時，按鍵會先被 WebView2 收走，桌面程式的選單收不到
   // 用 capture：比劇本編輯器（Monaco）自己的快捷鍵先處理
   useEffect(() => {
+    let chord = 0; // 按了 Ctrl+K 的時間：之後 1.5 秒內按 Ctrl+\ 就是「向下分割」
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.metaKey) return;
       const key = e.key.toLowerCase();
+      // Ctrl+\：向右分割；Ctrl+K 接著 Ctrl+\：向下分割（跟 VS Code 一樣）
+      // （Ctrl+K 本身不攔下來：劇本編輯器還有 Ctrl+K Ctrl+C 這類組合鍵要用）
+      if (!e.shiftKey && key === 'k') {
+        chord = Date.now();
+        return;
+      }
+      if (!e.shiftKey && key === '\\') {
+        e.preventDefault();
+        e.stopPropagation();
+        dockRef.current?.splitActive(Date.now() - chord < 1500 ? 'below' : 'right');
+        chord = 0;
+        return;
+      }
+      chord = 0;
       // Ctrl+Shift+M：打開／收起問題面板
       if (e.shiftKey && key === 'm') {
         e.preventDefault();
@@ -1112,6 +1127,8 @@ export default function App() {
       ? [
           { id: 'save', label: '全部存檔', keybinding: 'Ctrl+S', icon: 'save', run: () => void flushRef.current() },
           { id: 'close-tab', label: '關閉分頁', keybinding: 'Ctrl+W', icon: 'close', run: menu('close-tab') },
+          { id: 'split-right', label: '向右分割', keybinding: 'Ctrl+\\', icon: 'split-horizontal', run: () => dockRef.current?.splitActive('right') },
+          { id: 'split-down', label: '向下分割', keybinding: 'Ctrl+K Ctrl+\\', icon: 'split-vertical', run: () => dockRef.current?.splitActive('below') },
           { id: 'toggle-left', label: '收起／打開左側欄', keybinding: 'Ctrl+B', icon: 'layout-sidebar-left', run: () => setLeftVisible((v) => !v) },
           {
             id: 'toggle-problems',

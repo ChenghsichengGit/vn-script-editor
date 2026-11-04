@@ -36,3 +36,11 @@
 .codicon-save::before { content: "\eb4b"; }
 .codicon-root-folder::before { content: "\eb46"; }
 .codicon-list-flat::before { content: "\eb84"; }
+.codicon-split-horizontal::before { content: "\eb56"; }
+.codicon-split-vertical::before { content: "\eb57"; }
+.codicon-question::before { content: "\eb32"; }
+.codicon-keyboard::before { content: "\ea65"; }
+.codicon-book::before { content: "\eaa4"; }
+.codicon-github::before { content: "\ea84"; }
+.codicon-sync::before { content: "\ea77"; }
+.codicon-color-mode::before { content: "\eac6"; }

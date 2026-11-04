@@ -256,6 +256,51 @@ export default function SectionPanel(props: Props) {
           props.order[id]?.[folder],
         ).map((c) => c.name);
 
+  // 根目錄最後一個項目的 id（拖到下方空白處時，藍線畫在它下面）
+  const lastRootKey = () => {
+    if (id === 'files') {
+      const list = sortByOrder(Object.entries(props.files).filter(([, f]) => f.folder === ''), ([, f]) => f.name, props.order[id]?.['']);
+      return list[list.length - 1]?.[0];
+    }
+    const list = sortByOrder(props.cards[id as CardSectionId].filter((c) => (c.folder ?? '') === ''), (c) => c.name, props.order[id]?.['']);
+    return list[list.length - 1]?.id;
+  };
+
+  // 區塊下方空白處的拖曳目的地：拖的是項目時，放到根目錄的最後面（在子資料夾裡的會一起搬出來）；
+  // 拖的是資料夾時，跟以前一樣搬到根目錄
+  const blankDropTarget = () => {
+    const asFolder = dropTarget('');
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (!dragItem || dragItem.section !== id || dragItem.item.kind === 'folder') return asFolder.onDragOver(e);
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        scheduleExpand(null);
+        const last = lastRootKey();
+        // 藍線畫在最後一個項目下面；根目錄還沒有項目（或最後一個就是自己）時，改成整塊亮起來
+        if (last && !('id' in dragItem.item && dragItem.item.id === last)) {
+          setDropFolder(null);
+          if (dropLine?.key !== last || !dropLine.after) setDropLine({ key: last, after: true });
+        } else {
+          setDropLine(null);
+          setDropFolder('');
+        }
+      },
+      onDrop: (e: React.DragEvent) => {
+        const drag = dragItem;
+        if (!drag || drag.section !== id || drag.item.kind === 'folder') return asFolder.onDrop(e);
+        e.preventDefault();
+        endDrag();
+        const moving = nameOfItem(drag.item);
+        const list = [...namesIn('').filter((n) => n !== moving), moving];
+        void (async () => {
+          if (folderOf(drag.item) !== '') await props.onMove(id, drag.item, '');
+          props.onReorder(id, '', list);
+        })();
+      },
+    };
+  };
+
   // 右鍵的「排序 ▸ 名稱升序／降序」：把這個資料夾裡的項目照名稱排好，存成自訂順序
   const sortItem = (folder: string): ContextMenuItem => ({
     label: '排序',
@@ -338,6 +383,14 @@ export default function SectionPanel(props: Props) {
   };
 
   // ── 畫樹 ──────────────────────────────
+
+  // 資料夾裡有沒有東西（子資料夾、劇本或設定卡，或正在裡面新增）：空的就不畫摺疊箭頭
+  const hasChildren = (folder: string) =>
+    props.folders[id].some((f) => parentFolder(f) === folder) ||
+    (id === 'files'
+      ? Object.values(props.files).some((f) => f.folder === folder)
+      : props.cards[id as CardSectionId].some((c) => (c.folder ?? '') === folder)) ||
+    (editing?.mode === 'create' && editing.parent === folder);
 
   // 畫出某個資料夾裡的內容：先子資料夾、再項目，各自依名稱排序；子資料夾遞迴處理
   const renderLevel = (folder: string, depth: number) => {
@@ -443,8 +496,13 @@ export default function SectionPanel(props: Props) {
                 {...dragSource({ kind: 'folder', folder: sub }, folderBase(sub))}
                 {...dropTarget(sub, true)}
               >
-                <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
-                <Icon icon={open ? 'folder-opened' : 'folder'} className="tree-icon" />
+                {/* 空資料夾不畫摺疊箭頭（留一樣寬的空位，名稱才會對齊） */}
+                {hasChildren(sub) ? (
+                  <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
+                ) : (
+                  <span className="chevron" />
+                )}
+                <Icon icon={open && hasChildren(sub) ? 'folder-opened' : 'folder'} className="tree-icon" />
                 {renaming ? (
                   <NameInput
                     initial={folderBase(sub)}
@@ -511,7 +569,7 @@ export default function SectionPanel(props: Props) {
       {/* 空白處也是拖曳的目的地（放開 = 搬到區塊根目錄）；滑鼠完全離開本體才取消高亮 */}
       <div
         className={`section-body${dropFolder === '' ? ' drop-target' : ''}`}
-        {...dropTarget('')}
+        {...blankDropTarget()}
         onContextMenu={(e) => openMenu(e, { kind: 'root' })}
         onDragLeave={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {

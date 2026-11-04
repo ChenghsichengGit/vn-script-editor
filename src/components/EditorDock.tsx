@@ -8,6 +8,8 @@ import {
   GetTabContextMenuItemsParams,
   IDockviewPanelHeaderProps,
   IDockviewPanelProps,
+  IDockviewHeaderActionsProps,
+  IDockviewPanel,
   ReactContextMenuItemConfig,
   SerializedDockview,
   themeDark,
@@ -194,11 +196,31 @@ function addPanel(
   api.addPanel<PanelParams>({ id, component: COMPONENT, title, params: { tabId }, position });
 }
 
+// 把某個面板的檔案在旁邊再開一個畫面（分割）：同一個檔案的兩個畫面內容會即時同步
+function splitPanel(api: DockviewApi, panel: IDockviewPanel, direction: 'right' | 'below') {
+  const tabId = tabIdOf(panel);
+  if (tabId) addPanel(api, tabId, panel.title ?? '', { referencePanel: panel.id, direction });
+}
+
+// 每組分頁右上角的按鈕：向右分割、向下分割（跟 VS Code 一樣）
+function GroupActions({ containerApi, activePanel }: IDockviewHeaderActionsProps) {
+  if (!activePanel) return null;
+  return (
+    <div className="group-actions">
+      <button type="button" className="icon-btn" title="向右分割 (Ctrl+\)" onClick={() => splitPanel(containerApi, activePanel, 'right')}>
+        <Icon icon="split-horizontal" />
+      </button>
+      <button type="button" className="icon-btn" title="向下分割 (Ctrl+K Ctrl+\)" onClick={() => splitPanel(containerApi, activePanel, 'below')}>
+        <Icon icon="split-vertical" />
+      </button>
+    </div>
+  );
+}
+
 // 右鍵選單：關閉、分割、變浮動視窗。全部自己寫成中文（內建項目的文字是英文）
 function tabMenu({ panel, group, api }: GetTabContextMenuItemsParams): (BuiltInContextMenuItem | ReactContextMenuItemConfig)[] {
   const tabId = tabIdOf(panel);
-  const split = (direction: 'right' | 'below') => () =>
-    tabId && addPanel(api, tabId, panel.title ?? '', { referencePanel: panel.id, direction });
+  const split = (direction: 'right' | 'below') => () => splitPanel(api, panel, direction);
   // 一個一個關；有一個選了「取消」就停下來
   const closeAll = (keep?: string) => async () => {
     for (const p of group.panels.filter((x) => x.id !== keep)) {
@@ -230,6 +252,7 @@ export interface EditorDockHandle {
   closeTabs: (tabIds: string[]) => void; // 關掉這些分頁（所有群組裡顯示它們的面板）
   saveLayout: () => void; // 立刻把版面存起來（離開專案前呼叫）
   closeActive: () => void; // 關掉目前作用中的分頁（Ctrl+W）；沒有分頁就什麼都不做
+  splitActive: (direction: 'right' | 'below') => void; // 把目前的分頁在右邊／下面再開一個畫面（Ctrl+\、Ctrl+K Ctrl+\）
 }
 
 interface Props {
@@ -318,6 +341,10 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
       const panel = apiRef.current?.activePanel;
       if (panel) void requestClose(tabIdOf(panel), () => panel.api.close());
     },
+    splitActive: (direction) => {
+      const api = apiRef.current;
+      if (api?.activePanel) splitPanel(api, api.activePanel, direction);
+    },
   }));
 
   // dockview 建好了：還原這個專案上次的版面；失敗或沒有記錄就開第一個劇本
@@ -405,6 +432,7 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
             defaultTabComponent={EditorTab}
             watermarkComponent={Watermark}
             getTabContextMenuItems={tabMenu}
+            rightHeaderActionsComponent={GroupActions}
             theme={vnTheme}
             onReady={onReady}
           />
