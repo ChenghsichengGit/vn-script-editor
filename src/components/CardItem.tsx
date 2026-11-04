@@ -76,6 +76,35 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     return anyIcon ? <span className="field-icon field-icon-slot" /> : null;
   };
 
+  // 內容在右邊那欄排不下一行的欄位（第幾個）：改成名稱一行、內容從下一行開始
+  // 用「內容文字的寬度」跟「右邊那欄的寬度」比，不看排出來有沒有折行：改成上下排之後變寬也不會跳回並排，畫面不會來回閃
+  // 名稱欄寬由這張卡所有名稱決定（上下排的名稱也還在第一欄），所以右邊那欄的寬度不受上下排影響
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState<Set<number>>(new Set());
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!open || !body) return;
+    const ctx = document.createElement('canvas').getContext('2d');
+    const check = () => {
+      const key = body.querySelector<HTMLElement>(':scope > .card-row > .card-key');
+      const value = body.querySelector<HTMLElement>(':scope > .card-row > .card-value');
+      if (!ctx || !key || !value) return;
+      const style = getComputedStyle(body);
+      const inner = body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const room = inner - key.getBoundingClientRect().width - (parseFloat(style.columnGap) || 0);
+      ctx.font = getComputedStyle(value).font;
+      const next = new Set<number>();
+      card.fields.forEach((f, i) => {
+        if (!f.collapsed && (f.value.includes('\n') || ctx.measureText(f.value).width > room)) next.add(i);
+      });
+      setStacked((prev) => (prev.size === next.size && [...next].every((i) => prev.has(i)) ? prev : next));
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(body);
+    return () => ro.disconnect();
+  }, [open, card.fields]);
+
   const toggleField = (i: number) => {
     const next = new Set(openFields);
     if (next.has(i)) next.delete(i);
@@ -117,7 +146,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
       </div>
 
       {open && (
-        <div className="card-body" style={{ paddingLeft: 30 + depth * 14 }}>
+        <div className="card-body" ref={bodyRef} style={{ paddingLeft: 30 + depth * 14 }}>
           {card.fields.map((f, i) =>
             f.collapsed ? (
               // 收合欄位：只顯示名稱，點了才展開內容
@@ -131,7 +160,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
                 {openFields.has(i) && <div className="card-fold-value">{f.value}</div>}
               </div>
             ) : (
-              <div key={i} className="card-row">
+              <div key={i} className={`card-row${stacked.has(i) ? ' stacked' : ''}`}>
                 <FieldKey name={f.key}>
                   {fieldIcon(f.key)}
                   {f.key}
