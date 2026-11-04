@@ -4,18 +4,19 @@ import type { IconDef } from './components/Icon';
 
 // 四個區塊的標題、圖示（VS Code 的線條圖示＋顏色），以及按＋時新卡片的預設名稱
 export const sectionMeta: Record<SectionId, { title: string; icon: IconDef; newName?: string }> = {
-  files: { title: '檔案', icon: { name: 'files', color: '#75beff' } },
-  characters: { title: '角色', icon: { name: 'person', color: '#89d185' }, newName: '新角色' },
-  world: { title: '世界觀', icon: { name: 'globe', color: '#4ec9b0' }, newName: '新項目' },
-  commands: { title: '指令', icon: { name: 'terminal', color: '#c586c0' }, newName: '#新指令' },
+  // 顏色用 styles.css 的變數，淺色主題會換成比較深的版本
+  files: { title: '檔案', icon: { name: 'files', color: 'var(--icon-script)' } },
+  characters: { title: '角色', icon: { name: 'person', color: 'var(--icon-characters)' }, newName: '新角色' },
+  world: { title: '世界觀', icon: { name: 'globe', color: 'var(--icon-world)' }, newName: '新項目' },
+  commands: { title: '指令', icon: { name: 'terminal', color: 'var(--icon-commands)' }, newName: '#新指令' },
 };
 export const sectionOrder: SectionId[] = ['files', 'characters', 'world', 'commands'];
 
 // 劇本區塊裡的檔案：依副檔名決定圖示
 export function fileIcon(name: string): IconDef {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
-  if (ext === 'vns') return { name: 'file-code', color: '#75beff' };
-  if (ext === 'md') return { name: 'markdown', color: '#519aba' };
+  if (ext === 'vns') return { name: 'file-code', color: 'var(--icon-script)' };
+  if (ext === 'md') return { name: 'markdown', color: 'var(--icon-markdown)' };
   return { name: 'file' };
 }
 
