@@ -1002,26 +1002,50 @@ export default function App() {
     return takenNames(section, folder, { id }).has((sanitizeName(name) + '.md').toLowerCase()) ? '已經有同名的項目' : null;
   };
 
-  // 存欄位範本：先把改了名的欄位在每張卡上跟著改名，再讓每張卡都符合新範本（缺的補空白）
-  // 有變動的卡標成「還沒存」，交給自動存檔寫回去；範本本身寫進 project.json
+  // 存欄位範本：每張卡照新範本調整欄位（刪掉選了要刪的、改名、缺的補空白、照範本排序），範本本身寫進 project.json
+  // 卡片的改動直接寫進檔案，不標成「還沒存」（在欄位設定按「儲存」就是確認了）
+  // 例外：那張卡本來就有你還沒存的編輯 → 編輯器裡的版本（你的編輯 + 這次調整）維持「還沒存」，
+  //       另外把檔案裡上次存的版本也做同樣的調整寫回去；之後關分頁選「不儲存」，讀回來的也已經符合新範本
   const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[], removals: FieldRemoval[] = []) => {
     // from 只是用來改名的，不存進範本；沒填的 param／icon／color 不寫出去
     const schema = edits.map(({ key, param, icon, color }) => ({ key, ...(param && { param }), ...(icon && { icon }), ...(icon && color && { color }) }));
     const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
-    const updated = new Map<string, Card>();
     // 從範本刪掉、而且選了「連卡片上的一起刪」的欄位：先刪（用卡片上原本的名稱比對），再處理改名和補欄位
     const removeMode = new Map(removals.map((r) => [r.key, r.mode]));
-    for (const c of cards[section]) {
-      const kept = c.fields.filter((f) => {
+    const adjust = (fields: Card['fields']) => {
+      const kept = fields.filter((f) => {
         const mode = removeMode.get(f.key);
         return !(mode === 'all' || (mode === 'empty' && f.value.trim() === ''));
       });
-      const renamed = kept.map((f) => (renames.has(f.key) ? { ...f, key: renames.get(f.key)! } : f));
-      const fields = applySchema(renamed, schema);
-      if (JSON.stringify(fields) !== JSON.stringify(c.fields)) updated.set(c.id, { ...c, fields });
+      return applySchema(
+        kept.map((f) => (renames.has(f.key) ? { ...f, key: renames.get(f.key)! } : f)),
+        schema,
+      );
+    };
+
+    const store = project?.store;
+    const updated = new Map<string, Card>();
+    for (const c of cards[section]) {
+      const fields = adjust(c.fields);
+      if (JSON.stringify(fields) === JSON.stringify(c.fields)) continue;
+      const card = { ...c, fields };
+      updated.set(c.id, card);
+      if (!store) continue;
+      if (!dirty.has(cardTabId(section, c.id))) {
+        store.saveCard(section, card).catch(reportError);
+      } else {
+        // 有還沒存的編輯：只調整檔案裡的那一版（從沒存過的新卡沒有檔案，就不用）
+        store
+          .readSavedCard(section, c.id)
+          .then((saved) => {
+            if (!saved) return;
+            const savedFields = adjust(saved.fields);
+            if (JSON.stringify(savedFields) !== JSON.stringify(saved.fields)) return store.saveCard(section, { ...saved, fields: savedFields });
+          })
+          .catch(reportError);
+      }
     }
     setCards((all) => ({ ...all, [section]: all[section].map((c) => updated.get(c.id) ?? c) }));
-    updated.forEach((_, id) => markDirty(cardTabId(section, id)));
     const next = { ...schemas, [section]: nameParam ? { nameParam, fields: schema } : { fields: schema } };
     setSchemas(next);
     project?.store.saveSchemas(next).catch(reportError);
