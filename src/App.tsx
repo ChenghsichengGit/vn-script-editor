@@ -24,6 +24,8 @@ import {
 import SchemaDialog from './components/SchemaDialog';
 import CloseDialog from './components/CloseDialog';
 import UpdateDialog from './components/UpdateDialog';
+import HelpDialog, { HelpTopic } from './components/HelpDialog';
+import Tooltip from './components/Tooltip';
 import Icon from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
 import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
@@ -203,6 +205,10 @@ export default function App() {
   };
   const flushRef = useRef(flush);
   flushRef.current = flush;
+
+  // 「說明」選單：打開的說明視窗，以及手動「檢查更新」（每按一次加 1）
+  const [help, setHelp] = useState<HelpTopic | null>(null);
+  const [updateCheck, setUpdateCheck] = useState(0);
 
   // Ctrl+P／Ctrl+Shift+P 的快速選單：null = 沒開；'' = 找檔案；'>' = 找功能
   const [quickPick, setQuickPick] = useState<string | null>(null);
@@ -598,6 +604,14 @@ export default function App() {
     }
     if (ev.type === 'close-tab') {
       dockRef.current?.closeActive();
+      return;
+    }
+    if (ev.type === 'show-shortcuts' || ev.type === 'show-syntax' || ev.type === 'show-about') {
+      setHelp(ev.type === 'show-shortcuts' ? 'shortcuts' : ev.type === 'show-syntax' ? 'syntax' : 'about');
+      return;
+    }
+    if (ev.type === 'check-update') {
+      setUpdateCheck((n) => n + 1);
       return;
     }
     try {
@@ -1123,6 +1137,9 @@ export default function App() {
     { id: 'open-project', label: '開啟專案資料夾…', keybinding: 'Ctrl+O', icon: 'folder-opened', run: menu('open-project') },
     { id: 'new-project', label: '新增專案…', icon: 'new-folder', run: menu('new-project') },
     { id: 'settings', label: '設定…', keybinding: 'Ctrl+,', icon: 'settings-gear', run: () => setShowSettings(true) },
+    { id: 'help-shortcuts', label: '說明：鍵盤快捷鍵', icon: 'keyboard', run: () => setHelp('shortcuts') },
+    { id: 'help-syntax', label: '說明：劇本語法', icon: 'book', run: () => setHelp('syntax') },
+    { id: 'check-update', label: '檢查更新…', icon: 'sync', run: () => setUpdateCheck((n) => n + 1) },
     ...(project
       ? [
           { id: 'save', label: '全部存檔', keybinding: 'Ctrl+S', icon: 'save', run: () => void flushRef.current() },
@@ -1169,7 +1186,9 @@ export default function App() {
         <WelcomeScreen key={createKey} startInCreateMode={startInCreate} onOpen={loadProject} />
         {settingsDialog}
         {closeDialog}
-        <UpdateDialog beforeInstall={() => flushRef.current()} />
+        <UpdateDialog beforeInstall={() => flushRef.current()} manualCheck={updateCheck} />
+        {help && <HelpDialog topic={help} onClose={() => setHelp(null)} />}
+        <Tooltip />
         {quickPickView}
       </>
     );
@@ -1285,7 +1304,9 @@ export default function App() {
       />
       {settingsDialog}
       {closeDialog}
-      <UpdateDialog beforeInstall={() => flushRef.current()} />
+      <UpdateDialog beforeInstall={() => flushRef.current()} manualCheck={updateCheck} />
+      {help && <HelpDialog topic={help} onClose={() => setHelp(null)} />}
+      <Tooltip />
       {tabCloseDialog()}
       {conflictDialog}
       {quickPickView}

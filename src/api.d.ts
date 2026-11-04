@@ -18,7 +18,11 @@ type MenuEvent =
   | { type: 'open-recent'; path: string }
   | { type: 'close-project' }
   | { type: 'open-settings' }
-  | { type: 'close-tab' };
+  | { type: 'close-tab' }
+  | { type: 'show-shortcuts' }
+  | { type: 'show-syntax' }
+  | { type: 'check-update' }
+  | { type: 'show-about' };
 
 interface AppApi {
   // 檔案操作：路徑必須在使用者開啟過的專案資料夾內，否則會丟錯

@@ -16,7 +16,7 @@ export default function ActivityBar(props: {
         <button
           key={id}
           className={props.active.includes(id) ? 'active' : ''}
-          title={sectionMeta[id].title}
+          data-tip={`${sectionMeta[id].title}：顯示／隱藏這個區塊`}
           onClick={() => props.onToggle(id)}
         >
           <Icon icon={sectionMeta[id].icon.name} />
@@ -24,7 +24,7 @@ export default function ActivityBar(props: {
       ))}
       <button
         className="activity-collapse"
-        title={props.leftOpen ? '收起左側欄 (Ctrl+B)' : '打開左側欄 (Ctrl+B)'}
+        data-tip={props.leftOpen ? '收起左側欄 (Ctrl+B)' : '打開左側欄 (Ctrl+B)'}
         onClick={props.onToggleLeft}
       >
         <Icon icon={props.leftOpen ? 'layout-sidebar-left' : 'layout-sidebar-left-off'} />

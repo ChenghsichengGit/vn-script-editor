@@ -410,8 +410,15 @@ fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<W
     let settings = SubmenuBuilder::new(app, "設定")
         .item(&MenuItemBuilder::with_id("open-settings", "設定…\tCtrl+,").build(app)?)
         .build()?;
+    let help = SubmenuBuilder::new(app, "說明")
+        .item(&MenuItemBuilder::with_id("show-shortcuts", "鍵盤快捷鍵").build(app)?)
+        .item(&MenuItemBuilder::with_id("show-syntax", "劇本語法說明").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("check-update", "檢查更新…").build(app)?)
+        .item(&MenuItemBuilder::with_id("show-about", "關於 VN Script Editor").build(app)?)
+        .build()?;
     // 沒有「編輯」選單；複製／貼上／復原的快捷鍵不需要它也能用
-    MenuBuilder::new(app).item(&file).item(&settings).build()
+    MenuBuilder::new(app).item(&file).item(&settings).item(&help).build()
 }
 
 fn set_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<()> {

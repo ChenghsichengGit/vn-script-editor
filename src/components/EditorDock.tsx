@@ -207,10 +207,10 @@ function GroupActions({ containerApi, activePanel }: IDockviewHeaderActionsProps
   if (!activePanel) return null;
   return (
     <div className="group-actions">
-      <button type="button" className="icon-btn" title="向右分割 (Ctrl+\)" onClick={() => splitPanel(containerApi, activePanel, 'right')}>
+      <button type="button" className="icon-btn" data-tip="向右分割：在右邊再開一個這個檔案的畫面 (Ctrl+\)" onClick={() => splitPanel(containerApi, activePanel, 'right')}>
         <Icon icon="split-horizontal" />
       </button>
-      <button type="button" className="icon-btn" title="向下分割 (Ctrl+K Ctrl+\)" onClick={() => splitPanel(containerApi, activePanel, 'below')}>
+      <button type="button" className="icon-btn" data-tip="向下分割：在下面再開一個這個檔案的畫面 (Ctrl+K Ctrl+\)" onClick={() => splitPanel(containerApi, activePanel, 'below')}>
         <Icon icon="split-vertical" />
       </button>
     </div>

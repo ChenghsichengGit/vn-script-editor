@@ -547,7 +547,7 @@ export default function SectionPanel(props: Props) {
           {id !== 'files' && (
             <button
               className="icon-btn"
-              title={bulk.show ? '全部收起' : '全部展開'}
+              data-tip={bulk.show ? '全部收起：每張卡只顯示名稱' : '全部展開：顯示每張卡的欄位和詳細內容'}
               onClick={() => setBulk({ show: !bulk.show, tick: bulk.tick + 1 })}
             >
               <Icon icon={bulk.show ? 'collapse-all' : 'expand-all'} />
@@ -555,12 +555,12 @@ export default function SectionPanel(props: Props) {
           )}
           <button
             className="icon-btn"
-            title={id === 'files' ? '新增檔案' : `新增${meta.title}`}
+            data-tip={id === 'files' ? '新增劇本（也可以從 Ctrl+Shift+P 新增）' : `新增${meta.title}（也可以從 Ctrl+Shift+P 新增）`}
             onClick={() => startCreate('', 'item')}
           >
             <Icon icon="new-file" />
           </button>
-          <button className="icon-btn" title="新增資料夾" onClick={() => startCreate('', 'folder')}>
+          <button className="icon-btn" data-tip="新增資料夾" onClick={() => startCreate('', 'folder')}>
             <Icon icon="new-folder" />
           </button>
         </span>
