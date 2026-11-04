@@ -83,7 +83,7 @@ export default function ScriptEditor(props: Props) {
         <Editor
           path={props.fileId}
           defaultValue={props.initialText}
-          theme="vn-dark"
+          theme={`vn-${settings.theme}`} // 顏色主題：vn-dark／vn-light／vn-hc（定義在 scriptLanguage.ts）
           language={isScript ? LANGUAGE_ID : 'plaintext'}
           beforeMount={registerScriptLanguage}
           keepCurrentModel

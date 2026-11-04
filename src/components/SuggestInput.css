@@ -8,12 +8,12 @@
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 8px var(--shadow);
   font-size: 13px;
   font-weight: normal;
   font-style: normal;
 }
 .suggest-item { display: flex; align-items: baseline; gap: 16px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
-.suggest-item.active { background: #04395e; }
+.suggest-item.active { background: var(--list-active); }
 .suggest-label { color: var(--text); }
 .suggest-detail { margin-left: auto; color: var(--text-dim); font-size: 12px; }

@@ -417,17 +417,31 @@ export function registerScriptLanguage() {
       ],
     },
   });
+  // 劇本編輯器的配色：深色、淺色、高對比各一套（跟著設定裡的「顏色主題」，見 ScriptEditor）
+  const tokens = (c: { command: string; argument: string; comment: string; h1: string; h2: string; h3: string }) => [
+    { token: 'command', foreground: c.command, fontStyle: 'bold' },
+    { token: 'argument', foreground: c.argument },
+    { token: 'comment', foreground: c.comment },
+    { token: 'heading1', foreground: c.h1, fontStyle: 'bold' },
+    { token: 'heading2', foreground: c.h2, fontStyle: 'bold' },
+    { token: 'heading3', foreground: c.h3, fontStyle: 'bold' },
+  ];
   monaco.editor.defineTheme('vn-dark', {
     base: 'vs-dark',
     inherit: true,
-    rules: [
-      { token: 'command', foreground: 'C586C0', fontStyle: 'bold' },
-      { token: 'argument', foreground: '9CDCFE' },
-      { token: 'comment', foreground: '6A9955' },
-      { token: 'heading1', foreground: 'E2C08D', fontStyle: 'bold' },
-      { token: 'heading2', foreground: '7FB4E0', fontStyle: 'bold' },
-      { token: 'heading3', foreground: 'C8C8C8', fontStyle: 'bold' },
-    ],
+    rules: tokens({ command: 'C586C0', argument: '9CDCFE', comment: '6A9955', h1: 'E2C08D', h2: '7FB4E0', h3: 'C8C8C8' }),
+    colors: {},
+  });
+  monaco.editor.defineTheme('vn-light', {
+    base: 'vs',
+    inherit: true,
+    rules: tokens({ command: 'AF00DB', argument: '0451A5', comment: '008000', h1: '9A6700', h2: '0451A5', h3: '444444' }),
+    colors: {},
+  });
+  monaco.editor.defineTheme('vn-hc', {
+    base: 'hc-black',
+    inherit: true,
+    rules: tokens({ command: 'E4A0FF', argument: '9CDCFE', comment: '7CA668', h1: 'FFD700', h2: '9CDCFE', h3: 'FFFFFF' }),
     colors: {},
   });
 

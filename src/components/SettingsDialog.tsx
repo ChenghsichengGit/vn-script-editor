@@ -142,6 +142,15 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <div className="settings-body">
           <div className="settings-group">外觀</div>
+          <Row label="顏色主題" hint="整個程式和劇本編輯器一起換色">
+            <div className="settings-segment">
+              {(['dark', 'light', 'hc'] as const).map((v, i) => (
+                <button key={v} type="button" className={s.theme === v ? 'on' : ''} onClick={() => updateSettings({ theme: v })}>
+                  {['深色', '淺色', '高對比'][i]}
+                </button>
+              ))}
+            </div>
+          </Row>
           <Row label="UI 大小" hint="整個程式一起放大縮小">
             <ZoomSlider value={s.uiZoom} />
           </Row>

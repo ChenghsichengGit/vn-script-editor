@@ -7,7 +7,7 @@ import EditorDock, { EditorDockHandle } from './components/EditorDock';
 import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import SettingsDialog from './components/SettingsDialog';
-import { getSettings, useSettings } from './settings';
+import { getSettings, updateSettings, useSettings } from './settings';
 import {
   Card,
   CardOps,
@@ -230,6 +230,11 @@ export default function App() {
 
   // 套用設定：UI 大小交給桌面程式縮放整個畫面；設定卡內文大小用 CSS 變數
   useEffect(() => window.api.setZoom(settings.uiZoom), [settings.uiZoom]);
+  // 顏色主題：<html data-theme="light"> 之類，styles.css 依這個換顏色（深色是預設，不用設）
+  useEffect(() => {
+    if (settings.theme === 'dark') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = settings.theme;
+  }, [settings.theme]);
   useEffect(() => {
     document.documentElement.style.setProperty('--card-font-size', `${settings.cardFontSize}px`);
   }, [settings.cardFontSize]);
@@ -1137,6 +1142,12 @@ export default function App() {
     { id: 'open-project', label: '開啟專案資料夾…', keybinding: 'Ctrl+O', icon: 'folder-opened', run: menu('open-project') },
     { id: 'new-project', label: '新增專案…', icon: 'new-folder', run: menu('new-project') },
     { id: 'settings', label: '設定…', keybinding: 'Ctrl+,', icon: 'settings-gear', run: () => setShowSettings(true) },
+    ...(['dark', 'light', 'hc'] as const).map((theme, i) => ({
+      id: `theme-${theme}`,
+      label: `顏色主題：${['深色', '淺色', '高對比'][i]}`,
+      icon: 'color-mode',
+      run: () => updateSettings({ theme }),
+    })),
     { id: 'help-shortcuts', label: '說明：鍵盤快捷鍵', icon: 'keyboard', run: () => setHelp('shortcuts') },
     { id: 'help-syntax', label: '說明：劇本語法', icon: 'book', run: () => setHelp('syntax') },
     { id: 'check-update', label: '檢查更新…', icon: 'sync', run: () => setUpdateCheck((n) => n + 1) },

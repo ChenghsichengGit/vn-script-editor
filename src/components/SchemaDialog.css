@@ -3,7 +3,7 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -17,7 +17,7 @@
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 20px var(--shadow);
   color: var(--text);
   font-size: 13px;
 }
@@ -106,7 +106,7 @@ button.schema-icon:hover { background: var(--bg-selected); }
 }
 .schema-add:hover { filter: brightness(1.25); }
 
-.schema-error { margin-top: 8px; color: #f48771; }
+.schema-error { margin-top: 8px; color: var(--error); }
 
 .schema-footer {
   display: flex;
@@ -127,7 +127,7 @@ button.schema-icon:hover { background: var(--bg-selected); }
 }
 .schema-btn:hover:not(:disabled) { background: var(--bg-selected); }
 .schema-btn:disabled { opacity: 0.4; cursor: default; }
-.schema-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.schema-btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .schema-btn-primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.15); }
 
 /* 欄位名稱格：專用名稱（用法、說明）在右邊加 ✦，滑鼠移到這一列會顯示它的作用 */

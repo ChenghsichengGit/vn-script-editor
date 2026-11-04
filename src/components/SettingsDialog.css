@@ -3,7 +3,7 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -17,7 +17,7 @@
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 20px var(--shadow);
   color: var(--text);
   font-size: 13px;
 }
@@ -123,7 +123,7 @@
 .settings-segment button:first-child { border-radius: 3px 0 0 3px; }
 .settings-segment button:last-child { border-radius: 0 3px 3px 0; }
 .settings-segment button:hover:not(:disabled):not(.on) { background: var(--bg-selected); }
-.settings-segment button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.settings-segment button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .settings-segment button:disabled { opacity: 0.4; cursor: default; }
 
 /* 開關：checkbox 藏起來，用 track 畫出滑動的外觀 */
@@ -169,5 +169,5 @@
   cursor: pointer;
 }
 .settings-btn:hover { background: var(--bg-selected); }
-.settings-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.settings-btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .settings-btn-primary:hover { background: var(--accent); filter: brightness(1.15); }

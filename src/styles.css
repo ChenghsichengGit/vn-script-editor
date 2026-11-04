@@ -1,4 +1,5 @@
-/* 顏色集中在這裡，之後換主題只要改這幾行 */
+/* 顏色集中在這裡：:root 是深色主題（預設），下面兩段是淺色、高對比要換掉的顏色
+   主題由 <html data-theme="..."> 決定（設定裡的「顏色主題」），劇本編輯器的配色在 scriptLanguage.ts 另外定義 */
 :root {
   --bg-activity: #333333;
   --bg-sidebar: #252526;
@@ -7,7 +8,10 @@
   --bg-hover: #2a2d2e;
   --bg-selected: #37373d;
   --accent: #007acc;
+  --accent-hover: #1188dd;
+  --on-accent: #ffffff; /* 藍色底上的字 */
   --text: #cccccc;
+  --text-strong: #ffffff; /* 標題、作用中的分頁 */
   --text-dim: #8b8b8b;
   --text-placeholder: #6a6a6a; /* 沒填時的灰色提示字 */
   --field-key: #7fb4e0; /* 欄位名稱：跟已填的文字、提示字都分得出來 */
@@ -15,6 +19,107 @@
   --cmd-name: #c586c0; /* 指令名稱（跟劇本裡的 #指令 同色） */
   --cmd-arg: #9cdcfe; /* 指令參數 */
   --border: #3c3c3c;
+  --activity-icon: #ffffff; /* 最左邊那排圖示 */
+  --link: #4fa3ff;
+  --list-active: #04395e; /* 補齊清單、快速選單選中的那一項 */
+  --error: #f48771;
+  --error-bg: #5a1d1d;
+  --error-border: #be1100;
+  --error-icon: #f14c4c;
+  --drop-bg: rgba(0, 122, 204, 0.25); /* 拖曳時的放置提示 */
+  --drop-bg-soft: rgba(0, 122, 204, 0.12);
+  --overlay: rgba(0, 0, 0, 0.5); /* 對話框後面的半透明遮罩 */
+  --shadow: rgba(0, 0, 0, 0.5);
+  --scrollbar: rgba(121, 121, 121, 0.4);
+  --scrollbar-hover: rgba(100, 100, 100, 0.7);
+  --scrollbar-active: rgba(191, 191, 191, 0.4);
+  --hint-fg: #a0a0a0; /* 劇本行尾的參數提示色塊 */
+  --hint-bg: rgba(255, 255, 255, 0.08);
+  --hint-more-fg: #808080;
+  --hint-more-bg: rgba(255, 255, 255, 0.05);
+  --h1-line: rgba(226, 192, 141, 0.12); /* 劇本標題那一行的底色 */
+  --h2-line: rgba(127, 180, 224, 0.09);
+  --h3-line: rgba(255, 255, 255, 0.04);
+}
+
+/* 淺色主題（參考 VS Code 的 Light） */
+:root[data-theme='light'] {
+  --bg-activity: #f3f3f3;
+  --bg-sidebar: #f3f3f3;
+  --bg-editor: #ffffff;
+  --bg-tab: #ececec;
+  --bg-hover: #e8e8e8;
+  --bg-selected: #e4e6f1;
+  --accent: #007acc;
+  --accent-hover: #0062a3;
+  --text: #333333;
+  --text-strong: #000000;
+  --text-dim: #6f6f6f;
+  --text-placeholder: #a0a0a0;
+  --field-key: #0451a5;
+  --field-key-locked: #9a6700;
+  --cmd-name: #af00db;
+  --cmd-arg: #0451a5;
+  --border: #d4d4d4;
+  --activity-icon: #424242;
+  --link: #006ab1;
+  --list-active: #cce4f7;
+  --error: #c72e0f;
+  --error-bg: #f9e0dc;
+  --error-border: #be1100;
+  --error-icon: #e51400;
+  --overlay: rgba(0, 0, 0, 0.25);
+  --shadow: rgba(0, 0, 0, 0.18);
+  --scrollbar: rgba(100, 100, 100, 0.35);
+  --scrollbar-hover: rgba(100, 100, 100, 0.6);
+  --scrollbar-active: rgba(0, 0, 0, 0.5);
+  --hint-fg: #6f6f6f;
+  --hint-bg: rgba(0, 0, 0, 0.06);
+  --hint-more-fg: #8a8a8a;
+  --hint-more-bg: rgba(0, 0, 0, 0.04);
+  --h1-line: rgba(154, 103, 0, 0.1);
+  --h2-line: rgba(4, 81, 165, 0.07);
+  --h3-line: rgba(0, 0, 0, 0.04);
+}
+
+/* 高對比主題（參考 VS Code 的 High Contrast）：黑底、亮色邊框、字最亮 */
+:root[data-theme='hc'] {
+  --bg-activity: #000000;
+  --bg-sidebar: #000000;
+  --bg-editor: #000000;
+  --bg-tab: #000000;
+  --bg-hover: #1a1a1a;
+  --bg-selected: #0f4a85;
+  --accent: #0f4a85;
+  --accent-hover: #1663b0;
+  --text: #ffffff;
+  --text-strong: #ffffff;
+  --text-dim: #d0d0d0;
+  --text-placeholder: #a8a8a8;
+  --field-key: #9cdcfe;
+  --field-key-locked: #ffd700;
+  --cmd-name: #e4a0ff;
+  --cmd-arg: #9cdcfe;
+  --border: #6fc3df;
+  --activity-icon: #ffffff;
+  --link: #3794ff;
+  --list-active: #0f4a85;
+  --error: #ff8c8c;
+  --error-bg: #3d0000;
+  --error-border: #ff3b3b;
+  --error-icon: #ff3b3b;
+  --overlay: rgba(0, 0, 0, 0.7);
+  --shadow: rgba(0, 0, 0, 0);
+  --scrollbar: rgba(111, 195, 223, 0.6);
+  --scrollbar-hover: rgba(111, 195, 223, 0.8);
+  --scrollbar-active: rgba(111, 195, 223, 1);
+  --hint-fg: #ffffff;
+  --hint-bg: rgba(255, 255, 255, 0.15);
+  --hint-more-fg: #d0d0d0;
+  --hint-more-bg: rgba(255, 255, 255, 0.1);
+  --h1-line: rgba(255, 215, 0, 0.18);
+  --h2-line: rgba(156, 220, 254, 0.14);
+  --h3-line: rgba(255, 255, 255, 0.1);
 }
 
 * { box-sizing: border-box; }
@@ -47,7 +152,7 @@ html, body, #root {
   border: none;
   border-left: 2px solid transparent;
   background: none;
-  color: #fff; /* 圖示白色；有沒有選中用透明度區分（跟 VS Code 一樣） */
+  color: var(--activity-icon); /* 圖示顏色跟著主題；有沒有選中用透明度區分（跟 VS Code 一樣） */
   font-size: 20px;
   cursor: pointer;
   opacity: 0.6;
@@ -110,8 +215,8 @@ html, body, #root {
 body.dragging, body.dragging * { user-select: none; }
 
 /* 拖曳搬移檔案／資料夾：目標資料夾（或區塊空白處 = 根目錄）加藍色框線與淡藍底 */
-.tree-row.drop-target { background: rgba(0, 122, 204, 0.25); outline: 1px solid var(--accent); outline-offset: -1px; }
-.section-body.drop-target { background: rgba(0, 122, 204, 0.12); outline: 1px solid var(--accent); outline-offset: -1px; }
+.tree-row.drop-target { background: var(--drop-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+.section-body.drop-target { background: var(--drop-bg-soft); outline: 1px solid var(--accent); outline-offset: -1px; }
 
 /* 浮動面板：蓋在主區域上的一層。這層不擋滑鼠，只有面板本身接收 */
 .float-layer { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
@@ -122,7 +227,7 @@ body.dragging, body.dragging * { user-select: none; }
   pointer-events: auto;
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 20px var(--shadow);
 }
 .float-panel .section.floating { flex: 1 1 0; min-height: 0; }
 /* 標題列同時是視窗的標題列：可以按住拖動 */
@@ -147,15 +252,15 @@ body.dragging, body.dragging * { user-select: none; }
 .drop-zone {
   position: fixed;
   z-index: 100;
-  background: rgba(0, 122, 204, 0.25);
+  background: var(--drop-bg);
   border: 2px solid var(--accent);
   pointer-events: none;
 }
 /* 沒有側邊欄的那一邊，拖曳時露出的放置區 */
-.dock-zone { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 30; pointer-events: none; background: rgba(0, 122, 204, 0.08); }
+.dock-zone { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 30; pointer-events: none; background: var(--drop-bg-soft); }
 .dock-zone.left { left: 48px; }
 .dock-zone.right { right: 0; }
-.dock-zone.hot { background: rgba(0, 122, 204, 0.3); }
+.dock-zone.hot { background: var(--drop-bg); }
 .drag-ghost {
   position: fixed;
   z-index: 110;
@@ -239,7 +344,7 @@ body.dragging, body.dragging * { user-select: none; }
 /* 先命名的輸入框：錯誤訊息浮在輸入框正下方（紅字），不推開下面的列 */
 .name-input-wrap { position: relative; flex: 1; min-width: 0; display: block; }
 .name-input-wrap .rename-input { width: 100%; box-sizing: border-box; height: 20px; }
-.name-input-wrap .rename-input.invalid { border-color: #be1100; }
+.name-input-wrap .rename-input.invalid { border-color: var(--error-border); }
 .name-error {
   position: absolute;
   top: 100%;
@@ -250,9 +355,9 @@ body.dragging, body.dragging * { user-select: none; }
   font-size: 12px;
   line-height: 1.4;
   white-space: normal;
-  color: #f48771;
-  background: #5a1d1d;
-  border: 1px solid #be1100;
+  color: var(--error);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
 }
 
 /* 可拖曳的分隔線 */
@@ -291,7 +396,7 @@ body.dragging, body.dragging * { user-select: none; }
   --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-tab);
   --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-editor);
   --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-tab);
-  --dv-activegroup-visiblepanel-tab-color: #ffffff;
+  --dv-activegroup-visiblepanel-tab-color: var(--text-strong);
   --dv-activegroup-hiddenpanel-tab-color: var(--text-dim);
   --dv-inactivegroup-visiblepanel-tab-color: var(--text-dim);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--text-dim);
@@ -303,11 +408,11 @@ body.dragging, body.dragging * { user-select: none; }
   --dv-active-sash-color: var(--accent);
   --dv-active-sash-transition-delay: 0.15s; /* 預設 0.5 秒才變藍，太慢 */
   /* 拖曳分頁時的放置提示：半透明藍色，和區塊拖曳的提示一致 */
-  --dv-drag-over-background-color: rgba(0, 122, 204, 0.25);
+  --dv-drag-over-background-color: var(--drop-bg);
   --dv-drag-over-border-color: var(--accent);
   --dv-edge-dock-indicator-color: var(--accent);
   --dv-floating-border: 1px solid var(--border);
-  --dv-floating-box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --dv-floating-box-shadow: 0 6px 20px var(--shadow);
   --dv-floating-titlebar-background-color: var(--bg-tab);
 }
 /* 分割線的可抓取範圍：dockview 只在觸控螢幕才加寬，這裡讓滑鼠也一樣，左右（上下）各多 5px */
@@ -437,13 +542,13 @@ body.dragging, body.dragging * { user-select: none; }
   text-overflow: ellipsis;
 }
 .outline-item:hover { color: var(--text); }
-.outline-item.active { background: var(--bg-tab); color: #4fa3ff; }
+.outline-item.active { background: var(--bg-tab); color: var(--link); }
 .outline-empty { color: var(--text-dim); font-size: 12px; padding: 6px 10px; }
 
 /* 狀態列 */
 .status-bar {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   padding: 0 10px;
@@ -454,7 +559,7 @@ body.dragging, body.dragging * { user-select: none; }
 /* 開始畫面 */
 .welcome { height: 100%; display: grid; place-items: center; background: var(--bg-editor); }
 .welcome-panel { width: min(520px, calc(100% - 32px)); }
-.welcome h1 { font-size: 28px; font-weight: 300; margin: 0; color: #fff; }
+.welcome h1 { font-size: 28px; font-weight: 300; margin: 0; color: var(--text-strong); }
 .welcome-sub { color: var(--text-dim); margin: 4px 0 28px; }
 .welcome-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .welcome button {
@@ -468,10 +573,10 @@ body.dragging, body.dragging * { user-select: none; }
 }
 .welcome button:hover:not(:disabled) { background: var(--bg-selected); }
 .welcome button:disabled { opacity: 0.5; cursor: default; }
-.welcome button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.welcome button.primary:hover:not(:disabled) { background: #1188dd; }
+.welcome button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.welcome button.primary:hover:not(:disabled) { background: var(--accent-hover); }
 .welcome-hint { color: var(--text-dim); font-size: 12px; margin: 10px 0 0; }
-.welcome-error { color: #f48771; margin: 14px 0 0; }
+.welcome-error { color: var(--error); margin: 14px 0 0; }
 .welcome-label { color: var(--text-dim); font-size: 12px; margin-bottom: 8px; }
 .welcome-create { display: flex; flex-direction: column; gap: 10px; }
 .welcome-create input {
@@ -485,7 +590,7 @@ body.dragging, body.dragging * { user-select: none; }
 }
 .welcome-recent { margin-top: 32px; }
 .welcome-recent-row { display: flex; align-items: center; gap: 10px; height: 28px; }
-.welcome button.link { background: none; border: none; padding: 0; color: #4fa3ff; }
+.welcome button.link { background: none; border: none; padding: 0; color: var(--link); }
 .welcome button.link:hover:not(:disabled) { background: none; text-decoration: underline; }
 .welcome-folder { color: var(--text-dim); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .welcome .icon-btn { padding: 0; border: none; background: none; }
@@ -496,9 +601,9 @@ body.dragging, body.dragging * { user-select: none; }
 /* 捲軸：細細的深色捲軸（VS Code 風格） */
 ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(121, 121, 121, 0.4); border-radius: 0; }
-::-webkit-scrollbar-thumb:hover { background: rgba(100, 100, 100, 0.7); }
-::-webkit-scrollbar-thumb:active { background: rgba(191, 191, 191, 0.4); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+::-webkit-scrollbar-thumb:active { background: var(--scrollbar-active); }
 
 
 /* 指令卡的名稱 = 指令格式：等寬字、#指令和參數分別上色 */
@@ -510,8 +615,8 @@ body.dragging, body.dragging * { user-select: none; }
 /* 劇本行尾的參數提示色塊（指令還缺哪些參數） */
 /* 文字由 ::before（參數提示）和 ::after（+N 還有幾種寫法）的 content 決定，見 scriptLanguage.ts 的 hintClass */
 .monaco-editor .vns-hint::before {
-  color: #a0a0a0;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--hint-fg);
+  background: var(--hint-bg);
   border-radius: 3px;
   padding: 0 4px;
   margin-left: 6px;
@@ -519,8 +624,8 @@ body.dragging, body.dragging * { user-select: none; }
   white-space: pre;
 }
 .monaco-editor .vns-hint::after {
-  color: #808080;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--hint-more-fg);
+  background: var(--hint-more-bg);
   border-radius: 3px;
   padding: 0 3px;
   margin-left: 4px;
@@ -541,17 +646,17 @@ body.dragging, body.dragging * { user-select: none; }
 .tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 
 /* 關閉程式時「要先儲存嗎？」的視窗 */
-.close-backdrop { position: fixed; inset: 0; z-index: 1300; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; }
+.close-backdrop { position: fixed; inset: 0; z-index: 1300; background: var(--overlay); display: grid; place-items: center; }
 .close-panel {
   min-width: 360px;
   padding: 20px 22px 16px;
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px var(--shadow);
 }
 .close-message { font-size: 14px; margin-bottom: 18px; }
-.close-error { color: #f48771; font-size: 12px; margin: -8px 0 14px; }
+.close-error { color: var(--error); font-size: 12px; margin: -8px 0 14px; }
 .close-buttons { display: flex; justify-content: flex-end; gap: 8px; }
 .close-btn {
   font: inherit;
@@ -563,7 +668,7 @@ body.dragging, body.dragging * { user-select: none; }
   cursor: pointer;
 }
 .close-btn:hover:not(:disabled) { background: var(--bg-hover); }
-.close-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.close-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .close-btn:disabled { opacity: 0.6; cursor: default; }
 
 /* VS Code 線條圖示（codicon）在各處的大小：Monaco 的樣式預設 16px，這裡依位置調整 */
@@ -600,15 +705,15 @@ body.dragging, body.dragging * { user-select: none; }
 .problems-badge { background: var(--bg-selected); border-radius: 9px; padding: 0 6px; font-size: 11px; }
 .problems-dim { color: var(--text-dim); font-size: 12px; }
 .problems-code { overflow: hidden; text-overflow: ellipsis; min-width: 0; font-family: 'Cascadia Code', 'Microsoft JhengHei UI', monospace; }
-.problems-error.codicon { color: #f14c4c; }
+.problems-error.codicon { color: var(--error-icon); }
 
 /* 劇本編輯器：左邊是編輯區，有標題時右邊多一欄大綱 */
 .script-editor { display: flex; height: 100%; min-width: 0; }
 .script-editor-main { flex: 1; min-width: 0; height: 100%; }
 /* 劇本裡的標題那一行（//# 大標題 等）整行加一點底色 */
-.monaco-editor .vns-h1-line { background: rgba(226, 192, 141, 0.12); }
-.monaco-editor .vns-h2-line { background: rgba(127, 180, 224, 0.09); }
-.monaco-editor .vns-h3-line { background: rgba(255, 255, 255, 0.04); }
+.monaco-editor .vns-h1-line { background: var(--h1-line); }
+.monaco-editor .vns-h2-line { background: var(--h2-line); }
+.monaco-editor .vns-h3-line { background: var(--h3-line); }
 
 /* 外部改動（AI）的打字效果：要刪掉的先標紅；打完的行亮一下再淡掉 */
 .monaco-editor .vns-ai-delete { background: rgba(244, 71, 71, 0.35); }
@@ -643,7 +748,7 @@ body.dragging, body.dragging * { user-select: none; }
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px var(--shadow);
   font-size: 12px;
   pointer-events: none;
   white-space: pre-line;
