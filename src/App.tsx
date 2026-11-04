@@ -20,6 +20,8 @@ import {
   cardTabId,
   defaultSchemas,
   parseCardTab,
+  folderOrderKey,
+  SAVE_ALL_EVENT,
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
 import CloseDialog from './components/CloseDialog';
@@ -209,6 +211,19 @@ export default function App() {
   };
   const flushRef = useRef(flush);
   flushRef.current = flush;
+  // Ctrl+S：只存目前作用中的分頁（劇本或設定卡）；沒有開分頁就不做事
+  const saveActive = () => {
+    const tab = latest.current.activeTab;
+    if (tab) void flushRef.current([parseCardTab(tab) ? tab : fileKey(tab)]);
+  };
+  const saveActiveRef = useRef(saveActive);
+  saveActiveRef.current = saveActive;
+  // 劇本編輯器裡按 Ctrl+K S（由 ScriptEditor 登記的組合鍵）送來的「全部存檔」
+  useEffect(() => {
+    const onSaveAll = () => void flushRef.current();
+    window.addEventListener(SAVE_ALL_EVENT, onSaveAll);
+    return () => window.removeEventListener(SAVE_ALL_EVENT, onSaveAll);
+  }, []);
 
   // 「說明」選單：打開的說明視窗，以及手動「檢查更新」（每按一次加 1）
   const [help, setHelp] = useState<HelpTopic | null>(null);
@@ -585,7 +600,21 @@ export default function App() {
   useEffect(() => {
     let chord = 0; // 按了 Ctrl+K 的時間：之後 1.5 秒內按 Ctrl+\ 就是「向下分割」
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.altKey || e.metaKey) return;
+      // Ctrl+K 接著 S（S 不按 Ctrl）：全部存檔（跟 VS Code 一樣）
+      // 游標在劇本編輯器裡時交給編輯器自己的組合鍵處理（見 ScriptEditor），不然編輯器會一直等第二個鍵
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && e.key.toLowerCase() === 's' && Date.now() - chord < 1500) {
+        chord = 0;
+        if ((e.target as HTMLElement | null)?.closest?.('.monaco-editor')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        void flushRef.current();
+        return;
+      }
+      if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt') return; // 單獨按下修飾鍵不算，組合鍵等下一個鍵
+      if (!e.ctrlKey || e.altKey || e.metaKey) {
+        chord = 0;
+        return;
+      }
       const key = e.key.toLowerCase();
       // Ctrl+\：向右分割；Ctrl+K 接著 Ctrl+\：向下分割（跟 VS Code 一樣）
       // （Ctrl+K 本身不攔下來：劇本編輯器還有 Ctrl+K Ctrl+C 這類組合鍵要用）
@@ -827,15 +856,15 @@ export default function App() {
     }
   };
 
-  // Ctrl+B：收起／打開左側欄；Ctrl+S：立刻存檔
+  // Ctrl+B：收起／打開左側欄；Ctrl+S：存目前的分頁（Ctrl+K S 全部存檔在上面的快捷鍵那裡）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setLeftVisible((v) => !v);
-      } else if (e.ctrlKey && e.key.toLowerCase() === 's') {
+      } else if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        flushRef.current();
+        saveActiveRef.current();
       }
     };
     window.addEventListener('keydown', onKey, true);
@@ -1030,26 +1059,40 @@ export default function App() {
   // ── 左側清單的自訂順序 ──────────────────────────────
 
   // 某個資料夾裡的項目改成這個順序（拖曳排序、右鍵排序），並寫回 project.json
-  const reorder = (section: SectionId, folder: string, names: string[]) => {
-    const next: ItemOrder = { ...order, [section]: { ...order[section], [folder]: names } };
+  // 一律從 orderRef 讀最新的順序：拖曳時「先搬資料夾、再排位置」是連續兩次修改，中間還沒重新畫面，不能用舊的 order
+  const orderRef = useRef(order);
+  orderRef.current = order;
+  const commitOrder = (next: ItemOrder) => {
+    orderRef.current = next;
     setOrder(next);
-    project?.store.saveOrder(next).catch(reportError);
+    latest.current.project?.store.saveOrder(next).catch(reportError);
+  };
+  const reorder = (section: SectionId, folder: string, names: string[]) => {
+    const cur = orderRef.current;
+    commitOrder({ ...cur, [section]: { ...cur[section], [folder]: names } });
   };
   // 項目改名：順序清單裡的名字跟著換
   const renameInOrder = (section: SectionId, folder: string, from: string, to: string) => {
-    const list = order[section]?.[folder];
+    const list = orderRef.current[section]?.[folder];
     if (list?.includes(from)) reorder(section, folder, list.map((n) => (n === from ? to : n)));
   };
-  // 資料夾改名：它和底下各層資料夾的順序清單跟著搬到新路徑
+  // 資料夾改名或搬家：它和底下各層資料夾的順序清單跟著搬到新路徑；
+  // 原本所在那一層的清單裡，它的「名稱/」換成新名稱（同一層改名，位置不變）或拿掉（搬到別層）
   const renameFolderInOrder = (section: SectionId, oldPath: string, newPath: string) => {
-    const lists = order[section];
+    const lists = orderRef.current[section];
     if (!lists) return;
-    const moved = Object.fromEntries(
+    const moved: Record<string, string[]> = Object.fromEntries(
       Object.entries(lists).map(([f, names]) => [isInFolder(f, oldPath) ? newPath + f.slice(oldPath.length) : f, names]),
     );
-    const next: ItemOrder = { ...order, [section]: moved };
-    setOrder(next);
-    project?.store.saveOrder(next).catch(reportError);
+    const parent = parentFolder(oldPath);
+    const oldKey = folderOrderKey(oldPath);
+    if (moved[parent]?.includes(oldKey)) {
+      moved[parent] =
+        parentFolder(newPath) === parent
+          ? moved[parent].map((n) => (n === oldKey ? folderOrderKey(newPath) : n))
+          : moved[parent].filter((n) => n !== oldKey);
+    }
+    commitOrder({ ...orderRef.current, [section]: moved });
   };
 
   // ── 劇本檔案 ──────────────────────────────
@@ -1211,6 +1254,7 @@ export default function App() {
         // 資料夾本身和裡面每個檔案／卡片的路徑都換成新的前綴（和資料夾改名一樣）
         const remap = (p: string) => (isInFolder(p, item.folder) ? newRel + p.slice(item.folder.length) : p);
         setFolders((f) => ({ ...f, [section]: f[section].map(remap) }));
+        renameFolderInOrder(section, item.folder, newRel);
         if (section === 'files') {
           setFiles((all) => Object.fromEntries(Object.entries(all).map(([id, f]) => [id, { ...f, folder: remap(f.folder) }])));
         } else {
@@ -1300,7 +1344,8 @@ export default function App() {
     { id: 'check-update', label: '檢查更新…', icon: 'sync', run: () => setUpdateCheck((n) => n + 1) },
     ...(project
       ? [
-          { id: 'save', label: '全部存檔', keybinding: 'Ctrl+S', icon: 'save', run: () => void flushRef.current() },
+          { id: 'save', label: '存檔（目前的分頁）', keybinding: 'Ctrl+S', icon: 'save', run: () => saveActive() },
+          { id: 'save-all', label: '全部存檔', keybinding: 'Ctrl+K S', icon: 'save', run: () => void flushRef.current() },
           { id: 'close-tab', label: '關閉分頁', keybinding: 'Ctrl+W', icon: 'close', run: menu('close-tab') },
           { id: 'split-right', label: '向右分割', keybinding: 'Ctrl+\\', icon: 'split-horizontal', run: () => dockRef.current?.splitActive('right') },
           { id: 'split-down', label: '向下分割', keybinding: 'Ctrl+K Ctrl+\\', icon: 'split-vertical', run: () => dockRef.current?.splitActive('below') },

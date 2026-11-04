@@ -3,6 +3,7 @@ import Editor, { OnMount } from '@monaco-editor/react';
 import { DEFAULT_FONT_FAMILY, getSettings, updateSettings, useSettings } from '../settings';
 import { LANGUAGE_ID, registerScriptLanguage, scriptHeadings, setHeadingLevel } from '../scriptLanguage';
 import Outline, { Heading } from './Outline';
+import { SAVE_ALL_EVENT } from '../model';
 
 interface Props {
   fileId: string;
@@ -127,6 +128,10 @@ export default function ScriptEditor(props: Props) {
                 }),
               );
             }
+            // Ctrl+K S：全部存檔（跟 VS Code 一樣）。登記成編輯器的組合鍵，編輯器按完 Ctrl+K 等第二個鍵時才不會卡住
+            editor.addCommand(monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyCode.KeyS), () =>
+              window.dispatchEvent(new Event(SAVE_ALL_EVENT)),
+            );
             // 游標移動：只有作用中的面板才回報（另一個畫面編輯同一份內容時，這邊的游標也會被推動，不能算）
             editor.onDidChangeCursorPosition(() => activeRef.current && report());
             if (activeRef.current) report();

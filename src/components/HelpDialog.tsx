@@ -7,7 +7,8 @@ export type HelpTopic = 'shortcuts' | 'syntax' | 'about';
 const SHORTCUTS: [string, string][] = [
   ['Ctrl+P', '快速開啟劇本或設定卡'],
   ['Ctrl+Shift+P', '指令面板（找所有功能）'],
-  ['Ctrl+S', '全部存檔'],
+  ['Ctrl+S', '存檔（目前的分頁）'],
+  ['Ctrl+K S', '全部存檔（先按 Ctrl+K，再按 S）'],
   ['Ctrl+W', '關閉分頁'],
   ['Ctrl+O', '開啟專案資料夾'],
   ['Ctrl+Shift+N', '新視窗'],

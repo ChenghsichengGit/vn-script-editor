@@ -204,7 +204,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           </Row>
 
           <div className="settings-group">其他</div>
-          <Row label="自動存檔" hint="關掉後只有按 Ctrl+S 才會存檔">
+          <Row label="自動存檔" hint="關掉後要按 Ctrl+S（存目前的分頁）或 Ctrl+K S（全部存檔）才會存檔">
             <Toggle checked={s.autoSave} onChange={(v) => updateSettings({ autoSave: v })} />
           </Row>
           <Row label="啟動時開啟上次的專案" hint="打開程式就直接回到上次的專案和分頁">

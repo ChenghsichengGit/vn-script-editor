@@ -64,6 +64,27 @@ export function sortByOrder<T>(items: T[], nameOf: (item: T) => string, list: st
   return [...items].sort((a, b) => rank(a) - rank(b) || nameOf(a).localeCompare(nameOf(b), 'zh-Hant'));
 }
 
+// 資料夾和項目混在一起排：資料夾在順序清單裡記成「名稱/」（項目名稱不會以 / 結尾，所以不會撞名）
+export const folderOrderKey = (folderPath: string) => folderPath.slice(folderPath.lastIndexOf('/') + 1) + '/';
+
+export type TreeEntry<T> = { kind: 'folder'; folder: string } | { kind: 'item'; item: T };
+
+// 某個資料夾裡要畫出來的東西（子資料夾 + 項目），照自訂順序混排
+// 還沒排過的：資料夾放最前面、項目放最後面，各自照名稱排（舊專案的清單只有項目，畫出來會跟以前一樣「資料夾在上」）
+export function orderEntries<T>(subFolders: string[], items: T[], nameOf: (item: T) => string, list: string[] | undefined): TreeEntry<T>[] {
+  const byName = (a: string, b: string) => a.localeCompare(b, 'zh-Hant');
+  const entries: { entry: TreeEntry<T>; key: string; isFolder: boolean }[] = [
+    ...subFolders.map((folder) => ({ entry: { kind: 'folder' as const, folder }, key: folderOrderKey(folder), isFolder: true })),
+    ...items.map((item) => ({ entry: { kind: 'item' as const, item }, key: nameOf(item), isFolder: false })),
+  ];
+  const rank = (e: (typeof entries)[number]) => {
+    const i = list ? list.indexOf(e.key) : -1;
+    if (i >= 0) return i;
+    return e.isFolder ? -Infinity : Infinity;
+  };
+  return entries.sort((a, b) => rank(a) - rank(b) || byName(a.key, b.key)).map((e) => e.entry);
+}
+
 // 檔案樹的一個節點。有 children 的可以摺疊；有 fileId 的點了會開分頁
 export interface TreeNode {
   label: string;
@@ -81,6 +102,9 @@ export interface CardOps {
   update: (section: CardSectionId, id: string, patch: Partial<Card>) => void;
   remove: (section: CardSectionId, id: string) => void;
 }
+
+// 劇本編輯器裡按 Ctrl+K S 時送到 window 的事件名稱：App 收到就全部存檔
+export const SAVE_ALL_EVENT = 'vn-save-all';
 
 // 分頁 id：劇本直接用檔案 id；設定卡用 "card:區塊:卡片id"
 export const cardTabId = (section: CardSectionId, id: string) => `card:${section}:${id}`;

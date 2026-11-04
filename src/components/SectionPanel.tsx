@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { FileOps, FolderOps } from '../App';
-import { Card, CardOps, CardSectionId, ItemOrder, SectionId, cardTabId, sortByOrder } from '../model';
+import { Card, CardOps, CardSectionId, ItemOrder, SectionId, cardTabId, folderOrderKey, orderEntries } from '../model';
 import { fileIcon, sectionMeta } from '../sampleData';
 import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
@@ -192,121 +192,133 @@ export default function SectionPanel(props: Props) {
     },
   });
 
-  // 項目（劇本或設定卡）的名稱：自訂順序用名稱記
+  // 自訂順序裡的名稱：劇本是檔名、設定卡是卡片名稱、資料夾是「名稱/」
   const nameOfItem = (item: MoveItem) => {
     if (item.kind === 'file') return props.files[item.id]?.name ?? '';
     if (item.kind === 'card') return props.cards[id as CardSectionId].find((c) => c.id === item.id)?.name ?? '';
-    return '';
+    return folderOrderKey(item.folder);
+  };
+  // 每一列的 key（藍線畫在哪一列）：項目用 id，資料夾用 folder:路徑
+  const rowKeyOf = (item: MoveItem) => (item.kind === 'folder' ? `folder:${item.folder}` : item.id);
+
+  // 某個資料夾裡直接包含的東西（子資料夾和項目混排），照目前畫出來的順序
+  type Item = [string, { name: string; folder: string }] | Card;
+  const entriesIn = (folder: string) => {
+    const subs = props.folders[id].filter((f) => parentFolder(f) === folder);
+    const items: Item[] =
+      id === 'files'
+        ? Object.entries(props.files).filter(([, f]) => f.folder === folder)
+        : props.cards[id as CardSectionId].filter((c) => (c.folder ?? '') === folder);
+    const nameOf = (it: Item) => (Array.isArray(it) ? it[1].name : it.name);
+    return orderEntries(subs, items, nameOf, props.order[id]?.[folder]).map((e) =>
+      e.kind === 'folder'
+        ? { ...e, key: folderOrderKey(e.folder), rowKey: `folder:${e.folder}` }
+        : { ...e, key: nameOf(e.item), rowKey: Array.isArray(e.item) ? e.item[0] : e.item.id },
+    );
+  };
+  // 順序清單用的名稱（照目前畫出來的順序）
+  const namesIn = (folder: string) => entriesIn(folder).map((e) => e.key);
+
+  // 把拖著的東西放進 folder，排在 names 裡 anchor 的前面或後面（anchor = null：放最後面）
+  const dropAt = (drag: MoveItem, folder: string, names: string[], anchor: string | null, after: boolean) => {
+    const moving = nameOfItem(drag);
+    const list = names.filter((n) => n !== moving);
+    const at = anchor === null ? list.length : list.indexOf(anchor) + (after ? 1 : 0);
+    list.splice(at, 0, moving);
+    void (async () => {
+      // 從別的資料夾拖過來：先搬過來，再排位置
+      if (folderOf(drag) !== folder) await props.onMove(id, drag, folder);
+      props.onReorder(id, folder, list);
+    })();
   };
 
-  // 項目那一列的拖曳目的地：拖的是項目時，放在這一列的上面或下面（滑鼠在上半部 = 上面）；
-  // 拖的是資料夾時，跟以前一樣放進這一列所在的資料夾
-  // names = 這個資料夾目前畫出來的順序
-  const itemDropTarget = (folder: string, key: string, name: string, names: string[]) => {
-    const asFolder = dropTarget(folder);
-    const isAfter = (e: React.DragEvent) => {
+  // 拖著的東西能不能排進 folder 這一層（資料夾不能排進自己或自己底下）
+  const canPlaceIn = (item: MoveItem, folder: string) => !(item.kind === 'folder' && isInFolder(folder, item.folder));
+
+  // 一列的拖曳目的地：放在這一列的上面或下面（插入位置，畫藍線）
+  // 資料夾那一列多一個「中間」：放進這個資料夾（整列亮起來），上下各 1/4 才是插在它前後
+  // folder = 這一列所在的資料夾；rowKey／name = 這一列的 key 和順序名稱；into = 資料夾那一列自己的路徑
+  const rowDropTarget = (folder: string, rowKey: string, name: string, into?: string) => {
+    const zone = (e: React.DragEvent): 'before' | 'after' | 'into' => {
       const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      return e.clientY > box.top + box.height / 2;
+      const y = (e.clientY - box.top) / box.height;
+      if (into === undefined) return y > 0.5 ? 'after' : 'before';
+      return y < 0.25 ? 'before' : y > 0.75 ? 'after' : 'into';
     };
+    const asFolder = into === undefined ? null : dropTarget(into, true);
     return {
       onDragOver: (e: React.DragEvent) => {
-        if (!dragItem || dragItem.section !== id || dragItem.item.kind === 'folder') {
+        e.stopPropagation();
+        if (!dragItem || dragItem.section !== id) return;
+        const z = zone(e);
+        if (z === 'into' && asFolder) {
           setDropLine(null);
           return asFolder.onDragOver(e);
         }
-        e.stopPropagation();
-        if ('id' in dragItem.item && dragItem.item.id === key) {
+        setDropFolder(null);
+        scheduleExpand(null);
+        if (rowKeyOf(dragItem.item) === rowKey || !canPlaceIn(dragItem.item, folder)) {
           setDropLine(null);
-          return; // 拖到自己身上：不動
+          return; // 拖到自己身上、或資料夾拖進自己底下：不能放
         }
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        setDropFolder(null);
-        scheduleExpand(null);
-        const after = isAfter(e);
-        if (dropLine?.key !== key || dropLine.after !== after) setDropLine({ key, after });
+        const after = z === 'after';
+        if (dropLine?.key !== rowKey || dropLine.after !== after) setDropLine({ key: rowKey, after });
       },
       onDrop: (e: React.DragEvent) => {
-        const drag = dragItem;
-        if (!drag || drag.section !== id || drag.item.kind === 'folder') return asFolder.onDrop(e);
         e.stopPropagation();
+        const drag = dragItem;
+        if (!drag || drag.section !== id) return;
+        const z = zone(e);
+        if (z === 'into' && asFolder) return asFolder.onDrop(e);
         e.preventDefault();
         endDrag();
-        if ('id' in drag.item && drag.item.id === key) return;
-        const moving = nameOfItem(drag.item);
-        const list = names.filter((n) => n !== moving);
-        list.splice(list.indexOf(name) + (isAfter(e) ? 1 : 0), 0, moving);
-        void (async () => {
-          // 從別的資料夾拖過來：先搬過來，再排位置
-          if (folderOf(drag.item) !== folder) await props.onMove(id, drag.item, folder);
-          props.onReorder(id, folder, list);
-        })();
+        if (rowKeyOf(drag.item) === rowKey || !canPlaceIn(drag.item, folder)) return;
+        dropAt(drag.item, folder, namesIn(folder), name, z === 'after');
       },
     };
   };
   const lineClass = (key: string) => (dropLine?.key === key ? (dropLine.after ? ' drop-after' : ' drop-before') : '');
 
-  // 某個資料夾裡直接包含的項目名稱（照目前畫出來的順序）
-  const namesIn = (folder: string) =>
-    id === 'files'
-      ? sortByOrder(Object.values(props.files).filter((f) => f.folder === folder), (f) => f.name, props.order[id]?.[folder]).map((f) => f.name)
-      : sortByOrder(
-          props.cards[id as CardSectionId].filter((c) => (c.folder ?? '') === folder),
-          (c) => c.name,
-          props.order[id]?.[folder],
-        ).map((c) => c.name);
+  // 區塊下方空白處的拖曳目的地：放到根目錄的最後面（在子資料夾裡的會一起搬出來）
+  const blankDropTarget = () => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragItem || dragItem.section !== id) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      scheduleExpand(null);
+      const entries = entriesIn('');
+      const last = entries[entries.length - 1]?.rowKey;
+      // 藍線畫在最後一列下面；根目錄是空的（或最後一個就是自己）時，改成整塊亮起來
+      if (last && rowKeyOf(dragItem.item) !== last) {
+        setDropFolder(null);
+        if (dropLine?.key !== last || !dropLine.after) setDropLine({ key: last, after: true });
+      } else {
+        setDropLine(null);
+        setDropFolder('');
+      }
+    },
+    onDrop: (e: React.DragEvent) => {
+      const drag = dragItem;
+      if (!drag || drag.section !== id) return;
+      e.preventDefault();
+      endDrag();
+      dropAt(drag.item, '', namesIn(''), null, true);
+    },
+  });
 
-  // 根目錄最後一個項目的 id（拖到下方空白處時，藍線畫在它下面）
-  const lastRootKey = () => {
-    if (id === 'files') {
-      const list = sortByOrder(Object.entries(props.files).filter(([, f]) => f.folder === ''), ([, f]) => f.name, props.order[id]?.['']);
-      return list[list.length - 1]?.[0];
-    }
-    const list = sortByOrder(props.cards[id as CardSectionId].filter((c) => (c.folder ?? '') === ''), (c) => c.name, props.order[id]?.['']);
-    return list[list.length - 1]?.id;
+  // 右鍵的「排序 ▸ 名稱升序／降序」：把這個資料夾裡的東西照名稱排好（資料夾在前、項目在後），存成自訂順序
+  const sortedNames = (folder: string, desc: boolean) => {
+    const names = namesIn(folder);
+    const cmp = (a: string, b: string) => (desc ? byName(b, a) : byName(a, b));
+    return [...names.filter((n) => n.endsWith('/')).sort(cmp), ...names.filter((n) => !n.endsWith('/')).sort(cmp)];
   };
-
-  // 區塊下方空白處的拖曳目的地：拖的是項目時，放到根目錄的最後面（在子資料夾裡的會一起搬出來）；
-  // 拖的是資料夾時，跟以前一樣搬到根目錄
-  const blankDropTarget = () => {
-    const asFolder = dropTarget('');
-    return {
-      onDragOver: (e: React.DragEvent) => {
-        if (!dragItem || dragItem.section !== id || dragItem.item.kind === 'folder') return asFolder.onDragOver(e);
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        scheduleExpand(null);
-        const last = lastRootKey();
-        // 藍線畫在最後一個項目下面；根目錄還沒有項目（或最後一個就是自己）時，改成整塊亮起來
-        if (last && !('id' in dragItem.item && dragItem.item.id === last)) {
-          setDropFolder(null);
-          if (dropLine?.key !== last || !dropLine.after) setDropLine({ key: last, after: true });
-        } else {
-          setDropLine(null);
-          setDropFolder('');
-        }
-      },
-      onDrop: (e: React.DragEvent) => {
-        const drag = dragItem;
-        if (!drag || drag.section !== id || drag.item.kind === 'folder') return asFolder.onDrop(e);
-        e.preventDefault();
-        endDrag();
-        const moving = nameOfItem(drag.item);
-        const list = [...namesIn('').filter((n) => n !== moving), moving];
-        void (async () => {
-          if (folderOf(drag.item) !== '') await props.onMove(id, drag.item, '');
-          props.onReorder(id, '', list);
-        })();
-      },
-    };
-  };
-
-  // 右鍵的「排序 ▸ 名稱升序／降序」：把這個資料夾裡的項目照名稱排好，存成自訂順序
   const sortItem = (folder: string): ContextMenuItem => ({
     label: '排序',
     children: [
-      { label: '名稱升序', onClick: () => props.onReorder(id, folder, namesIn(folder).sort(byName)) },
-      { label: '名稱降序', onClick: () => props.onReorder(id, folder, namesIn(folder).sort((a, b) => byName(b, a))) },
+      { label: '名稱升序', onClick: () => props.onReorder(id, folder, sortedNames(folder, false)) },
+      { label: '名稱降序', onClick: () => props.onReorder(id, folder, sortedNames(folder, true)) },
     ],
   });
 
@@ -392,12 +404,9 @@ export default function SectionPanel(props: Props) {
       : props.cards[id as CardSectionId].some((c) => (c.folder ?? '') === folder)) ||
     (editing?.mode === 'create' && editing.parent === folder);
 
-  // 畫出某個資料夾裡的內容：先子資料夾、再項目，各自依名稱排序；子資料夾遞迴處理
-  const renderLevel = (folder: string, depth: number) => {
+  // 畫出某個資料夾裡的內容：子資料夾和項目照自訂順序混排；子資料夾遞迴處理
+  const renderLevel = (folder: string, depth: number): React.ReactNode => {
     const section = id;
-    const subs = props.folders[section]
-      .filter((f) => parentFolder(f) === folder)
-      .sort((a, b) => byName(folderBase(a), folderBase(b)));
     const creating = editing?.mode === 'create' && editing.section === section && editing.parent === folder ? editing : null;
 
     // 新增用的輸入框：資料夾的排在子資料夾群的最上面，檔案／設定卡的排在項目群的最上面
@@ -419,110 +428,101 @@ export default function SectionPanel(props: Props) {
       );
     };
 
-    // 這個資料夾直接包含的項目
-    let items: React.ReactNode;
-    if (section === 'files') {
-      const names = namesIn(folder);
-      items = sortByOrder(
-        Object.entries(props.files).filter(([, f]) => f.folder === folder),
-        ([, f]) => f.name,
-        props.order[section]?.[folder],
-      ).map(([fileId, file]) => {
-          const renaming = editing?.mode === 'rename' && editing.kind === 'file' && editing.id === fileId;
-          const dot = file.name.lastIndexOf('.');
-          return (
-            <div
-              key={fileId}
-              className={`tree-row${props.activeTab === fileId ? ' selected' : ''}${lineClass(fileId)}`}
-              style={{ paddingLeft: rowPad(depth, false) }}
-              onClick={() => props.onOpenFile(fileId)}
-              onContextMenu={(e) => openMenu(e, { kind: 'file', id: fileId })}
-              {...dragSource({ kind: 'file', id: fileId }, file.name)}
-              {...itemDropTarget(folder, fileId, file.name, names)}
-            >
-              <Icon icon={fileIcon(file.name)} className="tree-icon" />
-              {renaming ? (
-                <NameInput
-                  initial={file.name}
-                  selectTo={dot > 0 ? dot : undefined} // 一開始只選副檔名前面的部分
-                  onSubmit={(name) => props.fileOps.rename(fileId, name)}
-                  onClose={() => setEditing(null)}
-                />
-              ) : (
-                <span className="tree-label">{file.name}</span>
-              )}
-            </div>
-          );
-        });
-    } else {
-      const names = namesIn(folder);
-      items = sortByOrder(
-        props.cards[section].filter((c) => (c.folder ?? '') === folder),
-        (c) => c.name,
-        props.order[section]?.[folder],
-      ).map((card) => (
-          <CardItem
-            key={card.id}
-            section={section}
-            card={card}
-            ops={props.cardOps}
-            bulk={bulk}
-            selected={props.activeTab === cardTabId(section, card.id)}
-            depth={depth}
-            onMenu={(e) => openMenu(e, { kind: 'card', section, id: card.id })}
-            renaming={editing?.mode === 'rename' && editing.kind === 'card' && editing.id === card.id}
-            onRename={(name) => props.cardOps.rename(section, card.id, name)}
-            onRenameClose={() => setEditing(null)}
-            rowProps={{ ...dragSource({ kind: 'card', id: card.id }, card.name), ...itemDropTarget(folder, card.id, card.name, names) }}
-            rowClass={lineClass(card.id)}
-          />
-        ));
-    }
+    // 一個劇本檔案的那一列
+    const fileRow = (fileId: string, file: { name: string; folder: string }) => {
+      const renaming = editing?.mode === 'rename' && editing.kind === 'file' && editing.id === fileId;
+      const dot = file.name.lastIndexOf('.');
+      return (
+        <div
+          key={fileId}
+          className={`tree-row${props.activeTab === fileId ? ' selected' : ''}${lineClass(fileId)}`}
+          style={{ paddingLeft: rowPad(depth, false) }}
+          onClick={() => props.onOpenFile(fileId)}
+          onContextMenu={(e) => openMenu(e, { kind: 'file', id: fileId })}
+          {...dragSource({ kind: 'file', id: fileId }, file.name)}
+          {...rowDropTarget(folder, fileId, file.name)}
+        >
+          <Icon icon={fileIcon(file.name)} className="tree-icon" />
+          {renaming ? (
+            <NameInput
+              initial={file.name}
+              selectTo={dot > 0 ? dot : undefined} // 一開始只選副檔名前面的部分
+              onSubmit={(name) => props.fileOps.rename(fileId, name)}
+              onClose={() => setEditing(null)}
+            />
+          ) : (
+            <span className="tree-label">{file.name}</span>
+          )}
+        </div>
+      );
+    };
 
+    // 一張設定卡
+    const cardRow = (card: Card) => (
+      <CardItem
+        key={card.id}
+        section={section as CardSectionId}
+        card={card}
+        ops={props.cardOps}
+        bulk={bulk}
+        selected={props.activeTab === cardTabId(section as CardSectionId, card.id)}
+        depth={depth}
+        onMenu={(e) => openMenu(e, { kind: 'card', section: section as CardSectionId, id: card.id })}
+        renaming={editing?.mode === 'rename' && editing.kind === 'card' && editing.id === card.id}
+        onRename={(name) => props.cardOps.rename(section as CardSectionId, card.id, name)}
+        onRenameClose={() => setEditing(null)}
+        rowProps={{ ...dragSource({ kind: 'card', id: card.id }, card.name), ...rowDropTarget(folder, card.id, card.name) }}
+        rowClass={lineClass(card.id)}
+      />
+    );
+
+    // 一個子資料夾：那一列，展開的話接著畫它裡面的東西
+    const folderRow = (sub: string) => {
+      const open = !collapsed.has(folderKey(section, sub));
+      const renaming = editing?.mode === 'rename' && editing.kind === 'folder' && editing.section === section && editing.folder === sub;
+      const rowKey = `folder:${sub}`;
+      return (
+        <Fragment key={rowKey}>
+          <div
+            className={`tree-row${dropFolder === sub ? ' drop-target' : ''}${lineClass(rowKey)}`}
+            style={{ paddingLeft: rowPad(depth, true) }}
+            onClick={() => toggleFolder(sub)}
+            onContextMenu={(e) => openMenu(e, { kind: 'folder', section, folder: sub })}
+            {...dragSource({ kind: 'folder', folder: sub }, folderBase(sub))}
+            {...rowDropTarget(folder, rowKey, folderOrderKey(sub), sub)}
+          >
+            {/* 空資料夾不畫摺疊箭頭（留一樣寬的空位，名稱才會對齊） */}
+            {hasChildren(sub) ? <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" /> : <span className="chevron" />}
+            <Icon icon={open && hasChildren(sub) ? 'folder-opened' : 'folder'} className="tree-icon" />
+            {renaming ? (
+              <NameInput
+                initial={folderBase(sub)}
+                onSubmit={async (name) => {
+                  const err = await props.folderOps.rename(section, sub, name);
+                  if (!err) setCollapsed((c) => remapFolderKeys(c, section, sub, joinFolder(parentFolder(sub), name.trim())));
+                  return err;
+                }}
+                onClose={() => setEditing(null)}
+              />
+            ) : (
+              <span className="tree-label">{folderBase(sub)}</span>
+            )}
+          </div>
+          {open && renderLevel(sub, depth + 1)}
+        </Fragment>
+      );
+    };
+
+    // 子資料夾和項目照自訂順序混在一起畫（新增用的輸入框放最上面）
     return (
       <>
         {createRow('folder')}
-        {subs.map((sub) => {
-          const open = !collapsed.has(folderKey(section, sub));
-          const renaming =
-            editing?.mode === 'rename' && editing.kind === 'folder' && editing.section === section && editing.folder === sub;
-          return (
-            <Fragment key={sub}>
-              <div
-                className={`tree-row${dropFolder === sub ? ' drop-target' : ''}`}
-                style={{ paddingLeft: rowPad(depth, true) }}
-                onClick={() => toggleFolder(sub)}
-                onContextMenu={(e) => openMenu(e, { kind: 'folder', section, folder: sub })}
-                {...dragSource({ kind: 'folder', folder: sub }, folderBase(sub))}
-                {...dropTarget(sub, true)}
-              >
-                {/* 空資料夾不畫摺疊箭頭（留一樣寬的空位，名稱才會對齊） */}
-                {hasChildren(sub) ? (
-                  <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
-                ) : (
-                  <span className="chevron" />
-                )}
-                <Icon icon={open && hasChildren(sub) ? 'folder-opened' : 'folder'} className="tree-icon" />
-                {renaming ? (
-                  <NameInput
-                    initial={folderBase(sub)}
-                    onSubmit={async (name) => {
-                      const err = await props.folderOps.rename(section, sub, name);
-                      if (!err) setCollapsed((c) => remapFolderKeys(c, section, sub, joinFolder(parentFolder(sub), name.trim())));
-                      return err;
-                    }}
-                    onClose={() => setEditing(null)}
-                  />
-                ) : (
-                  <span className="tree-label">{folderBase(sub)}</span>
-                )}
-              </div>
-              {open && renderLevel(sub, depth + 1)}
-            </Fragment>
-          );
-        })}
         {createRow('item')}
-        {items}
+        {entriesIn(folder).map((e) => {
+          if (e.kind === 'folder') return folderRow(e.folder);
+          const it = e.item;
+          return Array.isArray(it) ? fileRow(it[0], it[1]) : cardRow(it);
+        })}
       </>
     );
   };

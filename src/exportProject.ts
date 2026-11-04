@@ -1,8 +1,8 @@
 // 把整個專案組成一份 Markdown 文字：給網頁版 AI（ChatGPT、Claude 網頁版等）一次貼上或上傳
 // 內容：AI說明（語法和指令規格）→ 角色／世界觀／指令的每張設定卡 → 所有劇本（照左側清單的資料夾和順序）
 import { buildAiGuide } from './aiGuide';
-import { Card, CardSectionId, ItemOrder, Schemas, SectionId, sortByOrder } from './model';
-import { parentFolder, folderBase } from './projectFiles';
+import { Card, CardSectionId, ItemOrder, Schemas, SectionId, orderEntries } from './model';
+import { parentFolder } from './projectFiles';
 import { sectionMeta } from './sampleData';
 
 export interface ExportInput {
@@ -15,7 +15,6 @@ export interface ExportInput {
   schemas: Schemas;
 }
 
-const byName = (a: string, b: string) => a.localeCompare(b, 'zh-Hant');
 
 // 用 ``` 把內容包起來；內容裡本身有 ``` 時，外框用更長的反引號，才不會被提早結束
 function fence(text: string, lang = ''): string {
@@ -24,7 +23,7 @@ function fence(text: string, lang = ''): string {
   return `${bar}${lang}\n${text.replace(/\s+$/, '')}\n${bar}`;
 }
 
-// 跟左側清單一樣的順序走過一個區塊：先子資料夾（依名稱）遞迴，再這一層的項目（依自訂順序）
+// 跟左側清單一樣的順序走過一個區塊：子資料夾和項目照自訂順序混排，遇到資料夾就往裡面走
 function walk<T>(
   section: SectionId,
   input: ExportInput,
@@ -33,9 +32,11 @@ function walk<T>(
   visit: (item: T, folder: string) => void,
   folder = '',
 ) {
-  const subs = input.folders[section].filter((f) => parentFolder(f) === folder).sort((a, b) => byName(folderBase(a), folderBase(b)));
-  for (const sub of subs) walk(section, input, itemsIn, nameOf, visit, sub);
-  for (const item of sortByOrder(itemsIn(folder), nameOf, input.order[section]?.[folder])) visit(item, folder);
+  const subs = input.folders[section].filter((f) => parentFolder(f) === folder);
+  for (const e of orderEntries(subs, itemsIn(folder), nameOf, input.order[section]?.[folder])) {
+    if (e.kind === 'folder') walk(section, input, itemsIn, nameOf, visit, e.folder);
+    else visit(e.item, folder);
+  }
 }
 
 const SECTIONS: CardSectionId[] = ['characters', 'world', 'commands'];
