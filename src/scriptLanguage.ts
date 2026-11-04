@@ -278,15 +278,17 @@ function validate(model: monaco.editor.ITextModel) {
 }
 
 // 跳到某個劇本的某一行：找到顯示這個檔案的編輯器（剛開分頁時編輯器還沒建好，就等一下再找）
-export function revealInEditor(fileId: string, line: number, column: number, tries = 30) {
+// 有給 endColumn 就把 column～endColumn 選起來（搜尋結果用）
+export function revealInEditor(fileId: string, line: number, column: number, endColumn?: number, tries = 30) {
   const editor = monaco.editor
     .getEditors()
     .find((e) => e.getModel()?.uri.path.replace(/^\//, '') === fileId && e.getContainerDomNode().offsetParent !== null);
   if (!editor) {
-    if (tries > 0) setTimeout(() => revealInEditor(fileId, line, column, tries - 1), 50);
+    if (tries > 0) setTimeout(() => revealInEditor(fileId, line, column, endColumn, tries - 1), 50);
     return;
   }
-  editor.setPosition({ lineNumber: line, column });
+  if (endColumn) editor.setSelection({ startLineNumber: line, startColumn: column, endLineNumber: line, endColumn });
+  else editor.setPosition({ lineNumber: line, column });
   editor.revealLineInCenterIfOutsideViewport(line);
   editor.focus();
 }

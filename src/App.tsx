@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ActivityBar from './components/ActivityBar';
 import Sidebar from './components/Sidebar';
 import FloatLayer from './components/FloatLayer';
@@ -29,6 +29,9 @@ import Tooltip from './components/Tooltip';
 import Icon from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
 import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
+import BottomPanel, { PanelTab } from './components/BottomPanel';
+import SearchPanel, { SearchState, emptySearch } from './components/SearchPanel';
+import { SearchGroup, SearchHit, SearchMatch, SearchTarget, replaceAllInText, replaceOneInText } from './projectSearch';
 import { playEdit, waitForEditor } from './aiPlayback';
 import monaco from './monaco';
 import type { DiskChanges } from './projectFiles';
@@ -472,6 +475,111 @@ export default function App() {
     />
   );
 
+  // ── 下方面板（問題／搜尋）────────────────
+  // 問題的快捷鍵或狀態列：面板開著而且就在這個分頁 → 收起；否則打開並切過去
+  const togglePanel = (tab: PanelTab) =>
+    setLayout((l) => (l.problemsOpen && l.panelTab === tab ? { ...l, problemsOpen: false } : { ...l, problemsOpen: true, panelTab: tab }));
+  const togglePanelRef = useRef(togglePanel);
+  togglePanelRef.current = togglePanel;
+
+  const [search, setSearch] = useState<SearchState>(emptySearch);
+  const [searchFocus, setSearchFocus] = useState(0);
+  // Ctrl+Shift+F：打開搜尋分頁、游標放進搜尋框；劇本編輯器裡選了一小段（一行內）的字，就拿來當搜尋的字
+  const openSearch = () => {
+    if (!latest.current.project) return;
+    const editor = monaco.editor.getEditors().find((e) => e.hasTextFocus());
+    const sel = editor?.getSelection();
+    const picked = sel && !sel.isEmpty() && sel.startLineNumber === sel.endLineNumber ? editor?.getModel()?.getValueInRange(sel) : '';
+    if (picked) setSearch((s) => ({ ...s, query: picked, regex: false }));
+    setLayout((l) => ({ ...l, problemsOpen: true, panelTab: 'search' }));
+    setSearchFocus((n) => n + 1);
+  };
+  const openSearchRef = useRef(openSearch);
+  openSearchRef.current = openSearch;
+
+  // 搜尋結果裡的一段文字：目前的內容，以及把它改成新內容
+  const targetText = (t: SearchTarget): string | null => {
+    const { contents, cards } = latest.current;
+    if (t.kind === 'file') return contents[t.fileId] ?? null;
+    const card = cards[t.section].find((c) => c.id === t.cardId);
+    if (!card) return null;
+    if (t.part === 'name') return card.name;
+    if (t.part === 'detail') return card.detail;
+    return card.fields[t.part.field]?.value ?? null;
+  };
+  const setTargetText = (t: SearchTarget, text: string) => {
+    if (t.kind === 'file') {
+      // 劇本開著的話改編輯器的內容：可以用 Ctrl+Z 復原
+      setModelText(t.fileId, text);
+      setContents((c) => ({ ...c, [t.fileId]: text }));
+      markDirty(fileKey(t.fileId));
+      return;
+    }
+    if (t.part === 'name') return; // 卡片名稱不取代（改名會連帶改檔名）
+    const card = latest.current.cards[t.section].find((c) => c.id === t.cardId);
+    if (!card) return;
+    if (t.part === 'detail') cardOps.update(t.section, t.cardId, { detail: text });
+    else {
+      const i = t.part.field;
+      cardOps.update(t.section, t.cardId, { fields: card.fields.map((f, j) => (j === i ? { ...f, value: text } : f)) });
+    }
+  };
+  // 全部取代：同一張卡的好幾個欄位要合併成一次更新，不然後面的會用舊的卡片內容蓋掉前面改好的
+  const replaceInGroups = (groups: SearchGroup[], re: RegExp) => {
+    const { replace, regex } = search;
+    let count = 0;
+    for (const g of groups) {
+      const hits = g.hits.filter((h) => !h.readonly);
+      if (hits.length === 0) continue;
+      const first = hits[0].target;
+      if (first.kind === 'file') {
+        const before = targetText(first);
+        if (before === null) continue;
+        const r = replaceAllInText(before, re, replace, regex);
+        count += r.count;
+        if (r.count > 0) setTargetText(first, r.text);
+        continue;
+      }
+      const card = latest.current.cards[first.section].find((c) => c.id === first.cardId);
+      if (!card) continue;
+      let detail = card.detail;
+      const fields = card.fields.map((f) => ({ ...f }));
+      for (const h of hits) {
+        const t = h.target;
+        if (t.kind !== 'card' || t.part === 'name') continue;
+        const before = t.part === 'detail' ? detail : fields[t.part.field]?.value;
+        if (before === undefined) continue;
+        const r = replaceAllInText(before, re, replace, regex);
+        count += r.count;
+        if (t.part === 'detail') detail = r.text;
+        else fields[t.part.field].value = r.text;
+      }
+      cardOps.update(first.section, first.cardId, { detail, fields });
+    }
+    return count;
+  };
+  const replaceAll = (groups: SearchGroup[], re: RegExp) => {
+    const editable = groups.filter((g) => g.hits.some((h) => !h.readonly));
+    const total = editable.reduce((n, g) => n + g.hits.filter((h) => !h.readonly).reduce((m, h) => m + h.matches.length, 0), 0);
+    const where = groups.length === 1 ? `「${groups[0].name}」` : `${editable.length} 個檔案或設定卡`;
+    const note = '開著的劇本可以用 Ctrl+Z 復原；沒開的劇本和設定卡不能復原。';
+    if (!window.confirm(`要在${where}中取代 ${total.toLocaleString()} 處嗎？\n\n${note}`)) return;
+    setStatusNote(`已取代 ${replaceInGroups(groups, re).toLocaleString()} 處`);
+  };
+  const replaceOne = (hit: SearchHit, match: SearchMatch, re: RegExp) => {
+    const before = targetText(hit.target);
+    const after = before === null ? null : replaceOneInText(before, match, re, search.replace, search.regex);
+    if (after !== null) setTargetText(hit.target, after); // null = 內容已經變了，對不上（等它重新搜尋完再按）
+  };
+  const jumpToMatch = (_g: SearchGroup, hit: SearchHit, m: SearchMatch) => {
+    const t = hit.target;
+    if (t.kind === 'file') {
+      openTab(t.fileId);
+      revealInEditor(t.fileId, m.line, m.start + 1, m.end + 1);
+    } else cardOps.open(t.section, t.cardId);
+  };
+  const searchData = useMemo(() => ({ files, contents, cards }), [files, contents, cards]);
+
   // 選單的快捷鍵由這裡偵測：游標在畫面裡時，按鍵會先被 WebView2 收走，桌面程式的選單收不到
   // 用 capture：比劇本編輯器（Monaco）自己的快捷鍵先處理
   useEffect(() => {
@@ -493,11 +601,17 @@ export default function App() {
         return;
       }
       chord = 0;
-      // Ctrl+Shift+M：打開／收起問題面板
+      // Ctrl+Shift+M：打開／收起問題面板；Ctrl+Shift+F：在整個專案中搜尋
       if (e.shiftKey && key === 'm') {
         e.preventDefault();
         e.stopPropagation();
-        setLayout((l) => ({ ...l, problemsOpen: !l.problemsOpen }));
+        togglePanelRef.current('problems');
+        return;
+      }
+      if (e.shiftKey && key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        openSearchRef.current();
         return;
       }
       // Ctrl+P：快速開啟；Ctrl+Shift+P：指令面板（同一個選單，開頭是 > 就是找功能）
@@ -1196,8 +1310,9 @@ export default function App() {
             label: '打開／收起問題面板',
             keybinding: 'Ctrl+Shift+M',
             icon: 'error',
-            run: () => setLayout((l) => ({ ...l, problemsOpen: !l.problemsOpen })),
+            run: () => togglePanel('problems'),
           },
+          { id: 'search', label: '在整個專案中搜尋／取代', keybinding: 'Ctrl+Shift+F', icon: 'search', run: () => openSearch() },
           {
             id: 'new-script',
             label: '新增劇本',
@@ -1303,16 +1418,34 @@ export default function App() {
           flash={flash}
           bottom={
             layout.problemsOpen && (
-              <ProblemsPanel
-                groups={problems}
+              <BottomPanel
+                tab={layout.panelTab}
+                onTab={(panelTab) => setLayout((l) => ({ ...l, panelTab }))}
+                problemCount={problemCount}
                 height={layout.problemsHeight}
                 onResize={(h) => setLayout((l) => ({ ...l, problemsHeight: h }))}
-                onJump={(fileId, line, column) => {
-                  openTab(fileId);
-                  revealInEditor(fileId, line, column);
-                }}
                 onClose={() => setLayout((l) => ({ ...l, problemsOpen: false }))}
-              />
+              >
+                {layout.panelTab === 'problems' ? (
+                  <ProblemsPanel
+                    groups={problems}
+                    onJump={(fileId, line, column) => {
+                      openTab(fileId);
+                      revealInEditor(fileId, line, column);
+                    }}
+                  />
+                ) : (
+                  <SearchPanel
+                    data={searchData}
+                    state={search}
+                    onState={(patch) => setSearch((s) => ({ ...s, ...patch }))}
+                    focusKey={searchFocus}
+                    onJump={jumpToMatch}
+                    onReplaceOne={replaceOne}
+                    onReplaceAll={replaceAll}
+                  />
+                )}
+              </BottomPanel>
             )
           }
         />
@@ -1344,7 +1477,7 @@ export default function App() {
       )}
       <StatusBar
         problems={problemCount}
-        onProblems={() => setLayout((l) => ({ ...l, problemsOpen: !l.problemsOpen }))}
+        onProblems={() => togglePanel('problems')}
         left={`${project.name}　｜　${status.left}`}
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
       />

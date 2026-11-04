@@ -14,6 +14,7 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl+,', '設定'],
   ['Ctrl+B', '收起／打開左側欄'],
   ['Ctrl+Shift+M', '打開／收起問題面板'],
+  ['Ctrl+Shift+F', '在整個專案中搜尋／取代'],
   ['Ctrl+\\', '向右分割'],
   ['Ctrl+K Ctrl+\\', '向下分割'],
   ['Ctrl+/', '劇本：加上／拿掉 // 註解'],
