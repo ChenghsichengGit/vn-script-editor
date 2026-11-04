@@ -227,6 +227,25 @@ async fn project_pick_folder(app: AppHandle, state: State<'_, AppState>) -> Resu
     Ok(Some(normalize(&path).to_string_lossy().into_owned()))
 }
 
+// 匯出：跳出「另存新檔」視窗，把 text 寫到使用者選的位置；取消回傳 false
+// 寫入的位置是使用者在系統視窗裡親自選的，所以不經過 guard（不限專案資料夾），也不會把它加進允許清單
+#[tauri::command]
+async fn export_save_text(app: AppHandle, default_name: String, text: String) -> Result<bool, String> {
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .set_file_name(&default_name)
+        .add_filter("Markdown", &["md"])
+        .add_filter("文字檔", &["txt"])
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    fs::write(path, text).map_err(err)?;
+    Ok(true)
+}
+
 #[tauri::command]
 fn project_get_recent(app: AppHandle, state: State<AppState>) -> Vec<RecentProject> {
     let _lock = state.recent_lock.lock().unwrap();
@@ -402,6 +421,9 @@ fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<W
         .item(&MenuItemBuilder::with_id("open-project", "開啟專案資料夾…\tCtrl+O").build(app)?)
         .item(&recent_menu.build()?)
         .separator()
+        .item(&MenuItemBuilder::with_id("copy-for-ai", "複製整個專案（給網頁版 AI）").build(app)?)
+        .item(&MenuItemBuilder::with_id("export-project", "匯出專案為單一文字檔…").build(app)?)
+        .separator()
         .item(&MenuItemBuilder::with_id("close-tab", "關閉分頁\tCtrl+W").build(app)?)
         .item(&MenuItemBuilder::with_id("close-project", "關閉專案").build(app)?)
         .separator()
@@ -483,6 +505,7 @@ pub fn run() {
             fs_remove,
             fs_exists,
             project_pick_folder,
+            export_save_text,
             project_get_recent,
             project_remember,
             project_forget,

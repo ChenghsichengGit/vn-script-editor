@@ -44,3 +44,10 @@
 .codicon-github::before { content: "\ea84"; }
 .codicon-sync::before { content: "\ea77"; }
 .codicon-color-mode::before { content: "\eac6"; }
+.codicon-copy::before { content: "\ebcc"; }
+.codicon-export::before { content: "\ebac"; }
+.codicon-case-sensitive::before { content: "\eab1"; }
+.codicon-regex::before { content: "\eb38"; }
+.codicon-replace::before { content: "\eb3d"; }
+.codicon-replace-all::before { content: "\eb3c"; }
+.codicon-clear-all::before { content: "\eabf"; }

@@ -33,6 +33,7 @@ import { playEdit, waitForEditor } from './aiPlayback';
 import monaco from './monaco';
 import type { DiskChanges } from './projectFiles';
 import { AI_GUIDE_NAME, buildAiGuide } from './aiGuide';
+import { buildProjectExport, exportFileName } from './exportProject';
 import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, setScriptData } from './scriptLanguage';
 import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
 import {
@@ -601,6 +602,34 @@ export default function App() {
     loadProject(store, data);
   };
 
+  // 狀態列右邊暫時顯示的一句話（例如「已複製」），3 秒後消失
+  const [statusNote, setStatusNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!statusNote) return;
+    const timer = setTimeout(() => setStatusNote(null), 3000);
+    return () => clearTimeout(timer);
+  }, [statusNote]);
+
+  // 把整個專案組成一份文字（給網頁版 AI）：複製到剪貼簿，或存成檔案
+  const exportProject = async (to: 'copy' | 'file') => {
+    const { project, files, contents, cards } = latest.current;
+    if (!project) {
+      window.alert('請先開啟專案。');
+      return;
+    }
+    const text = buildProjectExport({ name: project.name, files, contents, cards, folders, order, schemas });
+    try {
+      if (to === 'copy') {
+        await navigator.clipboard.writeText(text);
+        setStatusNote(`已複製整個專案（${text.length.toLocaleString()} 字元），可以貼到網頁版 AI`);
+      } else if (await window.api.exportSaveText(exportFileName(project.name), text)) {
+        setStatusNote('已匯出專案');
+      }
+    } catch (e) {
+      window.alert(`匯出失敗：${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   // 原生選單送來的指令（用 ref 讓訂閱一次就好，執行時永遠是最新版）
   const onMenu = async (ev: MenuEvent) => {
     if (ev.type === 'open-settings') {
@@ -617,6 +646,10 @@ export default function App() {
     }
     if (ev.type === 'check-update') {
       setUpdateCheck((n) => n + 1);
+      return;
+    }
+    if (ev.type === 'copy-for-ai' || ev.type === 'export-project') {
+      void exportProject(ev.type === 'copy-for-ai' ? 'copy' : 'file');
       return;
     }
     try {
@@ -1183,6 +1216,8 @@ export default function App() {
             icon: 'list-tree',
             run: () => setSchemaDialog(section),
           })),
+          { id: 'copy-for-ai', label: '複製整個專案（給網頁版 AI）', icon: 'copy', run: () => void exportProject('copy') },
+          { id: 'export-project', label: '匯出專案為單一文字檔…', icon: 'export', run: () => void exportProject('file') },
           { id: 'close-project', label: '關閉專案', icon: 'root-folder', run: menu('close-project') },
         ]
       : []),
@@ -1205,8 +1240,8 @@ export default function App() {
     );
   }
 
-  const saveLabel =
-    saveState === 'error' ? `⚠ 存檔失敗：${saveError}` : saveState === 'saving' ? '儲存中…' : dirty.size > 0 ? '尚未儲存' : '已儲存';
+  const saveLabel = statusNote ??
+    (saveState === 'error' ? `⚠ 存檔失敗：${saveError}` : saveState === 'saving' ? '儲存中…' : dirty.size > 0 ? '尚未儲存' : '已儲存');
 
   // 左右側邊欄和浮動面板的 SectionPanel 共用的資料與操作
   const treeProps = {

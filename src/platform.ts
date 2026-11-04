@@ -42,6 +42,9 @@ window.api = {
   watchProject: (path) => invoke('project_watch', { path }),
   onFsChange: (cb) => subscribe<string[]>('fs-change', cb),
 
+  // 匯出
+  exportSaveText: (defaultName, text) => invoke('export_save_text', { defaultName, text }),
+
   // 視窗
   newWindow: () => invoke('window_new'),
   isFirstWindow: thisWindow.label === 'main',

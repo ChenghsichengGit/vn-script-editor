@@ -19,6 +19,8 @@ type MenuEvent =
   | { type: 'close-project' }
   | { type: 'open-settings' }
   | { type: 'close-tab' }
+  | { type: 'copy-for-ai' }
+  | { type: 'export-project' }
   | { type: 'show-shortcuts' }
   | { type: 'show-syntax' }
   | { type: 'check-update' }
@@ -46,6 +48,9 @@ interface AppApi {
   // 監看專案資料夾：裡面有東西被新增、修改、刪除（例如 AI 改了檔案），就呼叫 onFsChange（內容是改到的路徑）
   watchProject(path: string): Promise<void>;
   onFsChange(cb: (paths: string[]) => void): () => void;
+
+  // 匯出：跳出「另存新檔」視窗，寫到使用者選的位置（不限專案資料夾）；取消回傳 false
+  exportSaveText(defaultName: string, text: string): Promise<boolean>;
 
   // 視窗：可以開很多個（跟 VS Code 一樣）；第一個視窗才會自動開啟上次的專案
   newWindow(): Promise<void>;
