@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardOps, CardSectionId, SchemaField } from '../model';
 import { fieldIconDef } from '../fieldIcons';
 import { sectionMeta } from '../sampleData';
@@ -31,6 +31,27 @@ function CardName({ section, name }: { section: CardSectionId; name: string }) {
     <span className="tree-label cmd-format" title={name}>
       <span className="cmd-name">{head}</span>
       {rest.length > 0 && <span className="cmd-arg"> {rest.join(' ')}</span>}
+    </span>
+  );
+}
+
+// 欄位名稱：不換行，太長被切掉時才加上 overflow（右邊淡出，見 styles.css），滑鼠停著顯示完整名稱
+// 側邊欄拉寬拉窄時重新判斷有沒有被切掉
+function FieldKey({ name, children }: { name: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [cut, setCut] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setCut(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [name]);
+  return (
+    <span ref={ref} className={`card-key${cut ? ' overflow' : ''}`} title={cut ? name : undefined}>
+      {children}
     </span>
   );
 }
@@ -96,25 +117,25 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
       </div>
 
       {open && (
-        <div className={`card-body${anyIcon ? ' with-icons' : ''}`} style={{ paddingLeft: 30 + depth * 14 }}>
+        <div className="card-body" style={{ paddingLeft: 30 + depth * 14 }}>
           {card.fields.map((f, i) =>
             f.collapsed ? (
               // 收合欄位：只顯示名稱，點了才展開內容
               <div key={i} className="card-fold">
                 <div className="card-row clickable" onClick={() => toggleField(i)}>
-                  <span className="card-key">
+                  <FieldKey name={f.key}>
                     <Icon icon={openFields.has(i) ? 'chevron-down' : 'chevron-right'} className="fold-chevron" /> {fieldIcon(f.key)}
                     {f.key}
-                  </span>
+                  </FieldKey>
                 </div>
                 {openFields.has(i) && <div className="card-fold-value">{f.value}</div>}
               </div>
             ) : (
               <div key={i} className="card-row">
-                <span className="card-key">
+                <FieldKey name={f.key}>
                   {fieldIcon(f.key)}
                   {f.key}
-                </span>
+                </FieldKey>
                 <span className="card-value">{f.value}</span>
               </div>
             ),
