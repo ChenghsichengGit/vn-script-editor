@@ -47,9 +47,12 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
   }, [bulk.tick]);
 
   // 欄位名稱前面的圖示（範本裡有設定才畫）
+  // 範本裡只要有一個欄位設了圖示，沒設的也留一格空位，欄位名稱的第一個字才會對齊
+  const anyIcon = schemaFields.some((s) => s.icon);
   const fieldIcon = (key: string) => {
     const def = fieldIconDef(schemaFields.find((s) => s.key === key));
-    return def && <Icon icon={def} className="field-icon" />;
+    if (def) return <Icon icon={def} className="field-icon" />;
+    return anyIcon ? <span className="field-icon field-icon-slot" /> : null;
   };
 
   const toggleField = (i: number) => {
@@ -93,7 +96,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
       </div>
 
       {open && (
-        <div className="card-body" style={{ paddingLeft: 30 + depth * 14 }}>
+        <div className={`card-body${anyIcon ? ' with-icons' : ''}`} style={{ paddingLeft: 30 + depth * 14 }}>
           {card.fields.map((f, i) =>
             f.collapsed ? (
               // 收合欄位：只顯示名稱，點了才展開內容

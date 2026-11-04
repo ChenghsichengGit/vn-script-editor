@@ -714,6 +714,11 @@ body.dragging, body.dragging * { user-select: none; }
 .codicon.field-lock { font-size: 13px; vertical-align: -2px; }
 /* 欄位名稱前面、欄位設定裡選的圖示（側邊欄的設定卡、卡片分頁） */
 .codicon.field-icon { font-size: 13px; vertical-align: -2px; margin-right: 3px; font-weight: normal; }
+/* 圖示和空位都固定寬度：有沒有圖示，欄位名稱都從同一個位置開始 */
+.card-key .field-icon { display: inline-block; width: 14px; text-align: center; }
+.field-icon-slot { margin-right: 3px; }
+/* 有圖示位置時欄位名稱那一欄加寬，名稱不會被擠到換行 */
+.card-body.with-icons .card-row > .card-key { width: 80px; }
 .codicon.field-special { font-size: 12px; }
 .codicon.fold-chevron { font-size: 12px; vertical-align: -1px; }
 .fold-toggle .codicon { font-size: 12px; vertical-align: -2px; }

@@ -64,7 +64,7 @@
 .schema-row:not(.schema-head):hover { background: var(--bg-hover); }
 .schema-head { font-size: 11px; color: var(--text-dim); background: var(--bg-tab); }
 .schema-col { flex: 1; min-width: 0; }
-.schema-fixed { padding: 3px 7px; color: var(--text-dim); }
+.schema-fixed { display: block; padding: 3px 7px; color: var(--text-dim); }
 
 /* 每列最前面：握把（按住上下拖曳）、欄位圖示（按下去選圖示和顏色） */
 .schema-grip {

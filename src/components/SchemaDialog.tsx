@@ -221,7 +221,10 @@ export default function SchemaDialog({
               <span className="schema-icon" title="名稱這一列不能移動或刪除">
                 <Icon icon={icon} />
               </span>
-              <span className="schema-col schema-fixed">名稱</span>
+              {/* 內距加在裡面那層：加在欄位本身會被算進平分的欄寬，右邊的參數格就對不齊 */}
+              <span className="schema-col">
+                <span className="schema-fixed">名稱</span>
+              </span>
               <span className="schema-col schema-name-cell">
                 <SuggestInput
                   type="text"
