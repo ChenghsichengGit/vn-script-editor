@@ -38,6 +38,11 @@ export interface SectionSchema {
 export type Schemas = Record<CardSectionId, SectionSchema>;
 // 欄位設定視窗交回來的結果：from = 這個欄位原本的名稱（新加的沒有），用來把舊卡片上的欄位跟著改名
 export type SchemaEdit = SchemaField & { from?: string };
+// 從範本刪掉欄位時，卡片上的這個欄位要怎麼處理：empty = 刪掉沒填內容的、all = 全部刪掉（只從範本移除就不用列）
+export interface FieldRemoval {
+  key: string; // 卡片上目前的欄位名稱
+  mode: 'empty' | 'all';
+}
 
 // 新專案（或舊專案沒有範本時）的預設範本：指令卡的名稱就是指令格式，另外固定有「用法」（多種寫法時一行一種）和「說明」
 export const defaultSchemas = (): Schemas => ({

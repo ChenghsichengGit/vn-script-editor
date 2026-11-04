@@ -219,3 +219,28 @@ button.schema-del:hover { background: var(--error-bg); color: var(--error); }
 .schema-name-cell { position: relative; display: flex; }
 .schema-name-cell .schema-input { flex: 1; min-width: 0; padding-right: 20px; }
 .schema-name-cell .field-special { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+
+/* 刪欄位的確認視窗：三種處理方式，一個選項一塊（粗體標題 + 說明） */
+.schema-confirm { width: 440px; max-width: calc(100% - 32px); color: var(--text); font-size: 13px; }
+.schema-confirm .close-message { margin-bottom: 12px; }
+.schema-confirm-detail { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+.schema-confirm-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.schema-confirm-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-tab);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.schema-confirm-option span { font-size: 12px; color: var(--text-dim); }
+.schema-confirm-option:hover:not(:disabled), .schema-confirm-option:focus-visible { border-color: var(--accent); background: var(--bg-hover); outline: none; }
+.schema-confirm-option:disabled { opacity: 0.45; cursor: default; }
+.schema-confirm-option.danger b { color: var(--error); }
+.schema-confirm-option.danger:hover:not(:disabled) { border-color: var(--error-border); }
+.schema-confirm-note { margin-top: 10px; font-size: 11px; color: var(--text-dim); }

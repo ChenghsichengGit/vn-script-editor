@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { SchemaEdit, SectionSchema } from '../model';
+import type { Card, FieldRemoval, SchemaEdit, SectionSchema } from '../model';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import SuggestInput from './SuggestInput';
 import Icon, { IconDef } from './Icon';
@@ -33,6 +33,7 @@ export default function SchemaDialog({
   icon,
   schema,
   specialFields,
+  cards,
   onSave,
   onClose,
 }: {
@@ -40,8 +41,10 @@ export default function SchemaDialog({
   icon: IconDef; // 區塊的圖示，放在「名稱」那一列
   schema: SectionSchema;
   specialFields: { name: string; description: string }[]; // 這個區塊有特別用途的欄位名稱（指令的「用法」「說明」），新增時可以直接選
+  cards: Card[]; // 這個區塊所有的卡：刪欄位時算有幾張卡有填、幾張是空的
 
-  onSave: (nameParam: string, fields: SchemaEdit[]) => void;
+  // removals = 被刪掉的欄位要不要連卡片上的一起刪（按「儲存」才真的做）
+  onSave: (nameParam: string, fields: SchemaEdit[], removals: FieldRemoval[]) => void;
   onClose: () => void;
 }) {
   // 本地副本：按「儲存」前都不會影響外面
@@ -57,13 +60,18 @@ export default function SchemaDialog({
   const [dragging, setDragging] = useState<number | null>(null);
   const rowEls = useRef(new Map<number, HTMLDivElement>());
 
-  // Esc：有開著的圖示面板就先關它，否則關掉整個視窗
-  const pickerOpen = useRef(false);
-  pickerOpen.current = picker !== null;
+  // 刪欄位：問卡片上已經有的要怎麼處理（row = 要刪的那一列，filled／empty = 有填／沒填內容的卡數）
+  const [confirmDel, setConfirmDel] = useState<{ row: Row; filled: number; empty: number } | null>(null);
+  const [removals, setRemovals] = useState<FieldRemoval[]>([]);
+
+  // Esc：先關最上層的東西（刪除確認、圖示面板），都沒有才關掉整個視窗
+  const overlay = useRef<'confirm' | 'picker' | null>(null);
+  overlay.current = confirmDel ? 'confirm' : picker ? 'picker' : null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (pickerOpen.current) setPicker(null);
+      if (overlay.current === 'confirm') setConfirmDel(null);
+      else if (overlay.current === 'picker') setPicker(null);
       else onClose();
     };
     window.addEventListener('keydown', onKey);
@@ -71,6 +79,21 @@ export default function SchemaDialog({
   }, [onClose]);
 
   const patch = (id: number, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...p } : r)));
+
+  // 把這一列從範本拿掉；mode = 卡片上的欄位要不要一起刪（沒給 = 卡片上的保留）
+  const removeRow = (row: Row, mode?: FieldRemoval['mode']) => {
+    setRows((rs) => rs.filter((x) => x.id !== row.id));
+    if (picker?.id === row.id) setPicker(null);
+    if (mode && row.from !== undefined) setRemovals((list) => [...list.filter((x) => x.key !== row.from), { key: row.from!, mode }]);
+  };
+  // 按 ×：剛新增還沒存過的欄位，或沒有任何卡有這個欄位，直接刪；不然先問
+  const askRemove = (row: Row) => {
+    const key = row.from;
+    const having = key === undefined ? [] : cards.flatMap((c) => c.fields.filter((f) => f.key === key));
+    if (having.length === 0) return removeRow(row);
+    const filled = having.filter((f) => f.value.trim() !== '').length;
+    setConfirmDel({ row, filled, empty: having.length - filled });
+  };
 
   const add = (name: string) => {
     setRows((rs) => [...rs, { id: nextId, name, param: '' }]);
@@ -178,7 +201,7 @@ export default function SchemaDialog({
       if (r.from !== undefined) edit.from = r.from;
       return edit;
     });
-    onSave(nameParam.trim(), out);
+    onSave(nameParam.trim(), out, removals);
     onClose();
   };
 
@@ -287,10 +310,7 @@ export default function SchemaDialog({
                     type="button"
                     className="schema-del"
                     title="刪除這個欄位"
-                    onClick={() => {
-                      setRows((rs) => rs.filter((x) => x.id !== r.id));
-                      if (picker?.id === r.id) setPicker(null);
-                    }}
+                    onClick={() => askRemove(r)}
                   >
                     <Icon icon="close" />
                   </button>
@@ -370,6 +390,50 @@ export default function SchemaDialog({
         </div>
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+
+      {/* 刪欄位的確認：卡片上已經有的這個欄位要怎麼處理（按「儲存」才真的改卡片） */}
+      {confirmDel && (
+        <div
+          className="close-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setConfirmDel(null);
+          }}
+        >
+          <div className="close-panel schema-confirm" role="dialog" aria-label="刪除欄位">
+            <div className="close-message">
+              要刪除欄位「{confirmDel.row.from}」嗎？
+              <div className="schema-confirm-detail">
+                共有 {confirmDel.filled + confirmDel.empty} 張卡有這個欄位：{confirmDel.filled} 張有填內容，{confirmDel.empty} 張是空的。
+              </div>
+            </div>
+            <div className="schema-confirm-options">
+              <button type="button" className="schema-confirm-option" autoFocus onClick={() => { removeRow(confirmDel.row); setConfirmDel(null); }}>
+                <b>只從範本移除</b>
+                <span>卡片上的欄位全部保留，只是不再強制每張卡都要有。</span>
+              </button>
+              <button
+                type="button"
+                className="schema-confirm-option"
+                disabled={confirmDel.empty === 0}
+                onClick={() => { removeRow(confirmDel.row, 'empty'); setConfirmDel(null); }}
+              >
+                <b>移除，並刪掉沒填內容的</b>
+                <span>{confirmDel.empty === 0 ? '每張卡都有填內容，沒有可以刪的。' : `空的 ${confirmDel.empty} 張卡拿掉這個欄位，有填內容的保留。`}</span>
+              </button>
+              <button type="button" className="schema-confirm-option danger" onClick={() => { removeRow(confirmDel.row, 'all'); setConfirmDel(null); }}>
+                <b>移除，並從所有卡片刪掉</b>
+                <span>{confirmDel.filled > 0 ? `${confirmDel.filled} 張卡已填的內容也會一起刪除，不能復原。` : '每張卡的這個欄位都是空的。'}</span>
+              </button>
+            </div>
+            <div className="close-buttons">
+              <button type="button" className="close-btn" onClick={() => setConfirmDel(null)}>
+                取消
+              </button>
+            </div>
+            <div className="schema-confirm-note">選完要按欄位設定的「儲存」才會真的改卡片；按「取消」關掉欄位設定就什麼都不會變。</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

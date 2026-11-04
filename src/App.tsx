@@ -14,6 +14,7 @@ import {
   CardSectionId,
   ItemOrder,
   SchemaEdit,
+  FieldRemoval,
   Schemas,
   SectionId,
   applySchema,
@@ -1003,13 +1004,19 @@ export default function App() {
 
   // 存欄位範本：先把改了名的欄位在每張卡上跟著改名，再讓每張卡都符合新範本（缺的補空白）
   // 有變動的卡標成「還沒存」，交給自動存檔寫回去；範本本身寫進 project.json
-  const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[]) => {
+  const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[], removals: FieldRemoval[] = []) => {
     // from 只是用來改名的，不存進範本；沒填的 param／icon／color 不寫出去
     const schema = edits.map(({ key, param, icon, color }) => ({ key, ...(param && { param }), ...(icon && { icon }), ...(icon && color && { color }) }));
     const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
     const updated = new Map<string, Card>();
+    // 從範本刪掉、而且選了「連卡片上的一起刪」的欄位：先刪（用卡片上原本的名稱比對），再處理改名和補欄位
+    const removeMode = new Map(removals.map((r) => [r.key, r.mode]));
     for (const c of cards[section]) {
-      const renamed = c.fields.map((f) => (renames.has(f.key) ? { ...f, key: renames.get(f.key)! } : f));
+      const kept = c.fields.filter((f) => {
+        const mode = removeMode.get(f.key);
+        return !(mode === 'all' || (mode === 'empty' && f.value.trim() === ''));
+      });
+      const renamed = kept.map((f) => (renames.has(f.key) ? { ...f, key: renames.get(f.key)! } : f));
       const fields = applySchema(renamed, schema);
       if (JSON.stringify(fields) !== JSON.stringify(c.fields)) updated.set(c.id, { ...c, fields });
     }
@@ -1543,7 +1550,8 @@ export default function App() {
           icon={sectionMeta[schemaDialog].icon}
           schema={schemas[schemaDialog]}
           specialFields={schemaDialog === 'commands' ? FIXED_COMMAND_FIELDS : []}
-          onSave={(nameParam, edits) => saveSchema(schemaDialog, nameParam, edits)}
+          cards={cards[schemaDialog]}
+          onSave={(nameParam, edits, removals) => saveSchema(schemaDialog, nameParam, edits, removals)}
           onClose={() => setSchemaDialog(null)}
         />
       )}
