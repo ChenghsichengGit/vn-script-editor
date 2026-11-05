@@ -37,8 +37,6 @@ struct AppState {
     next_window: AtomicUsize,
     // 每個視窗監看自己開著的專案資料夾（視窗的 label → 監看器；拿掉就停止監看）
     watchers: Mutex<HashMap<String, RecommendedWatcher>>,
-    // 雙擊專案檔（.vnsp）打開時，哪個視窗要開哪個專案（視窗的 label → 專案資料夾）；畫面讀走就拿掉
-    pending_open: Mutex<HashMap<String, PathBuf>>,
 }
 
 // ───────────────────────── 路徑檢查 ─────────────────────────
@@ -248,28 +246,6 @@ async fn export_save_text(app: AppHandle, default_name: String, text: String) ->
     Ok(true)
 }
 
-// 開啟專案：選專案檔（.vnsp），舊專案還沒有 .vnsp 的話也可以選 project.json；回傳它所在的資料夾（加進允許清單），取消回傳 null
-#[tauri::command]
-async fn project_pick_file(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
-    let Some(picked) = app
-        .dialog()
-        .file()
-        .set_title("開啟專案")
-        .add_filter("VN Script Editor 專案", &["vnsp", "json"])
-        .blocking_pick_file()
-    else {
-        return Ok(None);
-    };
-    let file = picked.into_path().map_err(|e| e.to_string())?;
-    let name = file.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
-    if !(name.ends_with(".vnsp") || name == "project.json") {
-        return Err("請選擇專案檔（.vnsp）或專案資料夾裡的 project.json".into());
-    }
-    let dir = file.parent().ok_or("找不到專案資料夾")?.to_path_buf();
-    add_root(&state, &dir);
-    Ok(Some(normalize(&dir).to_string_lossy().into_owned()))
-}
-
 #[tauri::command]
 fn project_get_recent(app: AppHandle, state: State<AppState>) -> Vec<RecentProject> {
     let _lock = state.recent_lock.lock().unwrap();
@@ -322,61 +298,16 @@ fn project_allow_root(app: AppHandle, state: State<AppState>, path: String) -> b
 // 可以開很多個視窗，各開各的專案；同一個專案已經在別的視窗開著時，改成跳到那個視窗
 
 // 開一個新視窗（從開始畫面開始）
-fn open_new_window(app: &AppHandle) -> tauri::Result<String> {
+fn open_new_window(app: &AppHandle) -> tauri::Result<()> {
     let state = app.state::<AppState>();
     let label = format!("w{}", state.next_window.fetch_add(1, Ordering::SeqCst) + 1);
-    WebviewWindowBuilder::new(app, label.clone(), WebviewUrl::default())
+    WebviewWindowBuilder::new(app, label, WebviewUrl::default())
         .title(window_title(app))
         .inner_size(1400.0, 900.0)
         .background_color(Color(0x1e, 0x1e, 0x1e, 0xff))
         .disable_drag_drop_handler() // 跟 tauri.conf.json 的 dragDropEnabled: false 一樣，不然畫面裡不能拖曳
         .build()?;
-    Ok(label)
-}
-
-// ───────────────────────── 專案檔（.vnsp） ─────────────────────────
-// 專案資料夾最上層的「專案名稱.vnsp」：安裝程式把 .vnsp 關聯到這個程式，雙擊就會帶著它的路徑啟動
-// 啟動參數裡有 .vnsp 就回傳它所在的資料夾（相對路徑以 cwd 為準）
-fn project_from_args(args: &[String], cwd: &Path) -> Option<PathBuf> {
-    args.iter().skip(1).find_map(|a| {
-        let p = Path::new(a);
-        if !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("vnsp")) {
-            return None;
-        }
-        let full = if p.is_absolute() { p.to_path_buf() } else { cwd.join(p) };
-        if !full.is_file() {
-            return None;
-        }
-        full.parent().map(normalize)
-    })
-}
-
-// 要打開某個專案（雙擊 .vnsp）：允許存取那個資料夾（是使用者親自雙擊的）；
-// 已經有視窗開著它就叫到前面，否則交給 label 這個視窗（沒給就開新視窗）在啟動時打開
-fn open_project_from_file(app: &AppHandle, root: PathBuf, label: Option<String>) {
-    let state = app.state::<AppState>();
-    add_root(&state, &root);
-    let opened_in = state.open_projects.lock().unwrap().iter().find(|(_, p)| same_path(p, &root)).map(|(l, _)| l.clone());
-    if let Some(l) = opened_in {
-        if let Some(w) = app.get_webview_window(&l) {
-            bring_to_front(&w);
-            return;
-        }
-    }
-    let label = match label {
-        Some(l) => l,
-        None => match open_new_window(app) {
-            Ok(l) => l,
-            Err(_) => return,
-        },
-    };
-    state.pending_open.lock().unwrap().insert(label, root);
-}
-
-// 畫面啟動時問：這個視窗有沒有指定要打開的專案（雙擊 .vnsp 來的）；問過就拿掉
-#[tauri::command]
-fn window_take_initial_project(window: WebviewWindow, state: State<AppState>) -> Option<String> {
-    state.pending_open.lock().unwrap().remove(window.label()).map(|p| p.to_string_lossy().into_owned())
+    Ok(())
 }
 
 // 視窗標題：程式名稱＋版本號（版本號取自 tauri.conf.json）
@@ -394,7 +325,7 @@ fn bring_to_front(window: &WebviewWindow) {
 // async：在 Windows 上，從同步的指令裡建立視窗會卡住
 #[tauri::command]
 async fn window_new(app: AppHandle) -> Result<(), String> {
-    open_new_window(&app).map(|_| ()).map_err(|e| e.to_string())
+    open_new_window(&app).map_err(|e| e.to_string())
 }
 
 // 這個視窗要開某個專案：別的視窗已經開著它，就把那個視窗叫到前面並回傳 false（這個視窗不要開）；
@@ -487,7 +418,7 @@ fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<W
         .item(&MenuItemBuilder::with_id("new-window", "新視窗\tCtrl+Shift+N").build(app)?)
         .separator()
         .item(&MenuItemBuilder::with_id("new-project", "新增專案…").build(app)?)
-        .item(&MenuItemBuilder::with_id("open-project", "開啟專案…\tCtrl+O").build(app)?)
+        .item(&MenuItemBuilder::with_id("open-project", "開啟專案資料夾…\tCtrl+O").build(app)?)
         .item(&recent_menu.build()?)
         .separator()
         .item(&MenuItemBuilder::with_id("copy-for-ai", "複製整個專案（給網頁版 AI）").build(app)?)
@@ -551,16 +482,11 @@ pub fn run() {
     tauri::Builder::default()
         // 程式已經開著時再啟動一次（例如再雙擊捷徑）：不另外開一個程式，改成在原本的程式裡多開一個視窗
         // （這個外掛要放在最前面）
-        // 雙擊 .vnsp 時，路徑也會跟著送過來：改成打開那個專案
         // 這個回呼跑在主執行緒上，在這裡直接建立視窗會死結（Windows），所以交給別的執行緒去開
-        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let app = app.clone();
-            let root = project_from_args(&args, Path::new(&cwd));
-            std::thread::spawn(move || match root {
-                Some(root) => open_project_from_file(&app, root, None),
-                None => {
-                    let _ = open_new_window(&app);
-                }
+            std::thread::spawn(move || {
+                let _ = open_new_window(&app);
             });
         }))
         .plugin(tauri_plugin_dialog::init())
@@ -577,7 +503,6 @@ pub fn run() {
             open_projects: Mutex::new(HashMap::new()),
             next_window: AtomicUsize::new(0),
             watchers: Mutex::new(HashMap::new()),
-            pending_open: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             fs_list_dir,
@@ -588,7 +513,6 @@ pub fn run() {
             fs_remove,
             fs_exists,
             project_pick_folder,
-            project_pick_file,
             export_save_text,
             project_get_recent,
             project_remember,
@@ -600,17 +524,10 @@ pub fn run() {
             window_new,
             app_ready_to_close,
             set_zoom,
-            window_take_initial_project,
         ])
         .setup(|app| {
             let handle = app.handle();
             set_menu(handle, &read_recent(handle))?;
-            // 雙擊 .vnsp 啟動的：第一個視窗直接打開那個專案
-            let args: Vec<String> = std::env::args().collect();
-            let cwd = std::env::current_dir().unwrap_or_default();
-            if let Some(root) = project_from_args(&args, &cwd) {
-                open_project_from_file(handle, root, Some("main".into()));
-            }
             if let Some(w) = handle.get_webview_window("main") {
                 let _ = w.set_title(&window_title(handle));
             }

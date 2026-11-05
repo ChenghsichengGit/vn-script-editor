@@ -33,7 +33,6 @@ window.api = {
 
   // 專案資料夾與最近的專案
   pickFolder: () => invoke('project_pick_folder'),
-  pickProjectFile: () => invoke('project_pick_file'),
   getRecent: () => invoke('project_get_recent'),
   rememberProject: (name, path) => invoke('project_remember', { name, path }),
   forgetProject: (path) => invoke('project_forget', { path }),
@@ -49,7 +48,6 @@ window.api = {
   // 視窗
   newWindow: () => invoke('window_new'),
   isFirstWindow: thisWindow.label === 'main',
-  takeInitialProject: () => invoke('window_take_initial_project'),
 
   // 選單與關閉視窗
   onMenu: (cb) => subscribe<MenuEvent>('menu', cb),

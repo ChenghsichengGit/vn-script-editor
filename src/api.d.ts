@@ -38,7 +38,6 @@ interface AppApi {
 
   // 專案資料夾與最近的專案
   pickFolder(): Promise<string | null>; // 取消時回傳 null
-  pickProjectFile(): Promise<string | null>; // 選專案檔（.vnsp 或 project.json），回傳所在的資料夾；取消時回傳 null
   getRecent(): Promise<RecentProject[]>;
   rememberProject(name: string, path: string): Promise<void>;
   forgetProject(path: string): Promise<void>;
@@ -56,8 +55,6 @@ interface AppApi {
   // 視窗：可以開很多個（跟 VS Code 一樣）；第一個視窗才會自動開啟上次的專案
   newWindow(): Promise<void>;
   isFirstWindow: boolean;
-  // 這個視窗是雙擊專案檔（.vnsp）開的：回傳要打開的專案資料夾（已經允許存取）；問過一次就沒了，沒有回傳 null
-  takeInitialProject(): Promise<string | null>;
 
   // 選單與關閉視窗；onXxx 回傳取消訂閱的函式
   onMenu(cb: (event: MenuEvent) => void): () => void;

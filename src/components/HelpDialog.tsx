@@ -10,7 +10,7 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl+S', '存檔（目前的分頁）'],
   ['Ctrl+K S', '全部存檔（先按 Ctrl+K，再按 S）'],
   ['Ctrl+W', '關閉分頁'],
-  ['Ctrl+O', '開啟專案（選 .vnsp 專案檔）'],
+  ['Ctrl+O', '開啟專案資料夾'],
   ['Ctrl+Shift+N', '新視窗'],
   ['Ctrl+,', '設定'],
   ['Ctrl+B', '收起／打開左側欄'],

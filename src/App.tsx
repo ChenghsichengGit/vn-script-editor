@@ -68,7 +68,7 @@ import {
   isInFolder,
   openRecent,
   parentFolder,
-  pickProjectFile,
+  pickFolder,
   rememberProject,
   sanitizeName,
   validateName,
@@ -820,7 +820,7 @@ export default function App() {
         setCreateKey((k) => k + 1);
       } else if (ev.type === 'open-project') {
         if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
-        const root = await pickProjectFile();
+        const root = await pickFolder();
         // 已經在別的視窗開著：跳到那個視窗，這個視窗維持原樣
         if (root && (await window.api.claimProject(root))) await openOpened(await ProjectStore.open(root));
       } else if (ev.type === 'open-recent') {
@@ -1409,7 +1409,7 @@ export default function App() {
   const menu = (type: MenuEvent['type']) => () => void onMenuRef.current({ type } as MenuEvent);
   const quickCommands: QuickPickItem[] = [
     { id: 'new-window', label: '新視窗', keybinding: 'Ctrl+Shift+N', icon: 'add', run: () => void window.api.newWindow() },
-    { id: 'open-project', label: '開啟專案…', keybinding: 'Ctrl+O', icon: 'folder-opened', run: menu('open-project') },
+    { id: 'open-project', label: '開啟專案資料夾…', keybinding: 'Ctrl+O', icon: 'folder-opened', run: menu('open-project') },
     { id: 'new-project', label: '新增專案…', icon: 'new-folder', run: menu('new-project') },
     { id: 'settings', label: '設定…', keybinding: 'Ctrl+,', icon: 'settings-gear', run: () => setShowSettings(true) },
     ...(['dark', 'light', 'hc'] as const).map((theme, i) => ({

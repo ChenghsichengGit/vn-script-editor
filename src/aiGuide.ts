@@ -27,7 +27,6 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   for (const s of getCardSections()) line(`| \`${s.dir}/**/*.md\` | ${s.title}的設定卡，一張卡一個檔案 |`);
   line('| `project.json` | 專案設定（欄位設定 `schemas`、左側清單順序 `order`），一般不需要改 |');
   line(`| \`${AI_GUIDE_NAME}\` | 這份說明（自動產生） |`);
-  line('| `*.vnsp` | 專案檔：雙擊用編輯器打開這個專案，不要改 |');
   line();
   line('- 所有檔案都是 UTF-8。');
   line('- 以 `.` 開頭的資料夾（例如 `.git`）會被忽略。');

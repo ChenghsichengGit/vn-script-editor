@@ -89,11 +89,6 @@ export function pickFolder(): Promise<string | null> {
   return window.api.pickFolder();
 }
 
-// 開啟專案：選專案檔（.vnsp；舊專案可以選 project.json），回傳它所在的資料夾；取消回傳 null
-export function pickProjectFile(): Promise<string | null> {
-  return window.api.pickProjectFile();
-}
-
 export function getRecentProjects(): Promise<{ name: string; path: string }[]> {
   return window.api.getRecent();
 }
@@ -116,18 +111,6 @@ export async function openRecent(path: string): Promise<void> {
 // ───────────────────────── 檔名與格式處理 ─────────────────────────
 
 const SCRIPT_DIR = FILES_SECTION.dir;
-
-// 專案檔（.vnsp）的內容：本身只是個入口，專案的內容都在同一個資料夾裡
-const PROJECT_FILE_TEXT =
-  JSON.stringify(
-    {
-      app: 'VN Script Editor',
-      format: 1,
-      note: '雙擊這個檔案就會用 VN Script Editor 打開這個專案。專案的內容（劇本、設定卡、project.json）都在同一個資料夾裡。',
-    },
-    null,
-    2,
-  ) + '\n';
 const SCRIPT_EXT = /\.(vns|txt|md)$/i;
 
 // 去掉 Windows 不允許的字元與控制字元，結尾的點與空白也不行；空字串給預設名稱
@@ -320,16 +303,6 @@ export class ProjectStore {
       if (meta && typeof meta.name === 'string' && meta.name.trim() !== '') name = meta.name;
     } catch {
       // 沒有或壞掉的 project.json：沿用資料夾名稱
-    }
-
-    // 專案檔（專案名稱.vnsp）：雙擊就用編輯器打開這個專案。沒有的話補一個（舊專案、新建的專案）
-    try {
-      const top = await window.api.listDir(root);
-      if (!top.some((e) => e.kind === 'file' && /\.vnsp$/i.test(e.name))) {
-        await window.api.writeText(joinPath(root, `${sanitizeName(name)}.vnsp`), PROJECT_FILE_TEXT);
-      }
-    } catch {
-      // 寫不進去（例如唯讀）也不影響開專案
     }
 
     store.sections = normalizeSections(store.meta.sections);

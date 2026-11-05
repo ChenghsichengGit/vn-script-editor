@@ -9,7 +9,6 @@ import {
   getRecentProjects,
   openRecent as allowRecent,
   pickFolder,
-  pickProjectFile,
   rememberProject,
 } from '../projectFiles';
 
@@ -19,7 +18,7 @@ type Recent = { name: string; path: string };
 let triedLastProject = false;
 type Opened = { store: ProjectStore; data: ProjectData };
 
-// 開始畫面：開啟專案（選 .vnsp）、建立新專案、最近開過的專案
+// 開始畫面：開啟專案資料夾、建立新專案、最近開過的專案
 // startInCreateMode：從選單「新增專案…」進來時，一開始就跳出資料夾選擇視窗
 export default function WelcomeScreen({
   onOpen,
@@ -38,22 +37,16 @@ export default function WelcomeScreen({
   useEffect(() => {
     const first = !triedLastProject;
     triedLastProject = true;
-    void (async () => {
-      // 雙擊專案檔（.vnsp）開的視窗：直接打開那個專案（主程式已經允許存取），不再開上次的專案
-      const fromFile = first ? await window.api.takeInitialProject().catch(() => null) : null;
-      if (fromFile) void openPath(fromFile);
-      try {
-        const list = await getRecentProjects();
+    getRecentProjects()
+      .then((list) => {
         setRecent(list);
         // 最近的專案清單第一個就是上次開的
         // 只有程式的第一個視窗會這樣做；之後開的新視窗都從開始畫面開始
-        if (!fromFile && first && window.api.isFirstWindow && !startInCreateMode && getSettings().openLastProject && list[0]) {
+        if (first && window.api.isFirstWindow && !startInCreateMode && getSettings().openLastProject && list[0]) {
           void openRecent(list[0].path);
         }
-      } catch {
-        setRecent([]);
-      }
-    })();
+      })
+      .catch(() => setRecent([]));
     if (startInCreateMode) startCreate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -75,10 +68,9 @@ export default function WelcomeScreen({
     }
   };
 
-  // 開啟專案：選專案檔（.vnsp，舊專案可以選 project.json），打開它所在的資料夾
-  const openProjectFile = () =>
+  const openFolder = () =>
     run(async () => {
-      const dir = await pickProjectFile();
+      const dir = await pickFolder();
       // 已經在別的視窗開著：跳到那個視窗，這裡不開
       return dir && (await window.api.claimProject(dir)) ? ProjectStore.open(dir) : null;
     });
@@ -90,10 +82,6 @@ export default function WelcomeScreen({
       if (!(await window.api.claimProject(path))) return null; // 已經在別的視窗開著
       return ProjectStore.open(path);
     });
-
-  // 雙擊專案檔來的：資料夾已經允許存取，不用經過「最近的專案」
-  const openPath = (path: string) =>
-    run(async () => ((await window.api.claimProject(path)) ? ProjectStore.open(path) : null));
 
   const startCreate = async () => {
     setError('');
@@ -146,8 +134,8 @@ export default function WelcomeScreen({
           </div>
         ) : (
           <div className="welcome-actions">
-            <button className="primary" disabled={busy} onClick={openProjectFile} title="選專案檔（.vnsp）；舊專案可以選資料夾裡的 project.json">
-              <Icon icon="folder-opened" /> 開啟專案
+            <button className="primary" disabled={busy} onClick={openFolder}>
+              <Icon icon="folder-opened" /> 開啟專案資料夾
             </button>
             <button disabled={busy} onClick={startCreate}>
               ＋ 建立新專案
