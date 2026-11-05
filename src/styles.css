@@ -525,6 +525,28 @@ body.dragging, body.dragging * { user-select: none; }
 .field-special { color: var(--field-key-locked); font-size: 11px; margin-left: 4px; }
 .field-key-cell .field-special { position: absolute; right: 6px; top: 7px; pointer-events: none; }
 .card-editor textarea { resize: none; field-sizing: content; line-height: 1.5; min-height: 30px; }
+/* 欄位內容有條列、又沒在編輯時：顯示成排好的清單，外觀跟輸入框一樣，點了變回輸入框 */
+.field-value-view {
+  min-height: 30px;
+  padding: 5px 8px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-tab);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: text;
+  outline: none;
+}
+.field-value-view:hover { border-color: var(--border); }
+
+/* 欄位內容（側邊欄、卡片分頁共用）：一般文字照原本換行；清單的記號往左突出，項目文字對齊，折行的第二行也對齊項目文字 */
+.field-text { display: block; }
+.field-text-plain { display: block; white-space: pre-wrap; }
+/* 同一個清單的記號共用一欄（9. 和 10. 寬度不同，項目文字照樣對齊） */
+.field-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 5px; }
+.field-list-item { display: contents; }
+.field-list-marker { color: var(--text-dim); text-align: right; min-width: 0.8em; }
+.field-list-text { min-width: 0; white-space: pre-wrap; word-break: break-word; }
 .card-editor .card-editor-name { font-size: 22px; font-weight: 600; background: none; padding-left: 0; }
 .card-editor-fields { display: flex; flex-direction: column; gap: 6px; }
 .card-editor-row { display: grid; grid-template-columns: 140px 1fr auto 24px; gap: 8px; align-items: start; }

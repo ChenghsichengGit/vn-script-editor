@@ -5,6 +5,7 @@ import { sectionMeta } from '../sampleData';
 import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
 import Icon from './Icon';
+import FieldText from './FieldText';
 
 interface Props {
   section: CardSectionId;
@@ -157,7 +158,11 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
                     {f.key}
                   </FieldKey>
                 </div>
-                {openFields.has(i) && <div className="card-fold-value">{f.value}</div>}
+                {openFields.has(i) && (
+                  <div className="card-fold-value">
+                    <FieldText text={f.value} />
+                  </div>
+                )}
               </div>
             ) : (
               <div key={i} className={`card-row${stacked.has(i) ? ' stacked' : ''}`}>
@@ -165,7 +170,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
                   {fieldIcon(f.key)}
                   {f.key}
                 </FieldKey>
-                <span className="card-value">{f.value}</span>
+                <FieldText className="card-value" text={f.value} />
               </div>
             ),
           )}

@@ -6,6 +6,7 @@ import Outline, { Heading } from './Outline';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import SuggestInput from './SuggestInput';
 import Icon from './Icon';
+import FieldValueInput from './FieldValueInput';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
@@ -203,12 +204,7 @@ export default function CardEditor({
                 {isCommand && f.key.trim() === '用法' ? (
                   usageEditor(i, f.value)
                 ) : (
-                  <textarea
-                    rows={1}
-                    value={f.value}
-                    placeholder="內容"
-                    onChange={(e) => setField(i, { value: e.target.value })}
-                  />
+                  <FieldValueInput value={f.value} onChange={(value) => setField(i, { value })} />
                 )}
                 <button
                   className={`fold-toggle${f.collapsed ? ' on' : ''}`}
