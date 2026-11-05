@@ -248,6 +248,28 @@ async fn export_save_text(app: AppHandle, default_name: String, text: String) ->
     Ok(true)
 }
 
+// 開啟專案：選專案檔（.vnsp），舊專案還沒有 .vnsp 的話也可以選 project.json；回傳它所在的資料夾（加進允許清單），取消回傳 null
+#[tauri::command]
+async fn project_pick_file(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .set_title("開啟專案")
+        .add_filter("VN Script Editor 專案", &["vnsp", "json"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let file = picked.into_path().map_err(|e| e.to_string())?;
+    let name = file.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    if !(name.ends_with(".vnsp") || name == "project.json") {
+        return Err("請選擇專案檔（.vnsp）或專案資料夾裡的 project.json".into());
+    }
+    let dir = file.parent().ok_or("找不到專案資料夾")?.to_path_buf();
+    add_root(&state, &dir);
+    Ok(Some(normalize(&dir).to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 fn project_get_recent(app: AppHandle, state: State<AppState>) -> Vec<RecentProject> {
     let _lock = state.recent_lock.lock().unwrap();
@@ -465,7 +487,7 @@ fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<W
         .item(&MenuItemBuilder::with_id("new-window", "新視窗\tCtrl+Shift+N").build(app)?)
         .separator()
         .item(&MenuItemBuilder::with_id("new-project", "新增專案…").build(app)?)
-        .item(&MenuItemBuilder::with_id("open-project", "開啟專案資料夾…\tCtrl+O").build(app)?)
+        .item(&MenuItemBuilder::with_id("open-project", "開啟專案…\tCtrl+O").build(app)?)
         .item(&recent_menu.build()?)
         .separator()
         .item(&MenuItemBuilder::with_id("copy-for-ai", "複製整個專案（給網頁版 AI）").build(app)?)
@@ -566,6 +588,7 @@ pub fn run() {
             fs_remove,
             fs_exists,
             project_pick_folder,
+            project_pick_file,
             export_save_text,
             project_get_recent,
             project_remember,

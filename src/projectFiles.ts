@@ -89,6 +89,11 @@ export function pickFolder(): Promise<string | null> {
   return window.api.pickFolder();
 }
 
+// 開啟專案：選專案檔（.vnsp；舊專案可以選 project.json），回傳它所在的資料夾；取消回傳 null
+export function pickProjectFile(): Promise<string | null> {
+  return window.api.pickProjectFile();
+}
+
 export function getRecentProjects(): Promise<{ name: string; path: string }[]> {
   return window.api.getRecent();
 }

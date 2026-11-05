@@ -33,6 +33,7 @@ window.api = {
 
   // 專案資料夾與最近的專案
   pickFolder: () => invoke('project_pick_folder'),
+  pickProjectFile: () => invoke('project_pick_file'),
   getRecent: () => invoke('project_get_recent'),
   rememberProject: (name, path) => invoke('project_remember', { name, path }),
   forgetProject: (path) => invoke('project_forget', { path }),

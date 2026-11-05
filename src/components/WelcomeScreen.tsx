@@ -9,6 +9,7 @@ import {
   getRecentProjects,
   openRecent as allowRecent,
   pickFolder,
+  pickProjectFile,
   rememberProject,
 } from '../projectFiles';
 
@@ -18,7 +19,7 @@ type Recent = { name: string; path: string };
 let triedLastProject = false;
 type Opened = { store: ProjectStore; data: ProjectData };
 
-// 開始畫面：開啟專案資料夾、建立新專案、最近開過的專案
+// 開始畫面：開啟專案（選 .vnsp）、建立新專案、最近開過的專案
 // startInCreateMode：從選單「新增專案…」進來時，一開始就跳出資料夾選擇視窗
 export default function WelcomeScreen({
   onOpen,
@@ -74,9 +75,10 @@ export default function WelcomeScreen({
     }
   };
 
-  const openFolder = () =>
+  // 開啟專案：選專案檔（.vnsp，舊專案可以選 project.json），打開它所在的資料夾
+  const openProjectFile = () =>
     run(async () => {
-      const dir = await pickFolder();
+      const dir = await pickProjectFile();
       // 已經在別的視窗開著：跳到那個視窗，這裡不開
       return dir && (await window.api.claimProject(dir)) ? ProjectStore.open(dir) : null;
     });
@@ -144,8 +146,8 @@ export default function WelcomeScreen({
           </div>
         ) : (
           <div className="welcome-actions">
-            <button className="primary" disabled={busy} onClick={openFolder}>
-              <Icon icon="folder-opened" /> 開啟專案資料夾
+            <button className="primary" disabled={busy} onClick={openProjectFile} title="選專案檔（.vnsp）；舊專案可以選資料夾裡的 project.json">
+              <Icon icon="folder-opened" /> 開啟專案
             </button>
             <button disabled={busy} onClick={startCreate}>
               ＋ 建立新專案

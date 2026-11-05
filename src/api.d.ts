@@ -38,6 +38,7 @@ interface AppApi {
 
   // 專案資料夾與最近的專案
   pickFolder(): Promise<string | null>; // 取消時回傳 null
+  pickProjectFile(): Promise<string | null>; // 選專案檔（.vnsp 或 project.json），回傳所在的資料夾；取消時回傳 null
   getRecent(): Promise<RecentProject[]>;
   rememberProject(name: string, path: string): Promise<void>;
   forgetProject(path: string): Promise<void>;
