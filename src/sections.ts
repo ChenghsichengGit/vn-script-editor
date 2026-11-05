@@ -16,6 +16,12 @@ export interface SectionDef {
   newName?: string; // 按 ＋ 時新卡片的預設名稱
 }
 
+// 區塊設定裡刪掉的區塊：deleteFolder = 連硬碟上的資料夾（和裡面的卡）一起刪
+export interface SectionRemoval {
+  id: string;
+  deleteFolder: boolean;
+}
+
 export const COMMANDS_ID = 'commands';
 export const FILES_SECTION: SectionDef = { id: 'files', title: '檔案', dir: '劇本', icon: 'files', color: 'blue' };
 

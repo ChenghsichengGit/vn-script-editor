@@ -9,7 +9,7 @@
 import { dump, load } from 'js-yaml';
 import { Card, CardSectionId, Field, ItemOrder, SchemaField, Schemas, SectionId, defaultSchemas, perSection } from './model';
 import { cleanFieldColor, cleanFieldIcon } from './fieldIcons';
-import { FILES_SECTION, SectionDef, normalizeSections } from './sections';
+import { FILES_SECTION, SectionDef, SectionRemoval, normalizeSections } from './sections';
 
 export interface ScriptFile {
   name: string; // 含副檔名，例如 "第一章.vns"
@@ -362,6 +362,60 @@ export class ProjectStore {
     return this.enqueue(async () => {
       this.meta = { ...this.meta, order };
       await this.writeMeta();
+    });
+  }
+
+  // 區塊設定改了：刪掉的區塊（要的話連資料夾一起刪）、改名的區塊（硬碟上的資料夾跟著改名）、
+  // 新增的區塊（資料夾沒有就建立；已經有的話把裡面的卡讀進來），最後把清單寫進 project.json
+  // 回傳新增區塊讀到的卡和子資料夾。改名時目標資料夾已經存在就整個不做、丟錯
+  updateSections(next: SectionDef[], removals: SectionRemoval[]): Promise<{ id: string; cards: Card[]; folders: string[] }[]> {
+    return this.enqueue(async () => {
+      const old = new Map(this.sections.map((s) => [s.id, s]));
+      const pathOf = (dir: string) => joinPath(this.root, dir);
+
+      // 先檢查改名會不會撞到已經存在的資料夾，有問題就什麼都不改
+      for (const s of next) {
+        const o = old.get(s.id);
+        if (!o || o.dir === s.dir) continue;
+        if (o.dir.toLowerCase() !== s.dir.toLowerCase() && (await window.api.exists(pathOf(s.dir)))) {
+          throw new Error(`專案裡已經有「${s.dir}」資料夾，「${o.title}」不能改成這個名稱`);
+        }
+      }
+
+      for (const rm of removals) {
+        const s = old.get(rm.id);
+        if (!s) continue;
+        if (rm.deleteFolder && (await window.api.exists(pathOf(s.dir)))) await window.api.remove(pathOf(s.dir), { recursive: true });
+        delete this.locMaps[rm.id];
+        delete this.knownMaps[rm.id];
+      }
+
+      for (const s of next) {
+        const o = old.get(s.id);
+        if (!o || o.dir === s.dir) continue;
+        if (await window.api.exists(pathOf(o.dir))) await window.api.rename(pathOf(o.dir), pathOf(s.dir));
+        else await window.api.mkdir(pathOf(s.dir));
+      }
+
+      const loaded: { id: string; cards: Card[]; folders: string[] }[] = [];
+      for (const s of next) {
+        if (old.has(s.id)) continue;
+        await window.api.mkdir(pathOf(s.dir));
+        const tree = await scanTree(pathOf(s.dir), (n) => /\.md$/i.test(n));
+        const cards: Card[] = [];
+        for (const f of tree.files) {
+          const id = newId();
+          cards.push({ ...parseCard(id, f.name, f.text), folder: f.folder });
+          this.locs(s.id).set(id, { folder: f.folder, name: f.name });
+          this.known(s.id).set(id, f.text);
+        }
+        loaded.push({ id: s.id, cards, folders: tree.folders });
+      }
+
+      this.sections = next;
+      this.meta = { ...this.meta, sections: next };
+      await this.writeMeta();
+      return loaded;
     });
   }
 

@@ -4,7 +4,8 @@ import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import SuggestInput from './SuggestInput';
 import Icon, { IconDef } from './Icon';
 import { definedParams, usedParams } from '../scriptLanguage';
-import { FIELD_COLORS, FIELD_ICONS, fieldIconDef } from '../fieldIcons';
+import { fieldIconDef } from '../fieldIcons';
+import IconPicker, { pickerPosition } from './IconPicker';
 import { dragWith } from '../App';
 import './SchemaDialog.css';
 
@@ -157,10 +158,8 @@ export default function SchemaDialog({
 
   // 圖示面板出現在圖示按鈕正下方（放不下就往上）
   const openPicker = (id: number, e: React.MouseEvent) => {
-    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const PANEL_H = 260;
-    const y = box.bottom + 4 + PANEL_H > window.innerHeight ? Math.max(8, box.top - 4 - PANEL_H) : box.bottom + 4;
-    setPicker((p) => (p?.id === id ? null : { id, x: box.left, y }));
+    const at = pickerPosition(e.currentTarget as HTMLElement);
+    setPicker((p) => (p?.id === id ? null : { id, ...at }));
   };
   const pickerRow = picker ? rows.find((r) => r.id === picker.id) : undefined;
 
@@ -336,58 +335,17 @@ export default function SchemaDialog({
         </div>
       </div>
 
-      {/* 圖示選擇面板：上面選圖示（第一格「無」），下面選顏色（第一格「預設」＝跟文字同色）；點面板外面就關掉 */}
+      {/* 圖示選擇面板 */}
       {picker && pickerRow && (
-        <div
-          className="icon-picker-layer"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setPicker(null);
-          }}
-        >
-          <div className="icon-picker" style={{ left: picker.x, top: picker.y }}>
-            <div className="icon-picker-label">圖示</div>
-            <div className="icon-picker-grid">
-              <button
-                type="button"
-                className={`icon-picker-cell none${!pickerRow.icon ? ' on' : ''}`}
-                title="無圖示"
-                onClick={() => patch(pickerRow.id, { icon: undefined })}
-              >
-                無
-              </button>
-              {FIELD_ICONS.map(([name, label]) => (
-                <button
-                  type="button"
-                  key={name}
-                  className={`icon-picker-cell${pickerRow.icon === name ? ' on' : ''}`}
-                  title={label}
-                  onClick={() => patch(pickerRow.id, { icon: name })}
-                >
-                  <Icon icon={{ name, color: pickerRow.color ? `var(--pal-${pickerRow.color})` : undefined }} />
-                </button>
-              ))}
-            </div>
-            <div className="icon-picker-label">顏色</div>
-            <div className="icon-picker-colors">
-              <button
-                type="button"
-                className={`icon-picker-swatch default${!pickerRow.color ? ' on' : ''}`}
-                title="預設（跟文字同色）"
-                onClick={() => patch(pickerRow.id, { color: undefined })}
-              />
-              {FIELD_COLORS.map(([name, label]) => (
-                <button
-                  type="button"
-                  key={name}
-                  className={`icon-picker-swatch${pickerRow.color === name ? ' on' : ''}`}
-                  title={label}
-                  style={{ background: `var(--pal-${name})` }}
-                  onClick={() => patch(pickerRow.id, { color: name, icon: pickerRow.icon ?? 'tag' })}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        <IconPicker
+          x={picker.x}
+          y={picker.y}
+          icon={pickerRow.icon}
+          color={pickerRow.color}
+          allowNone
+          onChange={(p) => patch(pickerRow.id, p)}
+          onClose={() => setPicker(null)}
+        />
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 

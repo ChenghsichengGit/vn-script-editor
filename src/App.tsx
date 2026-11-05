@@ -19,6 +19,7 @@ import {
   SectionId,
   applySchema,
   cardTabId,
+  defaultSchema,
   defaultSchemas,
   parseCardTab,
   folderOrderKey,
@@ -43,7 +44,8 @@ import { AI_GUIDE_NAME, buildAiGuide } from './aiGuide';
 import { buildProjectExport, exportFileName } from './exportProject';
 import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, setScriptData } from './scriptLanguage';
 import { fileIcon } from './sampleData';
-import { SectionDef, cardSectionIds, sectionMeta, sectionOrder, setCardSections } from './sections';
+import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
+import SectionsDialog from './components/SectionsDialog';
 import {
   FLOAT_DEFAULT_H,
   FLOAT_DEFAULT_W,
@@ -125,6 +127,8 @@ export default function App() {
   // 這個專案的設定卡區塊清單（真正給畫面讀的在 sections.ts；這個 state 讓清單換掉時畫面跟著重畫）
   const [, setSections] = useState<SectionDef[]>([]);
   const [schemaDialog, setSchemaDialog] = useState<CardSectionId | null>(null);
+  // 「區塊設定」視窗開著沒
+  const [sectionsDialog, setSectionsDialog] = useState(false);
   // 左側清單的自訂順序（存在 project.json）
   const [order, setOrder] = useState<ItemOrder>({});
   // 卡片或範本一變，就把最新的指令清單和參數可選值交給劇本編輯器的補齊功能
@@ -1063,6 +1067,37 @@ export default function App() {
     project?.store.saveSchemas(next).catch(reportError);
   };
 
+  // 區塊設定按了「儲存」：先把還沒存的存完（資料夾可能要改名），再請 ProjectStore 改硬碟（刪、改名、建立資料夾），
+  // 成功了才更新畫面：刪掉的區塊關掉它的分頁、拿掉卡片和範本；新增的區塊放進讀到的卡；版面裡沒有的區塊補到左邊
+  const saveSections = async (next: SectionDef[], removals: SectionRemoval[]) => {
+    const store = latest.current.project?.store;
+    if (!store) return;
+    await flushRef.current();
+    let loaded: Awaited<ReturnType<ProjectStore['updateSections']>>;
+    try {
+      loaded = await store.updateSections(next, removals);
+    } catch (e) {
+      window.alert(`區塊設定失敗：${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    const removed = removals.map((r) => r.id);
+    const { cards: allCards } = latest.current;
+    const tabIds = removed.flatMap((id) => (allCards[id] ?? []).map((c) => cardTabId(id, c.id)));
+    closeTabs(tabIds);
+    setDirty((d) => new Set([...d].filter((k) => !tabIds.includes(k))));
+
+    setCardSections(next);
+    setSections(next);
+    const without = <T,>(rec: Record<string, T>) => Object.fromEntries(Object.entries(rec).filter(([id]) => !removed.includes(id)));
+    setCards((all) => ({ ...without(all), ...Object.fromEntries(loaded.map((l) => [l.id, l.cards])) }));
+    setFolders((all) => ({ ...without(all), ...Object.fromEntries(loaded.map((l) => [l.id, l.folders])) }));
+    const nextSchemas = { ...without(schemas), ...Object.fromEntries(loaded.map((l) => [l.id, defaultSchema(l.id)])) };
+    setSchemas(nextSchemas);
+    store.saveSchemas(nextSchemas).catch(reportError);
+    if (removed.some((id) => orderRef.current[id])) commitOrder(without(orderRef.current) as ItemOrder);
+    setLayout((l) => reconcileLayout(l, sectionOrder()));
+  };
+
   const findCard = (section: CardSectionId, id: string) => cards[section].find((c) => c.id === id);
 
   const cardOps: CardOps = {
@@ -1422,6 +1457,7 @@ export default function App() {
           })),
           { id: 'copy-for-ai', label: '複製整個專案（給網頁版 AI）', icon: 'copy', run: () => void exportProject('copy') },
           { id: 'export-project', label: '匯出專案為單一文字檔…', icon: 'export', run: () => void exportProject('file') },
+          { id: 'edit-sections', label: '區塊設定…（新增、改名、刪除區塊）', icon: 'list-tree', run: () => setSectionsDialog(true) },
           { id: 'close-project', label: '關閉專案', icon: 'root-folder', run: menu('close-project') },
         ]
       : []),
@@ -1464,6 +1500,7 @@ export default function App() {
     onReorder: reorder,
     onHeaderDrag: startPanelDrag,
     onEditSchema: setSchemaDialog,
+    onEditSections: () => setSectionsDialog(true),
     schemas,
   };
   const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
@@ -1579,6 +1616,14 @@ export default function App() {
       {tabCloseDialog()}
       {conflictDialog}
       {quickPickView}
+      {sectionsDialog && (
+        <SectionsDialog
+          sections={getCardSections()}
+          cardCount={(id) => cards[id]?.length ?? 0}
+          onSave={(next, removals) => void saveSections(next, removals)}
+          onClose={() => setSectionsDialog(false)}
+        />
+      )}
       {schemaDialog && (
         <SchemaDialog
           key={schemaDialog}

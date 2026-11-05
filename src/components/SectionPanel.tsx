@@ -68,6 +68,7 @@ export interface TreeProps {
   onReorder: (section: SectionId, folder: string, names: string[]) => void; // 某個資料夾裡的項目改成這個順序
   onHeaderDrag: (id: SectionId, e: React.MouseEvent) => void; // 按住標題列開始搬動整個區塊
   onEditSchema: (section: CardSectionId) => void; // 打開某個設定卡區塊的「欄位設定」
+  onEditSections: () => void; // 打開「區塊設定」（新增、改名、刪除區塊）
   schemas: Schemas; // 欄位範本：設定卡展開時，欄位名稱前面畫範本設定的圖示
 }
 
@@ -340,6 +341,7 @@ export default function SectionPanel(props: Props) {
         items.push({ label: '欄位設定…', onClick: () => props.onEditSchema(id as CardSectionId) });
       }
       items.push(sortItem(''));
+      items.push({ label: '區塊設定…', onClick: props.onEditSections });
       return items;
     }
     if (t.kind === 'file') {
