@@ -769,6 +769,22 @@ export default function App() {
   }, [statusNote]);
 
   // 把整個專案組成一份文字（給網頁版 AI）：複製到剪貼簿，或存成檔案
+  // 打包專案：先把還沒存的存完，再把整個專案資料夾壓成一個 .vnpack（AI說明.md 不放，打開時會重新產生）
+  const packProject = async () => {
+    const { project } = latest.current;
+    if (!project) {
+      window.alert('請先開啟專案。');
+      return;
+    }
+    const error = await flushRef.current();
+    if (error && !window.confirm(`有內容存檔失敗（${error}），還是要打包嗎？沒存到的內容不會在打包檔裡。`)) return;
+    try {
+      if (await window.api.packProject(project.store.root, `${sanitizeName(project.name)}.vnpack`, [AI_GUIDE_NAME])) setStatusNote('已打包專案');
+    } catch (e) {
+      window.alert(`打包失敗：${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const exportProject = async (to: 'copy' | 'file') => {
     const { project, files, contents, cards } = latest.current;
     if (!project) {
@@ -827,6 +843,12 @@ export default function App() {
         if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
         await openRecent(ev.path);
         if (await window.api.claimProject(ev.path)) await openOpened(await ProjectStore.open(ev.path));
+      } else if (ev.type === 'import-project') {
+        if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
+        const root = await window.api.unpackProject();
+        if (root && (await window.api.claimProject(root))) await openOpened(await ProjectStore.open(root));
+      } else if (ev.type === 'pack-project') {
+        await packProject();
       }
     } catch (e) {
       window.alert(`發生錯誤：${e instanceof Error ? e.message : String(e)}`);
@@ -1457,6 +1479,7 @@ export default function App() {
           })),
           { id: 'copy-for-ai', label: '複製整個專案（給網頁版 AI）', icon: 'copy', run: () => void exportProject('copy') },
           { id: 'export-project', label: '匯出專案為單一文字檔…', icon: 'export', run: () => void exportProject('file') },
+          { id: 'pack-project', label: '打包專案成一個檔案（.vnpack）…', icon: 'export', run: () => void packProject() },
           { id: 'edit-sections', label: '區塊設定…（新增、改名、刪除區塊）', icon: 'list-tree', run: () => setSectionsDialog(true) },
           { id: 'close-project', label: '關閉專案', icon: 'root-folder', run: menu('close-project') },
         ]

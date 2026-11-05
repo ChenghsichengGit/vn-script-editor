@@ -83,6 +83,13 @@ export default function WelcomeScreen({
       return ProjectStore.open(path);
     });
 
+  // 匯入專案：選 .vnpack、選要放在哪裡，解壓成新的專案資料夾後打開
+  const importPack = () =>
+    run(async () => {
+      const root = await window.api.unpackProject();
+      return root && (await window.api.claimProject(root)) ? ProjectStore.open(root) : null;
+    });
+
   const startCreate = async () => {
     setError('');
     try {
@@ -139,6 +146,9 @@ export default function WelcomeScreen({
             </button>
             <button disabled={busy} onClick={startCreate}>
               ＋ 建立新專案
+            </button>
+            <button disabled={busy} onClick={importPack} title="開啟別人打包給你的專案（.vnpack）：選好要放在哪裡，會解壓成一個專案資料夾">
+              <Icon icon="export" /> 匯入專案…
             </button>
           </div>
         )}

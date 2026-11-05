@@ -20,6 +20,8 @@ type MenuEvent =
   | { type: 'open-settings' }
   | { type: 'close-tab' }
   | { type: 'copy-for-ai' }
+  | { type: 'pack-project' }
+  | { type: 'import-project' }
   | { type: 'export-project' }
   | { type: 'show-shortcuts' }
   | { type: 'show-syntax' }
@@ -51,6 +53,10 @@ interface AppApi {
 
   // 匯出：跳出「另存新檔」視窗，寫到使用者選的位置（不限專案資料夾）；取消回傳 false
   exportSaveText(defaultName: string, text: string): Promise<boolean>;
+  // 打包專案：跳出「另存新檔」，把整個專案資料夾壓成一個 .vnpack（exclude = 不放進去的最上層檔名）；取消回傳 false
+  packProject(root: string, defaultName: string, exclude: string[]): Promise<boolean>;
+  // 匯入專案：選 .vnpack、選要放在哪裡，解壓成新的專案資料夾並回傳它（已允許存取）；取消回傳 null
+  unpackProject(): Promise<string | null>;
 
   // 視窗：可以開很多個（跟 VS Code 一樣）；第一個視窗才會自動開啟上次的專案
   newWindow(): Promise<void>;

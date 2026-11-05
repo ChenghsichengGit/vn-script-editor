@@ -246,6 +246,151 @@ async fn export_save_text(app: AppHandle, default_name: String, text: String) ->
     Ok(true)
 }
 
+// ───────────────────────── 打包／匯入專案（.vnpack = zip） ─────────────────────────
+// 打包：整個專案資料夾壓成一個檔案，方便傳給別人；以 . 開頭的（.git 等）和 exclude 列的最上層檔案不放進去
+// 匯入：選 .vnpack、選要放在哪個資料夾，解壓成一個同名的專案資料夾
+
+const PACK_EXT: &str = "vnpack";
+
+fn zip_err(e: zip::result::ZipError) -> String {
+    e.to_string()
+}
+
+// 把 dir 底下的檔案（遞迴）加進壓縮檔，壓縮檔裡的路徑用 / 分隔、相對於專案資料夾
+fn add_dir_to_zip(
+    zip: &mut zip::ZipWriter<fs::File>,
+    root: &Path,
+    dir: &Path,
+    exclude_top: &[String],
+    skip: &Path,
+) -> Result<(), String> {
+    let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    for entry in fs::read_dir(dir).map_err(err)? {
+        let entry = entry.map_err(err)?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if same_path(&path, skip) {
+            continue; // 打包檔存在專案資料夾裡時，不要把自己也包進去
+        }
+        let rel = path.strip_prefix(root).map_err(|e| e.to_string())?;
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        if dir == root && exclude_top.iter().any(|x| x.eq_ignore_ascii_case(&name)) {
+            continue;
+        }
+        let ft = entry.file_type().map_err(err)?;
+        if ft.is_dir() {
+            zip.add_directory(format!("{rel_str}/"), options).map_err(zip_err)?;
+            add_dir_to_zip(zip, root, &path, exclude_top, skip)?;
+        } else if ft.is_file() {
+            zip.start_file(rel_str, options).map_err(zip_err)?;
+            let mut f = fs::File::open(&path).map_err(err)?;
+            std::io::copy(&mut f, zip).map_err(err)?;
+        }
+    }
+    Ok(())
+}
+
+// 打包專案：跳出「另存新檔」，把 root 整個壓進去；取消回傳 false
+#[tauri::command]
+async fn project_pack(app: AppHandle, state: State<'_, AppState>, root: String, default_name: String, exclude: Vec<String>) -> Result<bool, String> {
+    let root = guard(&state, &root)?;
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .set_title("打包專案")
+        .set_file_name(&default_name)
+        .add_filter("VN Script Editor 專案包", &[PACK_EXT])
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let target = picked.into_path().map_err(|e| e.to_string())?;
+    write_pack(&root, &target, &exclude).map(|_| true)
+}
+
+// 把 root 壓成 target；先寫到暫存檔，全部成功才換成正式檔名：中途失敗不會留下壞掉的打包檔
+fn write_pack(root: &Path, target: &Path, exclude: &[String]) -> Result<(), String> {
+    let temp = target.with_extension("vnpack.part");
+    let result = (|| {
+        let file = fs::File::create(&temp).map_err(err)?;
+        let mut zip = zip::ZipWriter::new(file);
+        add_dir_to_zip(&mut zip, root, root, exclude, &temp)?;
+        add_dir_check_target(target, root)?;
+        zip.finish().map_err(zip_err)?;
+        fs::rename(&temp, target).map_err(err)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
+// 打包檔不能直接存成專案裡的某個資料夾（例如存成「劇本」）：那樣改名時會蓋掉它
+fn add_dir_check_target(target: &Path, root: &Path) -> Result<(), String> {
+    if target.is_dir() || same_path(target, root) {
+        return Err("不能存成資料夾，請換一個檔名".into());
+    }
+    Ok(())
+}
+
+// 把 pack 解壓到 dest（dest 要事先不存在）；中途失敗會把 dest 整個清掉
+fn extract_pack(pack: &Path, dest: &Path) -> Result<(), String> {
+    let file = fs::File::open(pack).map_err(err)?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("這不是有效的專案包：{e}"))?;
+    fs::create_dir_all(dest).map_err(err)?;
+    let result = (|| {
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(zip_err)?;
+            // enclosed_name：擋掉 ../ 或絕對路徑這種會寫到目標資料夾外面的項目
+            let Some(rel) = entry.enclosed_name() else { continue };
+            let out = dest.join(rel);
+            if entry.is_dir() {
+                fs::create_dir_all(&out).map_err(err)?;
+            } else {
+                if let Some(p) = out.parent() {
+                    fs::create_dir_all(p).map_err(err)?;
+                }
+                let mut f = fs::File::create(&out).map_err(err)?;
+                std::io::copy(&mut entry, &mut f).map_err(err)?;
+            }
+        }
+        Ok::<(), String>(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(dest);
+    }
+    result
+}
+
+// 匯入專案：選 .vnpack → 選要放在哪個資料夾 → 解壓成「檔名」這個新資料夾（已經有同名的就加 2、3…）
+// 回傳新的專案資料夾（已加進允許清單）；任一步取消回傳 null
+#[tauri::command]
+async fn project_unpack(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let Some(picked) = app.dialog().file().set_title("匯入專案：選擇專案包").add_filter("VN Script Editor 專案包", &[PACK_EXT]).blocking_pick_file() else {
+        return Ok(None);
+    };
+    let pack = picked.into_path().map_err(|e| e.to_string())?;
+    let Some(parent) = app.dialog().file().set_title("匯入專案：要放在哪個資料夾").blocking_pick_folder() else {
+        return Ok(None);
+    };
+    let parent = parent.into_path().map_err(|e| e.to_string())?;
+
+    let stem = pack.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "專案".into());
+    let mut dest = parent.join(&stem);
+    let mut n = 2;
+    while dest.exists() {
+        dest = parent.join(format!("{stem} {n}"));
+        n += 1;
+    }
+
+    extract_pack(&pack, &dest)?;
+    add_root(&state, &dest);
+    Ok(Some(normalize(&dest).to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 fn project_get_recent(app: AppHandle, state: State<AppState>) -> Vec<RecentProject> {
     let _lock = state.recent_lock.lock().unwrap();
@@ -419,8 +564,10 @@ fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<W
         .separator()
         .item(&MenuItemBuilder::with_id("new-project", "新增專案…").build(app)?)
         .item(&MenuItemBuilder::with_id("open-project", "開啟專案資料夾…\tCtrl+O").build(app)?)
+        .item(&MenuItemBuilder::with_id("import-project", "匯入專案（.vnpack）…").build(app)?)
         .item(&recent_menu.build()?)
         .separator()
+        .item(&MenuItemBuilder::with_id("pack-project", "打包專案成一個檔案（.vnpack）…").build(app)?)
         .item(&MenuItemBuilder::with_id("copy-for-ai", "複製整個專案（給網頁版 AI）").build(app)?)
         .item(&MenuItemBuilder::with_id("export-project", "匯出專案為單一文字檔…").build(app)?)
         .separator()
@@ -514,6 +661,8 @@ pub fn run() {
             fs_exists,
             project_pick_folder,
             export_save_text,
+            project_pack,
+            project_unpack,
             project_get_recent,
             project_remember,
             project_forget,
@@ -557,4 +706,74 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("程式啟動失敗");
+}
+
+// ───────────────────────── 測試：打包／匯入 ─────────────────────────
+#[cfg(test)]
+mod pack_tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("vnpack-test-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn pack_and_extract_roundtrip() {
+        let root = temp_dir("root");
+        fs::create_dir_all(root.join("劇本/第一章")).unwrap();
+        fs::create_dir_all(root.join("角色")).unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::write(root.join("劇本/第一章/開場.vns"), "#bg 咖啡廳\n「歡迎光臨」").unwrap();
+        fs::write(root.join("角色/紗季.md"), "---\nname: 紗季\n---\n").unwrap();
+        fs::write(root.join("project.json"), "{\"name\":\"測試\"}").unwrap();
+        fs::write(root.join("AI說明.md"), "auto").unwrap();
+        fs::write(root.join(".git/HEAD"), "x").unwrap();
+        fs::create_dir_all(root.join("空資料夾")).unwrap();
+
+        // 打包檔存在專案資料夾裡面也不能把自己包進去
+        let pack = root.join("測試.vnpack");
+        write_pack(&root, &pack, &["AI說明.md".to_string()]).unwrap();
+
+        let out = temp_dir("out").join("測試");
+        extract_pack(&pack, &out).unwrap();
+        assert_eq!(fs::read_to_string(out.join("劇本/第一章/開場.vns")).unwrap(), "#bg 咖啡廳\n「歡迎光臨」");
+        assert!(out.join("角色/紗季.md").is_file());
+        assert!(out.join("project.json").is_file());
+        assert!(out.join("空資料夾").is_dir());
+        assert!(!out.join("AI說明.md").exists(), "AI說明.md 不該放進去");
+        assert!(!out.join(".git").exists(), ".git 不該放進去");
+        assert!(!out.join("測試.vnpack").exists(), "不該把自己包進去");
+    }
+
+    #[test]
+    fn extract_rejects_escaping_paths() {
+        let dir = temp_dir("evil");
+        let pack = dir.join("evil.vnpack");
+        {
+            let mut zip = zip::ZipWriter::new(fs::File::create(&pack).unwrap());
+            let o = zip::write::SimpleFileOptions::default();
+            zip.start_file("../逃出去.txt", o).unwrap();
+            std::io::Write::write_all(&mut zip, b"bad").unwrap();
+            zip.start_file("ok.txt", o).unwrap();
+            std::io::Write::write_all(&mut zip, b"ok").unwrap();
+            zip.finish().unwrap();
+        }
+        let out = dir.join("out");
+        extract_pack(&pack, &out).unwrap();
+        assert!(out.join("ok.txt").is_file());
+        assert!(!dir.join("逃出去.txt").exists(), "不能寫到目標資料夾外面");
+    }
+
+    #[test]
+    fn extract_rejects_non_zip() {
+        let dir = temp_dir("notzip");
+        let pack = dir.join("x.vnpack");
+        fs::write(&pack, "not a zip").unwrap();
+        let out = dir.join("out");
+        assert!(extract_pack(&pack, &out).is_err());
+        assert!(!out.exists(), "失敗時要清掉建出來的資料夾");
+    }
 }

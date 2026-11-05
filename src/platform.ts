@@ -44,6 +44,8 @@ window.api = {
 
   // 匯出
   exportSaveText: (defaultName, text) => invoke('export_save_text', { defaultName, text }),
+  packProject: (root, defaultName, exclude) => invoke('project_pack', { root, defaultName, exclude }),
+  unpackProject: () => invoke('project_unpack'),
 
   // 視窗
   newWindow: () => invoke('window_new'),
