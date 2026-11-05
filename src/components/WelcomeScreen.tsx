@@ -37,16 +37,22 @@ export default function WelcomeScreen({
   useEffect(() => {
     const first = !triedLastProject;
     triedLastProject = true;
-    getRecentProjects()
-      .then((list) => {
+    void (async () => {
+      // 雙擊專案檔（.vnsp）開的視窗：直接打開那個專案（主程式已經允許存取），不再開上次的專案
+      const fromFile = first ? await window.api.takeInitialProject().catch(() => null) : null;
+      if (fromFile) void openPath(fromFile);
+      try {
+        const list = await getRecentProjects();
         setRecent(list);
         // 最近的專案清單第一個就是上次開的
         // 只有程式的第一個視窗會這樣做；之後開的新視窗都從開始畫面開始
-        if (first && window.api.isFirstWindow && !startInCreateMode && getSettings().openLastProject && list[0]) {
+        if (!fromFile && first && window.api.isFirstWindow && !startInCreateMode && getSettings().openLastProject && list[0]) {
           void openRecent(list[0].path);
         }
-      })
-      .catch(() => setRecent([]));
+      } catch {
+        setRecent([]);
+      }
+    })();
     if (startInCreateMode) startCreate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -82,6 +88,10 @@ export default function WelcomeScreen({
       if (!(await window.api.claimProject(path))) return null; // 已經在別的視窗開著
       return ProjectStore.open(path);
     });
+
+  // 雙擊專案檔來的：資料夾已經允許存取，不用經過「最近的專案」
+  const openPath = (path: string) =>
+    run(async () => ((await window.api.claimProject(path)) ? ProjectStore.open(path) : null));
 
   const startCreate = async () => {
     setError('');

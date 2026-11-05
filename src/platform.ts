@@ -48,6 +48,7 @@ window.api = {
   // 視窗
   newWindow: () => invoke('window_new'),
   isFirstWindow: thisWindow.label === 'main',
+  takeInitialProject: () => invoke('window_take_initial_project'),
 
   // 選單與關閉視窗
   onMenu: (cb) => subscribe<MenuEvent>('menu', cb),

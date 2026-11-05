@@ -36,7 +36,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "fileAssociations": [
+      {
+        "ext": ["vnsp"],
+        "name": "VNScriptEditor.Project",
+        "description": "VN Script Editor 專案",
+        "role": "Editor"
+      }
+    ]
   },
   "plugins": {
     "updater": {
