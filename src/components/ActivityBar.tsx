@@ -1,5 +1,5 @@
 import { SectionId } from '../model';
-import { sectionMeta, sectionOrder } from '../sampleData';
+import { sectionMeta, sectionOrder } from '../sections';
 import Icon from './Icon';
 
 // 最左邊的圖示列：每個圖示是一個開關，可以同時開好幾個（關閉專案改由選單的「檔案」操作）
@@ -12,14 +12,14 @@ export default function ActivityBar(props: {
 }) {
   return (
     <nav className="activity-bar">
-      {sectionOrder.map((id) => (
+      {sectionOrder().map((id) => (
         <button
           key={id}
           className={props.active.includes(id) ? 'active' : ''}
-          data-tip={`${sectionMeta[id].title}：顯示／隱藏這個區塊`}
+          data-tip={`${sectionMeta(id).title}：顯示／隱藏這個區塊`}
           onClick={() => props.onToggle(id)}
         >
-          <Icon icon={sectionMeta[id].icon.name} />
+          <Icon icon={sectionMeta(id).icon.name} />
         </button>
       ))}
       <button

@@ -1,9 +1,9 @@
 // 資料的「形狀」定義在這裡：之後存讀檔也照這個格式
 
-// 左側的四個區塊
-export type SectionId = 'files' | 'characters' | 'world' | 'commands';
+// 左側的區塊：'files'（劇本）固定，其他是設定卡區塊（角色、世界觀、指令、自己加的…），清單在 sections.ts
+export type SectionId = string;
 // 除了「檔案」以外，其他區塊裝的都是設定卡
-export type CardSectionId = Exclude<SectionId, 'files'>;
+export type CardSectionId = string;
 
 // 設定卡的一個欄位，例如 年齡：不詳
 // collapsed = true 時，側邊欄只顯示欄位名稱，點了才展開內容
@@ -44,12 +44,13 @@ export interface FieldRemoval {
   mode: 'empty' | 'all';
 }
 
-// 新專案（或舊專案沒有範本時）的預設範本：指令卡的名稱就是指令格式，另外固定有「用法」（多種寫法時一行一種）和「說明」
-export const defaultSchemas = (): Schemas => ({
-  characters: { fields: [] },
-  world: { fields: [] },
-  commands: { fields: [{ key: '用法' }, { key: '說明' }] },
-});
+// 某個區塊還沒有範本時的預設：指令卡固定有「用法」（多種寫法時一行一種）和「說明」，其他區塊沒有規定欄位
+export const defaultSchema = (section: CardSectionId): SectionSchema =>
+  section === 'commands' ? { fields: [{ key: '用法' }, { key: '說明' }] } : { fields: [] };
+// 每個區塊都有一份範本（ids = 目前所有的設定卡區塊）
+export const defaultSchemas = (ids: CardSectionId[]): Schemas => Object.fromEntries(ids.map((id) => [id, defaultSchema(id)]));
+// 每個區塊一份空的東西（卡片清單、資料夾清單…）
+export const perSection = <T>(ids: string[], make: () => T): Record<string, T> => Object.fromEntries(ids.map((id) => [id, make()]));
 
 // 讓一張卡符合範本：範本欄位依範本順序排在最前面（已有的保留內容，缺的補空白），其他欄位接在後面
 export function applySchema(fields: Field[], schema: SchemaField[]): Field[] {

@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { FileOps, FolderOps } from '../App';
 import { Card, CardOps, CardSectionId, ItemOrder, Schemas, SectionId, cardTabId, folderOrderKey, orderEntries } from '../model';
-import { fileIcon, sectionMeta } from '../sampleData';
+import { fileIcon } from '../sampleData';
+import { sectionMeta } from '../sections';
 import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
@@ -80,7 +81,7 @@ interface Props extends TreeProps {
 // 一個區塊：標題列 + 檔案／設定卡的樹。放在左右側邊欄或浮動視窗裡都是同一個元件
 export default function SectionPanel(props: Props) {
   const { id, collapsed, setCollapsed } = props;
-  const meta = sectionMeta[id];
+  const meta = sectionMeta(id);
 
   // 「全部展開／全部收起」訊號：tick 每按一次加 1，卡片看到變化就跟著切換
   const [bulk, setBulk] = useState({ show: false, tick: 0 });
@@ -369,7 +370,7 @@ export default function SectionPanel(props: Props) {
     }
     return [
       {
-        label: t.section === 'files' ? '新增檔案' : `新增${sectionMeta[t.section].title}`,
+        label: t.section === 'files' ? '新增檔案' : `新增${sectionMeta(t.section).title}`,
         onClick: () => startCreate(t.folder, 'item'),
       },
       { label: '新增資料夾', onClick: () => startCreate(t.folder, 'folder') },

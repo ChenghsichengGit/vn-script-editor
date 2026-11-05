@@ -20,7 +20,7 @@
 // //# 大標題、//## 中標題、//### 小標題：也是註解（不會輸出），用來分段；劇本右邊的大綱會列出來
 import monaco from './monaco';
 import { Card, CardSectionId, Schemas } from './model';
-import { sectionMeta } from './sampleData';
+import { sectionMeta } from './sections';
 
 export const LANGUAGE_ID = 'vns';
 
@@ -138,17 +138,17 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
   const addSource = (param: string, text: string) => paramSources.set(param, [...(paramSources.get(param) ?? []), text]);
   const collect = (param: string, section: CardSectionId, valueOf: (card: Card) => string) => {
     const list = paramValues.get(param) ?? [];
-    for (const card of cards[section]) {
+    for (const card of cards[section] ?? []) {
       const value = valueOf(card);
       if (value && !list.some((v) => v.value === value)) {
-        list.push({ value, source: `${sectionMeta[section].title}／${card.name}` });
+        list.push({ value, source: `${sectionMeta(section).title}／${card.name}` });
       }
     }
     paramValues.set(param, list);
   };
   for (const section of Object.keys(schemas) as CardSectionId[]) {
     const { nameParam, fields } = schemas[section];
-    const title = sectionMeta[section].title;
+    const title = sectionMeta(section).title;
     if (nameParam) {
       collect(nameParam, section, (card) => card.name.trim());
       addSource(nameParam, `${title}的名稱`);

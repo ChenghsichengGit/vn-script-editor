@@ -2,11 +2,10 @@
 // 寫清楚資料夾結構、劇本語法、設定卡格式、目前所有的指令，AI 先讀這份就能照規則修改，不會寫出編輯器讀不懂的格式
 // 指令或欄位設定一改就重新產生（App 負責寫檔）
 import { Card, CardSectionId, Schemas } from './model';
-import { sectionMeta } from './sampleData';
+import { getCardSections, sectionMeta } from './sections';
 
 export const AI_GUIDE_NAME = 'AI說明.md';
 
-const DIRS: Record<CardSectionId, string> = { characters: '角色', world: '世界觀', commands: '指令' };
 
 const fieldOf = (card: Card, key: string) => card.fields.find((f) => f.key === key)?.value.trim() ?? '';
 
@@ -25,7 +24,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('| 位置 | 內容 |');
   line('|---|---|');
   line('| `劇本/**/*.vns` | 劇本（純文字），子資料夾可以自由建立 |');
-  for (const s of Object.keys(DIRS) as CardSectionId[]) line(`| \`${DIRS[s]}/**/*.md\` | ${sectionMeta[s].title}的設定卡，一張卡一個檔案 |`);
+  for (const s of getCardSections()) line(`| \`${s.dir}/**/*.md\` | ${s.title}的設定卡，一張卡一個檔案 |`);
   line('| `project.json` | 專案設定（欄位設定 `schemas`、左側清單順序 `order`），一般不需要改 |');
   line(`| \`${AI_GUIDE_NAME}\` | 這份說明（自動產生） |`);
   line();
@@ -72,13 +71,13 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line();
   line('每張卡都一定要有這些欄位（順序照這裡）。標了「指令參數」的，它的內容（或卡片名稱）可以填進指令的 `[參數]`。');
   line();
-  for (const s of Object.keys(DIRS) as CardSectionId[]) {
-    const schema = schemas[s];
+  for (const s of getCardSections().map((d) => d.id)) {
+    const schema = schemas[s] ?? { fields: [] };
     const items = [
       ...(schema.nameParam ? [`名稱（指令參數 \`[${schema.nameParam}]\`）`] : []),
       ...schema.fields.map((f) => (f.param ? `${f.key}（指令參數 \`[${f.param}]\`）` : f.key)),
     ];
-    line(`- **${sectionMeta[s].title}**：${items.length > 0 ? items.join('、') : '（沒有規定）'}`);
+    line(`- **${sectionMeta(s).title}**：${items.length > 0 ? items.join('、') : '（沒有規定）'}`);
   }
   line();
 

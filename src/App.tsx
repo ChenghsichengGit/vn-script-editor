@@ -22,6 +22,7 @@ import {
   defaultSchemas,
   parseCardTab,
   folderOrderKey,
+  perSection,
   SAVE_ALL_EVENT,
 } from './model';
 import SchemaDialog from './components/SchemaDialog';
@@ -41,7 +42,8 @@ import type { DiskChanges } from './projectFiles';
 import { AI_GUIDE_NAME, buildAiGuide } from './aiGuide';
 import { buildProjectExport, exportFileName } from './exportProject';
 import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, setScriptData } from './scriptLanguage';
-import { fileIcon, sectionMeta, sectionOrder } from './sampleData';
+import { fileIcon } from './sampleData';
+import { SectionDef, cardSectionIds, sectionMeta, sectionOrder, setCardSections } from './sections';
 import {
   FLOAT_DEFAULT_H,
   FLOAT_DEFAULT_W,
@@ -55,6 +57,7 @@ import {
   dockSection,
   floatSection,
   loadLayout,
+  reconcileLayout,
 } from './layout';
 import {
   ProjectData,
@@ -70,8 +73,9 @@ import {
   withScriptExt,
 } from './projectFiles';
 
-const emptyCards: Record<CardSectionId, Card[]> = { characters: [], world: [], commands: [] };
-const emptyFolders: Record<SectionId, string[]> = { files: [], characters: [], world: [], commands: [] };
+// 每個區塊一份空的卡片／資料夾清單（區塊是專案自訂的，照目前的區塊清單做）
+const emptyCards = (): Record<CardSectionId, Card[]> => perSection(cardSectionIds(), () => [] as Card[]);
+const emptyFolders = (): Record<SectionId, string[]> => ({ files: [], ...perSection(cardSectionIds(), () => [] as string[]) });
 
 // 「還沒存檔」清單裡的代號：劇本是 file:id，設定卡直接用分頁 id（card:區塊:id）
 const fileKey = (id: string) => `file:${id}`;
@@ -117,7 +121,9 @@ export default function App() {
   const [folders, setFolders] = useState(emptyFolders);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   // 角色／世界觀／指令的欄位範本（存在 project.json），以及正在編輯哪一個區塊的範本
-  const [schemas, setSchemas] = useState<Schemas>(defaultSchemas);
+  const [schemas, setSchemas] = useState<Schemas>(() => defaultSchemas(cardSectionIds()));
+  // 這個專案的設定卡區塊清單（真正給畫面讀的在 sections.ts；這個 state 讓清單換掉時畫面跟著重畫）
+  const [, setSections] = useState<SectionDef[]>([]);
   const [schemaDialog, setSchemaDialog] = useState<CardSectionId | null>(null);
   // 左側清單的自訂順序（存在 project.json）
   const [order, setOrder] = useState<ItemOrder>({});
@@ -682,6 +688,10 @@ export default function App() {
   // 要開哪些分頁由編輯區決定：還原這個專案上次的版面，沒有記錄就開第一個劇本
   const loadProject = (store: ProjectStore, data: ProjectData) => {
     dockRef.current?.saveLayout(); // 從別的專案切過來時，先把舊專案的版面存起來
+    // 這個專案的區塊：先換掉 sections.ts 裡的清單，之後畫面讀到的都是這個專案的；版面裡沒有的區塊補到左邊
+    setCardSections(data.sections);
+    setSections(data.sections);
+    setLayout((l) => reconcileLayout(l, sectionOrder()));
     const ids = Object.keys(data.files);
     setFiles(Object.fromEntries(ids.map((id) => [id, { name: data.files[id].name, folder: data.files[id].folder }])));
     setFolders(data.folders);
@@ -834,15 +844,17 @@ export default function App() {
   // ── 側邊欄與浮動面板 ──────────────────────────────
 
   // 每個區塊住在哪裡：左、右、浮動（隱藏的區塊位置照樣保留）
-  const visibleIds = (ids: SectionId[]) => ids.filter((s) => !layout.hidden.includes(s));
+  // 版面裡可能記著別的專案才有的區塊：這個專案沒有的不畫（位置照樣記著）
+  const existing = new Set(sectionOrder());
+  const visibleIds = (ids: SectionId[]) => ids.filter((s) => existing.has(s) && !layout.hidden.includes(s));
   const leftSections = visibleIds(layout.left.sections);
   const rightSections = visibleIds(layout.right.sections);
-  const floatPanels = layout.floating.filter((f) => !layout.hidden.includes(f.id));
+  const floatPanels = layout.floating.filter((f) => existing.has(f.id) && !layout.hidden.includes(f.id));
   // 側邊欄裡沒有任何要顯示的區塊就自動收起來
   const showLeft = leftVisible && leftSections.length > 0;
   const showRight = rightSections.length > 0;
   // 活動列上亮著的圖示 = 現在看得到的區塊（左側欄被 Ctrl+B 收起時，裡面的不算）
-  const activeSections = sectionOrder.filter(
+  const activeSections = sectionOrder().filter(
     (s) => !layout.hidden.includes(s) && (layout.left.sections.includes(s) ? leftVisible : true),
   );
 
@@ -1316,7 +1328,7 @@ export default function App() {
   const tabIcon = (tabId: string) => {
     const ref = parseCardTab(tabId);
     if (!ref) return files[tabId] ? fileIcon(files[tabId].name) : null;
-    return sectionMeta[ref.section].icon;
+    return sectionMeta(ref.section).icon;
   };
 
   const activeCardRef = activeTab ? parseCardTab(activeTab) : null;
@@ -1325,7 +1337,7 @@ export default function App() {
   let status = { left: '沒有開啟的檔案', right: '' };
 
   if (activeCardRef && activeCard) {
-    status = { left: `${sectionMeta[activeCardRef.section].title}／${activeCard.name}`, right: `詳細內容 ${countChars(activeCard.detail)} 字` };
+    status = { left: `${sectionMeta(activeCardRef.section).title}／${activeCard.name}`, right: `詳細內容 ${countChars(activeCard.detail)} 字` };
   } else if (activeTab && !activeCardRef && files[activeTab]) {
     status = {
       left: files[activeTab]?.name ?? '',
@@ -1352,8 +1364,8 @@ export default function App() {
           cards[section].map((c) => ({
             id: cardTabId(section, c.id),
             label: c.name || '（未命名）',
-            detail: where(sectionMeta[section].title, c.folder),
-            icon: sectionMeta[section].icon,
+            detail: where(sectionMeta(section).title, c.folder),
+            icon: sectionMeta(section).icon,
             run: () => cardOps.open(section, c.id),
           })),
         ),
@@ -1398,13 +1410,13 @@ export default function App() {
           },
           ...(Object.keys(cards) as CardSectionId[]).map((section) => ({
             id: `new-${section}`,
-            label: `新增${sectionMeta[section].title}`,
-            icon: sectionMeta[section].icon,
-            run: () => ({ placeholder: `${sectionMeta[section].title}的名稱`, submit: (name: string) => cardOps.add(section, '', name) }),
+            label: `新增${sectionMeta(section).title}`,
+            icon: sectionMeta(section).icon,
+            run: () => ({ placeholder: `${sectionMeta(section).title}的名稱`, submit: (name: string) => cardOps.add(section, '', name) }),
           })),
           ...(Object.keys(cards) as CardSectionId[]).map((section) => ({
             id: `schema-${section}`,
-            label: `${sectionMeta[section].title}的欄位設定…`,
+            label: `${sectionMeta(section).title}的欄位設定…`,
             icon: 'list-tree',
             run: () => setSchemaDialog(section),
           })),
@@ -1550,7 +1562,7 @@ export default function App() {
       )}
       {panelDrag?.ghost && (
         <div className="drag-ghost" style={{ left: panelDrag.x + 12, top: panelDrag.y + 8 }}>
-          <Icon icon={sectionMeta[panelDrag.id].icon} /> {sectionMeta[panelDrag.id].title}
+          <Icon icon={sectionMeta(panelDrag.id).icon} /> {sectionMeta(panelDrag.id).title}
         </div>
       )}
       <StatusBar
@@ -1570,8 +1582,8 @@ export default function App() {
       {schemaDialog && (
         <SchemaDialog
           key={schemaDialog}
-          title={sectionMeta[schemaDialog].title}
-          icon={sectionMeta[schemaDialog].icon}
+          title={sectionMeta(schemaDialog).title}
+          icon={sectionMeta(schemaDialog).icon}
           schema={schemas[schemaDialog]}
           specialFields={schemaDialog === 'commands' ? FIXED_COMMAND_FIELDS : []}
           cards={cards[schemaDialog]}

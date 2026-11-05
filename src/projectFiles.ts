@@ -7,8 +7,9 @@
 //   每個區塊底下可以有任意層的子資料夾；檔案／卡片屬於哪個資料夾由位置決定，不寫進 YAML
 
 import { dump, load } from 'js-yaml';
-import { Card, CardSectionId, Field, ItemOrder, SchemaField, Schemas, SectionId, defaultSchemas } from './model';
+import { Card, CardSectionId, Field, ItemOrder, SchemaField, Schemas, SectionId, defaultSchemas, perSection } from './model';
 import { cleanFieldColor, cleanFieldIcon } from './fieldIcons';
+import { FILES_SECTION, SectionDef, normalizeSections } from './sections';
 
 export interface ScriptFile {
   name: string; // 含副檔名，例如 "第一章.vns"
@@ -21,6 +22,7 @@ export interface ProjectData {
   files: Record<string, ScriptFile>; // key = 記憶體中的 id
   cards: Record<CardSectionId, Card[]>; // card.id = 記憶體中的 id；card.folder = 所在子資料夾
   folders: Record<SectionId, string[]>; // 每個區塊裡所有的子資料夾（含空的、含巢狀的每一層），例如 "第一章"、"第一章/場景1"
+  sections: SectionDef[]; // 設定卡區塊的清單（角色、世界觀、指令、自己加的…），取自 project.json
   schemas: Schemas; // 每個設定卡區塊的欄位範本，取自 project.json
   order: ItemOrder; // 左側清單的自訂順序，取自 project.json
 }
@@ -42,10 +44,10 @@ function normalizeOrder(raw: unknown): ItemOrder {
 
 // 把 project.json 裡的 schemas 整理成合法的範本：認不得的丟掉、同名欄位只留第一個；整個沒有就用預設
 // 舊格式（每個區塊直接是欄位陣列）也讀得懂，當成沒有設定名稱參數
-function normalizeSchemas(raw: unknown): Schemas {
-  const out = defaultSchemas();
+function normalizeSchemas(raw: unknown, ids: CardSectionId[]): Schemas {
+  const out = defaultSchemas(ids);
   if (!raw || typeof raw !== 'object') return out;
-  for (const section of Object.keys(out) as CardSectionId[]) {
+  for (const section of ids) {
     const entry = (raw as Record<string, unknown>)[section] as Record<string, unknown> | unknown[] | undefined;
     const list = Array.isArray(entry) ? entry : entry && typeof entry === 'object' ? entry.fields : undefined;
     if (!Array.isArray(list)) continue;
@@ -108,13 +110,7 @@ export async function openRecent(path: string): Promise<void> {
 
 // ───────────────────────── 檔名與格式處理 ─────────────────────────
 
-const SCRIPT_DIR = '劇本';
-const CARD_DIRS: Record<CardSectionId, string> = {
-  characters: '角色',
-  world: '世界觀',
-  commands: '指令',
-};
-const SECTIONS = Object.keys(CARD_DIRS) as CardSectionId[];
+const SCRIPT_DIR = FILES_SECTION.dir;
 const SCRIPT_EXT = /\.(vns|txt|md)$/i;
 
 // 去掉 Windows 不允許的字元與控制字元，結尾的點與空白也不行；空字串給預設名稱
@@ -235,8 +231,6 @@ async function scanTree(
 let idCounter = 0;
 const newId = () => `${Date.now().toString(36)}${(idCounter++).toString(36)}`;
 
-// 每個區塊在專案資料夾底下的資料夾名稱
-const sectionDir = (section: SectionId) => (section === 'files' ? SCRIPT_DIR : CARD_DIRS[section]);
 
 // 搬移時目標已有同名項目的錯誤訊息
 const MOVE_CONFLICT = '目標資料夾裡已經有同名的項目';
@@ -252,7 +246,7 @@ export interface DiskChanges {
   files: { changed: (ScriptFile & { id: string })[]; added: (ScriptFile & { id: string })[]; removed: string[] };
   cards: Record<CardSectionId, { changed: Card[]; added: Card[]; removed: string[] }>;
   folders: ProjectData['folders'];
-  meta: { schemas: Schemas; order: ItemOrder } | null; // project.json 有變才有
+  meta: { schemas: Schemas; order: ItemOrder; sections: SectionDef[] } | null; // project.json 有變才有
 }
 
 // ───────────────────────── ProjectStore ─────────────────────────
@@ -261,21 +255,25 @@ export class ProjectStore {
   readonly root: string; // 專案資料夾的絕對路徑
 
   // 每個區塊的 id → 硬碟位置；只有這裡登記過的檔案，我們才會去刪／搬
-  private locs: Record<SectionId, Map<string, Loc>> = {
-    files: new Map(),
-    characters: new Map(),
-    world: new Map(),
-    commands: new Map(),
-  };
+  // （區塊是使用者自訂的，第一次用到才建立）
+  private locMaps: Record<SectionId, Map<string, Loc>> = {};
+  private locs(section: SectionId): Map<string, Loc> {
+    return (this.locMaps[section] ??= new Map());
+  }
 
   // 每個 id 目前在硬碟上的內容（讀進來或寫出去時記下）：重新讀硬碟時，內容跟這裡不一樣 = 被外部改了
   // 自己存檔時也會更新這裡，所以存檔觸發的監看通知會被認出來略過
-  private known: Record<SectionId, Map<string, string>> = {
-    files: new Map(),
-    characters: new Map(),
-    world: new Map(),
-    commands: new Map(),
-  };
+  private knownMaps: Record<SectionId, Map<string, string>> = {};
+  private known(section: SectionId): Map<string, string> {
+    return (this.knownMaps[section] ??= new Map());
+  }
+
+  // 設定卡區塊的清單（決定要讀哪些資料夾、每個區塊對應哪個資料夾）
+  private sections: SectionDef[] = [];
+  private dirOf(section: SectionId): string {
+    if (section === FILES_SECTION.id) return SCRIPT_DIR;
+    return this.sections.find((s) => s.id === section)?.dir ?? section;
+  }
   private knownMeta = '';
 
   // 所有寫入都排進同一條佇列，自動存檔連續觸發時不會讓寫入與刪除交錯
@@ -290,7 +288,7 @@ export class ProjectStore {
 
   // 某區塊某個子資料夾的絕對路徑（folder = '' 就是區塊根目錄）
   private dirPath(section: SectionId, folder: string): string {
-    return folder ? joinPath(this.root, sectionDir(section), folder) : joinPath(this.root, sectionDir(section));
+    return folder ? joinPath(this.root, this.dirOf(section), folder) : joinPath(this.root, this.dirOf(section));
   }
 
   static async open(root: string): Promise<{ store: ProjectStore; data: ProjectData }> {
@@ -307,7 +305,9 @@ export class ProjectStore {
       // 沒有或壞掉的 project.json：沿用資料夾名稱
     }
 
-    const folders = { files: [], characters: [], world: [], commands: [] } as ProjectData['folders'];
+    store.sections = normalizeSections(store.meta.sections);
+    const ids = store.sections.map((s) => s.id);
+    const folders: ProjectData['folders'] = { files: [], ...perSection(ids, () => [] as string[]) };
 
     // 劇本
     const files: Record<string, ScriptFile> = {};
@@ -316,31 +316,35 @@ export class ProjectStore {
     for (const f of scripts.files) {
       const id = newId();
       files[id] = { name: f.name, content: f.text, folder: f.folder };
-      store.locs.files.set(id, { folder: f.folder, name: f.name });
-      store.known.files.set(id, f.text);
+      store.locs('files').set(id, { folder: f.folder, name: f.name });
+      store.known('files').set(id, f.text);
     }
 
-    // 三種設定卡
-    const cards = { characters: [], world: [], commands: [] } as ProjectData['cards'];
-    for (const section of SECTIONS) {
-      const tree = await scanTree(joinPath(root, CARD_DIRS[section]), (n) => /\.md$/i.test(n));
+    // 每個設定卡區塊
+    const cards: ProjectData['cards'] = perSection(ids, () => [] as Card[]);
+    for (const section of ids) {
+      const tree = await scanTree(joinPath(root, store.dirOf(section)), (n) => /\.md$/i.test(n));
       folders[section] = tree.folders;
       for (const f of tree.files) {
         const id = newId();
         cards[section].push({ ...parseCard(id, f.name, f.text), folder: f.folder });
-        store.locs[section].set(id, { folder: f.folder, name: f.name });
-        store.known[section].set(id, f.text);
+        store.locs(section).set(id, { folder: f.folder, name: f.name });
+        store.known(section).set(id, f.text);
       }
     }
 
-    return { store, data: { name, files, cards, folders, schemas: normalizeSchemas(store.meta.schemas), order: normalizeOrder(store.meta.order) } };
+    return {
+      store,
+      data: { name, files, cards, folders, sections: store.sections, schemas: normalizeSchemas(store.meta.schemas, ids), order: normalizeOrder(store.meta.order) },
+    };
   }
 
   static async create(root: string, name: string): Promise<{ store: ProjectStore; data: ProjectData }> {
-    const meta = { name, version: 1, schemas: defaultSchemas() };
+    const sections = normalizeSections(undefined);
+    const meta = { name, version: 1, schemas: defaultSchemas(sections.map((s) => s.id)) };
     await window.api.writeText(joinPath(root, 'project.json'), JSON.stringify(meta, null, 2) + '\n');
-    // 四個子資料夾 + 一個空白的起始劇本
-    for (const section of SECTIONS) await window.api.mkdir(joinPath(root, CARD_DIRS[section]));
+    // 每個設定卡區塊的資料夾 + 一個空白的起始劇本
+    for (const s of sections) await window.api.mkdir(joinPath(root, s.dir));
     await window.api.writeText(joinPath(root, SCRIPT_DIR, '第一章.vns'), '');
     return ProjectStore.open(root);
   }
@@ -370,23 +374,20 @@ export class ProjectStore {
   // 排進存檔佇列：不會跟正在進行的存檔交錯
   syncFromDisk(): Promise<DiskChanges> {
     return this.enqueue(async () => {
+      const ids = this.sections.map((s) => s.id);
       const changes: DiskChanges = {
         files: { changed: [], added: [], removed: [] },
-        cards: {
-          characters: { changed: [], added: [], removed: [] },
-          world: { changed: [], added: [], removed: [] },
-          commands: { changed: [], added: [], removed: [] },
-        },
-        folders: { files: [], characters: [], world: [], commands: [] },
+        cards: perSection(ids, () => ({ changed: [] as Card[], added: [] as Card[], removed: [] as string[] })),
+        folders: { files: [], ...perSection(ids, () => [] as string[]) },
         meta: null,
       };
       const key = (folder: string, name: string) => `${folder}/${name}`.toLowerCase();
 
       // 一個區塊：用「資料夾＋檔名」找回原本的 id；內容跟上次知道的不一樣就是被改了
       const syncSection = async (section: SectionId, accept: (name: string) => boolean) => {
-        const tree = await scanTree(joinPath(this.root, sectionDir(section)), accept);
+        const tree = await scanTree(joinPath(this.root, this.dirOf(section)), accept);
         changes.folders[section] = tree.folders;
-        const byPath = new Map([...this.locs[section]].map(([id, loc]) => [key(loc.folder, loc.name), id]));
+        const byPath = new Map([...this.locs(section)].map(([id, loc]) => [key(loc.folder, loc.name), id]));
         const seen = new Set<string>();
         const result: { id: string; folder: string; name: string; text: string; isNew: boolean }[] = [];
         for (const f of tree.files) {
@@ -394,17 +395,17 @@ export class ProjectStore {
           const isNew = id === undefined;
           if (id === undefined) {
             id = newId();
-            this.locs[section].set(id, { folder: f.folder, name: f.name });
+            this.locs(section).set(id, { folder: f.folder, name: f.name });
           }
           seen.add(id);
-          if (!isNew && this.known[section].get(id) === f.text) continue; // 沒變
-          this.known[section].set(id, f.text);
+          if (!isNew && this.known(section).get(id) === f.text) continue; // 沒變
+          this.known(section).set(id, f.text);
           result.push({ id, folder: f.folder, name: f.name, text: f.text, isNew });
         }
-        const removed = [...this.locs[section].keys()].filter((id) => !seen.has(id));
+        const removed = [...this.locs(section).keys()].filter((id) => !seen.has(id));
         for (const id of removed) {
-          this.locs[section].delete(id);
-          this.known[section].delete(id);
+          this.locs(section).delete(id);
+          this.known(section).delete(id);
         }
         return { result, removed };
       };
@@ -416,7 +417,7 @@ export class ProjectStore {
       }
       changes.files.removed = scripts.removed;
 
-      for (const section of SECTIONS) {
+      for (const section of ids) {
         const synced = await syncSection(section, (n) => /\.md$/i.test(n));
         for (const f of synced.result) {
           const card = { ...parseCard(f.id, f.name, f.text), folder: f.folder };
@@ -433,7 +434,8 @@ export class ProjectStore {
           const meta = JSON.parse(text);
           if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
             this.meta = meta;
-            changes.meta = { schemas: normalizeSchemas(meta.schemas), order: normalizeOrder(meta.order) };
+            // 區塊清單在專案開著時不跟著外部改動換（要換資料夾得重新讀整個專案），這裡只交出範本和順序
+            changes.meta = { schemas: normalizeSchemas(meta.schemas, ids), order: normalizeOrder(meta.order), sections: this.sections };
           }
         }
       } catch {
@@ -454,7 +456,7 @@ export class ProjectStore {
   // Windows 檔名不分大小寫，所以比對時一律轉小寫
   private uniqueName(section: SectionId, selfId: string, folder: string, wanted: string, ext: string): string {
     const taken = new Set<string>();
-    for (const [id, loc] of this.locs[section]) {
+    for (const [id, loc] of this.locs(section)) {
       if (id !== selfId && loc.folder === folder) taken.add(loc.name.toLowerCase());
     }
     if (!taken.has(wanted.toLowerCase())) return wanted;
@@ -474,11 +476,11 @@ export class ProjectStore {
     newName: string,
     text: string,
   ): Promise<void> {
-    const locs = this.locs[section];
+    const locs = this.locs(section);
     const old = locs.get(id);
     const newPath = joinPath(this.dirPath(section, folder), newName);
 
-    this.known[section].set(id, text);
+    this.known(section).set(id, text);
     if (old === undefined || (old.folder === folder && old.name === newName)) {
       await window.api.writeText(newPath, text);
       locs.set(id, { folder, name: newName });
@@ -511,7 +513,7 @@ export class ProjectStore {
   // 從硬碟讀回上次存的劇本（「不儲存」關分頁時用）；從沒存過回傳 null
   readSavedFile(id: string): Promise<{ name: string; content: string } | null> {
     return this.enqueue(async () => {
-      const loc = this.locs.files.get(id);
+      const loc = this.locs('files').get(id);
       if (!loc) return null;
       return { name: loc.name, content: await window.api.readText(joinPath(this.dirPath('files', loc.folder), loc.name)) };
     });
@@ -520,7 +522,7 @@ export class ProjectStore {
   // 從硬碟讀回上次存的設定卡；從沒存過回傳 null
   readSavedCard(section: CardSectionId, id: string): Promise<Card | null> {
     return this.enqueue(async () => {
-      const loc = this.locs[section].get(id);
+      const loc = this.locs(section).get(id);
       if (!loc) return null;
       const text = await window.api.readText(joinPath(this.dirPath(section, loc.folder), loc.name));
       return { ...parseCard(id, loc.name, text), folder: loc.folder };
@@ -529,10 +531,10 @@ export class ProjectStore {
 
   deleteFile(id: string): Promise<void> {
     return this.enqueue(async () => {
-      const old = this.locs.files.get(id);
+      const old = this.locs('files').get(id);
       if (old === undefined) return; // 從沒存過也沒載入過：硬碟上沒有對應檔案
       await removeFile(joinPath(this.dirPath('files', old.folder), old.name));
-      this.locs.files.delete(id);
+      this.locs('files').delete(id);
     });
   }
 
@@ -546,10 +548,10 @@ export class ProjectStore {
 
   deleteCard(section: CardSectionId, id: string): Promise<void> {
     return this.enqueue(async () => {
-      const old = this.locs[section].get(id);
+      const old = this.locs(section).get(id);
       if (old === undefined) return;
       await removeFile(joinPath(this.dirPath(section, old.folder), old.name));
-      this.locs[section].delete(id);
+      this.locs(section).delete(id);
     });
   }
 
@@ -559,12 +561,12 @@ export class ProjectStore {
   // 目標已有同名項目就丟錯；還沒存過的（沒登記位置）不用搬，之後存檔自然會存到新資料夾
   private moveItem(section: SectionId, id: string, toFolder: string): Promise<void> {
     return this.enqueue(async () => {
-      const old = this.locs[section].get(id);
+      const old = this.locs(section).get(id);
       if (old === undefined || old.folder === toFolder) return;
       const newPath = joinPath(this.dirPath(section, toFolder), old.name);
       if (await window.api.exists(newPath)) throw new Error(MOVE_CONFLICT);
       await window.api.rename(joinPath(this.dirPath(section, old.folder), old.name), newPath);
-      this.locs[section].set(id, { folder: toFolder, name: old.name });
+      this.locs(section).set(id, { folder: toFolder, name: old.name });
     });
   }
 
@@ -587,7 +589,7 @@ export class ProjectStore {
       const newAbs = this.dirPath(section, newRel);
       if (await window.api.exists(newAbs)) throw new Error(MOVE_CONFLICT);
       await window.api.rename(this.dirPath(section, folder), newAbs);
-      for (const loc of this.locs[section].values()) {
+      for (const loc of this.locs(section).values()) {
         if (isInFolder(loc.folder, folder)) loc.folder = newRel + loc.folder.slice(folder.length);
       }
       return newRel;
@@ -618,7 +620,7 @@ export class ProjectStore {
         throw new Error('已經有同名的項目');
       }
       await window.api.rename(oldAbs, newAbs);
-      for (const loc of this.locs[section].values()) {
+      for (const loc of this.locs(section).values()) {
         if (isInFolder(loc.folder, folder)) loc.folder = newRel + loc.folder.slice(folder.length);
       }
       return newRel;
@@ -631,8 +633,8 @@ export class ProjectStore {
       if (folder === '') throw new Error('不能刪除區塊的根目錄');
       const abs = this.dirPath(section, folder);
       if (await window.api.exists(abs)) await window.api.remove(abs, { recursive: true });
-      for (const [id, loc] of [...this.locs[section]]) {
-        if (isInFolder(loc.folder, folder)) this.locs[section].delete(id);
+      for (const [id, loc] of [...this.locs(section)]) {
+        if (isInFolder(loc.folder, folder)) this.locs(section).delete(id);
       }
     });
   }

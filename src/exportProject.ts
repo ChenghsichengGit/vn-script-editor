@@ -3,7 +3,7 @@
 import { buildAiGuide } from './aiGuide';
 import { Card, CardSectionId, ItemOrder, Schemas, SectionId, orderEntries } from './model';
 import { parentFolder } from './projectFiles';
-import { sectionMeta } from './sampleData';
+import { cardSectionIds, sectionMeta } from './sections';
 
 export interface ExportInput {
   name: string;
@@ -39,7 +39,6 @@ function walk<T>(
   }
 }
 
-const SECTIONS: CardSectionId[] = ['characters', 'world', 'commands'];
 
 export function buildProjectExport(input: ExportInput): string {
   const out: string[] = [];
@@ -57,14 +56,14 @@ export function buildProjectExport(input: ExportInput): string {
   push(...guide.map((l) => (/^#{1,5} /.test(l) ? `#${l}` : l)), '');
 
   // 2. 設定卡
-  for (const section of SECTIONS) {
-    const title = sectionMeta[section].title;
+  for (const section of cardSectionIds()) {
+    const title = sectionMeta(section).title;
     push(`## ${title}`, '');
     const before = out.length;
     walk(
       section,
       input,
-      (folder) => input.cards[section].filter((c) => (c.folder ?? '') === folder),
+      (folder) => (input.cards[section] ?? []).filter((c) => (c.folder ?? '') === folder),
       (c) => c.name,
       (card, folder) => {
         push(`### ${folder ? `${folder}/` : ''}${card.name || '（未命名）'}`, '');

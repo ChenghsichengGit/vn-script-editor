@@ -1,7 +1,7 @@
 // 版面：四個區塊各自放在哪裡（左側欄、右側欄、浮動視窗）、哪些被隱藏、各自多高、側邊欄多寬
 // 會記在瀏覽器的 localStorage；這個檔案只放資料的形狀和純函式，不碰畫面
 import { SectionId } from './model';
-import { sectionOrder } from './sampleData';
+import { sectionOrder } from './sections';
 
 export type Side = 'left' | 'right';
 
@@ -42,7 +42,7 @@ export const FLOAT_DEFAULT_W = 300;
 export const FLOAT_DEFAULT_H = 380;
 
 const defaultLayout = (): Layout => ({
-  left: { sections: [...sectionOrder], width: 300 },
+  left: { sections: sectionOrder(), width: 300 },
   right: { sections: [], width: 300 },
   floating: [],
   hidden: [],
@@ -53,7 +53,8 @@ const defaultLayout = (): Layout => ({
   panelTab: 'problems',
 });
 
-const isSection = (x: unknown): x is SectionId => sectionOrder.includes(x as SectionId);
+// 區塊 id 是專案自訂的：任何非空字串都留著（別的專案才有的區塊，版面位置也記著，換回那個專案時還在）
+const isSection = (x: unknown): x is SectionId => typeof x === 'string' && x !== '';
 const num = (x: unknown, fallback: number) => (typeof x === 'number' && Number.isFinite(x) ? x : fallback);
 const clampWidth = (w: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
 
@@ -72,18 +73,18 @@ function normalizeLayout(raw: unknown): Layout {
     });
 
   const sizes: Layout['sizes'] = {};
-  for (const id of sectionOrder) {
+  for (const id of Object.keys(r.sizes ?? {})) {
     const v = r.sizes?.[id];
     if (typeof v === 'number' && Number.isFinite(v) && v > 0) sizes[id] = v;
   }
 
   // 舊格式
   if (!r.left || typeof r.left !== 'object') {
-    const open: SectionId[] = Array.isArray(r.open) ? r.open.filter(isSection) : [...sectionOrder];
+    const open: SectionId[] = Array.isArray(r.open) ? r.open.filter(isSection) : sectionOrder();
     return {
       ...base,
-      left: { sections: [...sectionOrder], width: clampWidth(num(r.width, 300)) },
-      hidden: sectionOrder.filter((s) => !open.includes(s)),
+      left: { sections: sectionOrder(), width: clampWidth(num(r.width, 300)) },
+      hidden: sectionOrder().filter((s) => !open.includes(s)),
       sizes,
     };
   }
@@ -103,7 +104,7 @@ function normalizeLayout(raw: unknown): Layout {
       z: num(f.z, floating.length + 1),
     });
   }
-  for (const id of sectionOrder) if (!seen.has(id)) left.push(id); // 漏掉的補回左邊
+  for (const id of sectionOrder()) if (!seen.has(id)) left.push(id); // 漏掉的補回左邊
 
   return {
     left: { sections: left, width: clampWidth(num(r.left.width, 300)) },
@@ -152,4 +153,11 @@ export function floatSection(l: Layout, id: SectionId, rect: { x: number; y: num
   const next = detach(l, id);
   const z = Math.max(0, ...l.floating.map((f) => f.z)) + 1;
   return unhide({ ...next, floating: [...next.floating, { id, ...rect, z }] }, id);
+}
+
+// 打開專案後：這個專案有、但版面裡哪裡都沒記的區塊（例如剛新增的），補到左側欄最下面
+export function reconcileLayout(l: Layout, ids: SectionId[]): Layout {
+  const placed = new Set([...l.left.sections, ...l.right.sections, ...l.floating.map((f) => f.id)]);
+  const missing = ids.filter((id) => !placed.has(id));
+  return missing.length === 0 ? l : { ...l, left: { ...l.left, sections: [...l.left.sections, ...missing] } };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardOps, CardSectionId, SchemaField } from '../model';
 import { fieldIconDef } from '../fieldIcons';
-import { sectionMeta } from '../sampleData';
+import { sectionMeta } from '../sections';
 import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
 import Icon from './Icon';
@@ -126,7 +126,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         }}
       >
         <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
-        <Icon icon={sectionMeta[section].icon} className="tree-icon" />
+        <Icon icon={sectionMeta(section).icon} className="tree-icon" />
         {renaming ? (
           <NameInput initial={card.name} onSubmit={onRename} onClose={onRenameClose} />
         ) : (

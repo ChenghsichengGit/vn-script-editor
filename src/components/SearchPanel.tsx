@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
-import { fileIcon, sectionMeta } from '../sampleData';
+import { fileIcon } from '../sampleData';
+import { sectionMeta } from '../sections';
 import { MAX_RESULTS, SearchGroup, SearchHit, SearchInput, SearchMatch, buildRegex, replacementFor, searchProject } from '../projectSearch';
 
 // 搜尋框的內容與選項：放在 App 裡，切到「問題」分頁或關掉面板再打開時還在
@@ -82,7 +83,7 @@ export default function SearchPanel({
     );
   };
 
-  const groupIcon = (g: SearchGroup) => (g.kind === 'file' ? fileIcon(g.name) : sectionMeta[g.section!].icon);
+  const groupIcon = (g: SearchGroup) => (g.kind === 'file' ? fileIcon(g.name) : sectionMeta(g.section!).icon);
 
   return (
     <div className="search-panel">
