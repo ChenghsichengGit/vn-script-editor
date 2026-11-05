@@ -64,6 +64,7 @@ import {
 import {
   ProjectData,
   ProjectStore,
+  assertProject,
   folderBase,
   isInFolder,
   openRecent,
@@ -837,11 +838,13 @@ export default function App() {
       } else if (ev.type === 'open-project') {
         if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
         const root = await pickFolder();
+        if (root) await assertProject(root); // 不是專案的資料夾：不打開（錯誤訊息在下面的 catch 顯示）
         // 已經在別的視窗開著：跳到那個視窗，這個視窗維持原樣
         if (root && (await window.api.claimProject(root))) await openOpened(await ProjectStore.open(root));
       } else if (ev.type === 'open-recent') {
         if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
         await openRecent(ev.path);
+        await assertProject(ev.path);
         if (await window.api.claimProject(ev.path)) await openOpened(await ProjectStore.open(ev.path));
       } else if (ev.type === 'import-project') {
         if (!(await flushBeforeLeave('有內容存檔失敗，確定要離開目前的專案嗎？'))) return;
@@ -898,6 +901,12 @@ export default function App() {
   // Ctrl+B：收起／打開左側欄；Ctrl+S：存目前的分頁（Ctrl+K S 全部存檔在上面的快捷鍵那裡）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 正式版：Ctrl+R、Ctrl+Shift+R、F5 不要重新載入畫面（重新載入等於重開程式，會再自動開一次上次的專案）
+      // 開發版照樣可以用，改程式時要重新整理
+      if (import.meta.env.PROD && (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r'))) {
+        e.preventDefault();
+        return;
+      }
       if (e.ctrlKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setLeftVisible((v) => !v);

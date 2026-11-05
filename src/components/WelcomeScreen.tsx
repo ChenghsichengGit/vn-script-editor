@@ -4,12 +4,15 @@ import Icon from './Icon';
 import {
   ProjectData,
   ProjectStore,
+  assertProject,
   baseName,
+  joinPath,
   forgetProject,
   getRecentProjects,
   openRecent as allowRecent,
   pickFolder,
   rememberProject,
+  sanitizeName,
 } from '../projectFiles';
 
 type Recent = { name: string; path: string };
@@ -72,13 +75,16 @@ export default function WelcomeScreen({
     run(async () => {
       const dir = await pickFolder();
       // 已經在別的視窗開著：跳到那個視窗，這裡不開
-      return dir && (await window.api.claimProject(dir)) ? ProjectStore.open(dir) : null;
+      if (!dir) return null;
+      await assertProject(dir);
+      return (await window.api.claimProject(dir)) ? ProjectStore.open(dir) : null;
     });
 
   const openRecent = (path: string) =>
     run(async () => {
       // 先請主程式允許存取這個資料夾（資料夾不見了會丟錯）
       await allowRecent(path);
+      await assertProject(path);
       if (!(await window.api.claimProject(path))) return null; // 已經在別的視窗開著
       return ProjectStore.open(path);
     });
@@ -96,17 +102,25 @@ export default function WelcomeScreen({
       const dir = await pickFolder();
       if (dir) {
         setCreating(dir);
-        setNewName(baseName(dir));
+        setNewName('');
       }
     } catch (e) {
       setError(`發生錯誤：${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
+  // 建立新專案：在選的位置底下新增一個「專案名稱」資料夾，專案的東西都放在裡面（不會直接放進選的資料夾）
+  const newFolderName = newName.trim() ? sanitizeName(newName.trim()) : '';
   const confirmCreate = () =>
     run(async () => {
-      await window.api.claimProject(creating!);
-      return ProjectStore.create(creating!, newName.trim() || baseName(creating!));
+      const name = newName.trim();
+      if (!name) throw new Error('請輸入專案名稱');
+      const root = joinPath(creating!, newFolderName);
+      if (await window.api.exists(root)) {
+        throw new Error(`「${baseName(creating!)}」裡已經有「${newFolderName}」這個資料夾，請換一個名稱`);
+      }
+      await window.api.claimProject(root);
+      return ProjectStore.create(root, name);
     });
 
   const removeRecent = async (path: string) => {
@@ -122,7 +136,7 @@ export default function WelcomeScreen({
 
         {creating ? (
           <div className="welcome-create">
-            <div className="welcome-label">在「{baseName(creating)}」資料夾建立新專案</div>
+            <div className="welcome-label">在「{baseName(creating)}」裡建立新專案</div>
             <input
               autoFocus
               value={newName}
@@ -130,6 +144,7 @@ export default function WelcomeScreen({
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && confirmCreate()}
             />
+            <div className="welcome-hint">會新增資料夾：{joinPath(creating, newFolderName || '（專案名稱）').replace(/\//g, '\\')}</div>
             <div className="welcome-actions">
               <button className="primary" disabled={busy} onClick={confirmCreate}>
                 建立
@@ -152,7 +167,7 @@ export default function WelcomeScreen({
             </button>
           </div>
         )}
-        {!creating && <p className="welcome-hint">建立新專案時，請選擇（或在選擇視窗裡新建）一個空的資料夾。</p>}
+        {!creating && <p className="welcome-hint">建立新專案時，先選要放在哪裡、再取名字，會在那裡新增一個同名的專案資料夾。</p>}
 
         {error && <p className="welcome-error">{error}</p>}
 

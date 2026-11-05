@@ -89,6 +89,14 @@ export function pickFolder(): Promise<string | null> {
   return window.api.pickFolder();
 }
 
+// 沒有 project.json 的資料夾不是專案：開之前先擋下來，不打開也不寫任何檔案進去
+// （不然會在別人的資料夾裡生出 AI說明.md 這些東西）
+export async function assertProject(root: string): Promise<void> {
+  if (!(await window.api.exists(joinPath(root, 'project.json')))) {
+    throw new Error(`「${baseName(root)}」不是 VN Script Editor 專案（裡面沒有 project.json）。要開新的專案，請用「建立新專案」。`);
+  }
+}
+
 export function getRecentProjects(): Promise<{ name: string; path: string }[]> {
   return window.api.getRecent();
 }
@@ -292,6 +300,7 @@ export class ProjectStore {
   }
 
   static async open(root: string): Promise<{ store: ProjectStore; data: ProjectData }> {
+    await assertProject(root);
     const store = new ProjectStore(root);
 
     // 專案名稱：project.json 的 name，讀不到就用資料夾名稱
