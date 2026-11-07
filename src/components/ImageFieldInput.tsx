@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { imageError, imageFiles, imageSrc, pickImage, saveImageFile } from '../images';
+import { openImageViewer } from './ImageViewer';
 
 // 卡片分頁裡的圖片欄位：value = 圖片的相對路徑（例如 圖片/立繪.png），空字串 = 還沒放圖
 // 放圖的方式：點「選擇圖片」、從檔案總管拖進來、點一下這一格再按 Ctrl+V 貼上
+// 點圖片：放大在畫面中央（換圖用「換一張」）
 // 「移除」只是清掉欄位，圖檔留在「圖片」資料夾裡（別的地方可能還在用）
 export default function ImageFieldInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const [over, setOver] = useState(false);
@@ -49,7 +51,7 @@ export default function ImageFieldInput({ value, onChange }: { value: string; on
         broken ? (
           <div className="image-field-missing">找不到圖片：{value}</div>
         ) : (
-          <img className="image-field-img" src={src} alt={value} draggable={false} onError={() => setBroken(true)} onClick={choose} />
+          <img className="image-field-img" src={src} alt={value} draggable={false} onError={() => setBroken(true)} onClick={() => openImageViewer(value)} title="點一下放大" />
         )
       ) : (
         <button type="button" className="image-field-placeholder" onClick={choose}>

@@ -885,13 +885,13 @@ del.search-match { text-decoration: line-through; background: rgba(255, 0, 0, 0.
 
 /* ── 圖片 ── */
 /* 側邊欄預覽：縮圖放在欄位名稱下面，最寬撐滿、最高 160px */
-.card-image { display: block; max-width: 100%; max-height: 160px; object-fit: contain; border-radius: 3px; box-sizing: border-box; }
+.card-image { display: block; max-width: 100%; max-height: 160px; object-fit: contain; border-radius: 3px; box-sizing: border-box; cursor: zoom-in; }
 .card-fold-value .card-image { margin-top: 2px; }
 .card-image-missing { display: block; color: var(--error); font-size: 12px; }
 /* 卡片分頁的圖片欄位：有圖顯示圖和「換一張／移除」；沒圖是虛線框，可以點、拖進來、貼上 */
 .image-field { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; border-radius: 4px; outline: none; }
 .image-field:focus-visible, .image-field.drop { outline: 2px solid var(--accent); outline-offset: 2px; }
-.image-field-img { display: block; max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 4px; cursor: pointer; background: var(--bg-hover); }
+.image-field-img { display: block; max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: var(--bg-hover); }
 .image-field-placeholder {
   width: 100%;
   min-height: 30px;
@@ -943,3 +943,10 @@ body.image-resizing, body.image-resizing * { cursor: nwse-resize !important; use
 .change-bar-dot { width: 7px; height: 7px; border-radius: 50%; background: rgb(230, 190, 60); }
 .change-bar-btn { margin-left: auto; font: inherit; color: var(--accent); background: none; border: none; cursor: pointer; padding: 2px 4px; }
 .change-bar-btn:hover { text-decoration: underline; }
+
+/* 點圖片放大：畫面變暗，圖片在中央；滾輪縮放、拖曳移動（ImageViewer.tsx） */
+.image-viewer { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.55); overflow: hidden; cursor: zoom-out; }
+.image-viewer-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; cursor: grab; user-select: none; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
+body.image-viewer-dragging, body.image-viewer-dragging .image-viewer-img { cursor: grabbing; }
+.image-viewer-info { position: absolute; right: 16px; bottom: 12px; padding: 3px 8px; border-radius: 3px; font-size: 12px; color: #ddd; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
+.image-viewer-missing { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 10px 16px; border: 1px dashed var(--error-border); border-radius: 4px; color: var(--error); background: var(--bg); }

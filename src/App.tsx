@@ -31,6 +31,7 @@ import CloseDialog from './components/CloseDialog';
 import UpdateDialog from './components/UpdateDialog';
 import HelpDialog, { HelpTopic } from './components/HelpDialog';
 import Tooltip from './components/Tooltip';
+import ImageViewerHost from './components/ImageViewer';
 import Icon from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
 import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
@@ -1522,6 +1523,7 @@ export default function App() {
         <UpdateDialog beforeInstall={() => flushRef.current()} manualCheck={updateCheck} />
         {help && <HelpDialog topic={help} onClose={() => setHelp(null)} />}
         <Tooltip />
+        <ImageViewerHost />
         {quickPickView}
       </>
     );
@@ -1660,6 +1662,7 @@ export default function App() {
       <UpdateDialog beforeInstall={() => flushRef.current()} manualCheck={updateCheck} />
       {help && <HelpDialog topic={help} onClose={() => setHelp(null)} />}
       <Tooltip />
+      <ImageViewerHost />
       {tabCloseDialog()}
       {conflictDialog}
       {quickPickView}

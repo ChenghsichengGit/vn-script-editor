@@ -7,6 +7,7 @@ import NameInput from './NameInput';
 import Icon from './Icon';
 import FieldText from './FieldText';
 import { imageSrc } from '../images';
+import { openImageViewer } from './ImageViewer';
 import { hasMarks, useChangeMarks } from '../changeMarks';
 
 // 側邊欄的圖片欄位縮圖；讀不到圖（檔案不見、內容不是圖片路徑）就改成文字「找不到圖片」，不畫破圖
@@ -15,7 +16,20 @@ function CardImage({ path, className }: { path: string; className?: string }) {
   useEffect(() => setBroken(false), [path]);
   const cls = className ? ` ${className}` : '';
   if (broken) return <span className={`card-image-missing${cls}`} title={path}>找不到圖片</span>;
-  return <img className={`card-image${cls}`} src={imageSrc(path)} alt={path} title={path} draggable={false} onError={() => setBroken(true)} />;
+  return (
+    <img
+      className={`card-image${cls}`}
+      src={imageSrc(path)}
+      alt={path}
+      title={`${path}（點一下放大）`}
+      draggable={false}
+      onError={() => setBroken(true)}
+      onClick={(e) => {
+        e.stopPropagation(); // 不要觸發所在那一列的展開／收合
+        openImageViewer(path);
+      }}
+    />
+  );
 }
 
 interface Props {
