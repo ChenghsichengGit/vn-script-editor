@@ -24,28 +24,46 @@ export default function Sidebar(props: Props) {
 
   const filler = sections[sections.length - 1]; // 負責填滿空間的那一塊
 
-  // 拖曳第 index 條分隔線：改變上方區塊的高度
-  // 下方如果是填滿用的區塊，它會自動吸收差額；如果是固定高度的，就一增一減
+  // 拖曳第 index 條分隔線（在第 index 和 index+1 塊之間）
+  // 一步一步推：每次滑鼠移動只套用這一小段位移，從目前的高度算起
+  //   拖的方向那一邊的區塊由近到遠依序縮（最近的縮到最小，再推下一塊）；另一邊緊鄰的那塊變高
+  //   往回拖時，之前被推過的區塊留在原地，不會彈回來
+  //   推到底後線停住；滑鼠要回到線的位置，線才再跟著動（線和滑鼠一直對齊）
+  // 填滿用的區塊（最下面）不記高度，它會自動吸收差額
   const startSectionResize = (index: number, e: React.MouseEvent) => {
     e.preventDefault();
-    const above = sections[index];
-    const below = sections[index + 1];
-    if (!above || !below) return;
+    if (!sections[index] || !sections[index + 1]) return;
 
     const height = (id: SectionId) =>
       asideRef.current!.querySelector(`:scope > [data-section="${id}"]`)!.getBoundingClientRect().height;
-    const startAbove = height(above);
-    const startBelow = height(below);
-    const startY = e.clientY;
-    const belowMin = below === filler ? FILLER_MIN_HEIGHT : MIN_HEIGHT;
+    const start = sections.map(height);
+    const cur = start.slice(); // 目前的高度（每一步都在這上面改）
+    const minOf = (i: number) => (sections[i] === filler ? FILLER_MIN_HEIGHT : MIN_HEIGHT);
+    const all = sections.map((_, i) => i);
+    let lineY = e.clientY; // 線目前在哪（滑鼠拖過頭時，線停在這裡）
 
     dragWith((ev) => {
-      let dy = ev.clientY - startY;
-      // 上下兩塊都不能比最小高度矮，否則內容會撐出側邊欄、跑出捲軸
-      dy = Math.max(MIN_HEIGHT - startAbove, dy);
-      dy = Math.min(startBelow - belowMin, dy);
-      const sizes = { ...layout.sizes, [above]: startAbove + dy };
-      if (below !== filler) sizes[below] = startBelow - dy;
+      const dy = ev.clientY - lineY;
+      if (dy === 0) return;
+      // 往下拖：下方由近到遠縮、上方緊鄰的那塊變高；往上拖反過來
+      const shrink = dy > 0 ? all.slice(index + 1) : all.slice(0, index + 1).reverse();
+      const grow = dy > 0 ? index : index + 1;
+      let left = Math.abs(dy);
+      for (const i of shrink) {
+        if (left <= 0) break;
+        const take = Math.min(left, Math.max(0, cur[i] - minOf(i)));
+        cur[i] -= take;
+        left -= take;
+      }
+      // 每一塊都縮到最小了：多拖的部分不算（區塊不能比最小高度矮，否則內容會撐出側邊欄、跑出捲軸）
+      const moved = Math.abs(dy) - left;
+      if (moved === 0) return; // 已經推到底，滑鼠還在線的外側：線不動
+      cur[grow] += moved;
+      lineY += Math.sign(dy) * moved;
+      const sizes = { ...layout.sizes };
+      sections.forEach((id, i) => {
+        if (id !== filler && cur[i] !== start[i]) sizes[id] = cur[i];
+      });
       onLayoutChange({ sizes });
     });
   };
