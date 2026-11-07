@@ -227,6 +227,9 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
             <Toggle checked={s.aiPlayback} onChange={(v) => updateSettings({ aiPlayback: v })} />
           </Row>
+          <Row label="標出外部修改" hint="一起寫的人（或 AI）在程式外面改了檔案：改到的行、欄位、段落用淡黃底標出來，側邊欄也會有黃點；按分頁上方的「清除標記」才會消失">
+            <Toggle checked={s.markExternal} onChange={(v) => updateSettings({ markExternal: v })} />
+          </Row>
         </div>
 
         <div className="settings-footer">

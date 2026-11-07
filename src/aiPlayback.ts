@@ -14,7 +14,7 @@ const TICK = 20;
 const DELETE_PAUSE: Record<PlaybackSpeed, number> = { slow: 500, normal: 280, fast: 120 };
 
 // 一段改動：舊內容的第 oldStart 行起 oldCount 行，換成新內容的第 newStart 行起 newCount 行（都從 0 開始）
-interface Hunk {
+export interface Hunk {
   oldStart: number;
   oldCount: number;
   newStart: number;
@@ -22,7 +22,7 @@ interface Hunk {
 }
 
 // 以行為單位比對（最長共同子序列）：找出哪些行是新加的、哪些是刪掉的
-function diffLines(a: string[], b: string[]): Hunk[] {
+export function diffLines(a: string[], b: string[]): Hunk[] {
   // 前後一樣的行先去掉，中間才做完整比對（AI 通常只改一小部分，這樣快很多）
   let head = 0;
   while (head < a.length && head < b.length && a[head] === b[head]) head++;

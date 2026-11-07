@@ -4,6 +4,8 @@ import { DEFAULT_FONT_FAMILY, getSettings, updateSettings, useSettings } from '.
 import { LANGUAGE_ID, registerScriptLanguage, scriptHeadings, setHeadingLevel } from '../scriptLanguage';
 import Outline, { Heading } from './Outline';
 import { SAVE_ALL_EVENT } from '../model';
+import { attachModel } from '../changeMarks';
+import ChangeBar from './ChangeBar';
 
 interface Props {
   fileId: string;
@@ -80,6 +82,7 @@ export default function ScriptEditor(props: Props) {
   return (
     <div className="script-editor">
       <div className="script-editor-main">
+        <ChangeBar markKey={props.fileId} />
         {/* path 讓每個檔案有各自的內容和復原紀錄；同一個檔案開在兩個畫面時共用同一份，內容自動同步 */}
         <Editor
           path={props.fileId}
@@ -93,6 +96,7 @@ export default function ScriptEditor(props: Props) {
             editorRef.current = editor;
             monacoRef.current = monaco;
             modelRef.current = editor.getModel();
+            if (modelRef.current) attachModel(props.fileId, modelRef.current); // 畫上「外部修改」的標記
             if (isScript) {
               // 大綱：內容一改就重新找標題；游標一動就更新目前所在的段落
               const collect = () => {

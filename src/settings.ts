@@ -14,6 +14,7 @@ export interface Settings {
   openLastProject: boolean; // 程式啟動時直接開啟上次的專案
   aiPlayback: boolean; // 外部（例如 AI）改了檔案時：切到那個分頁、播放打字效果
   aiSpeed: 'slow' | 'normal' | 'fast'; // 打字效果的速度
+  markExternal: boolean; // 外部（一起寫的人、AI）改過的地方用淡黃底標出來，直到按「清除標記」
   theme: 'dark' | 'light' | 'hc'; // 顏色主題：深色、淺色、高對比
 }
 
@@ -33,6 +34,7 @@ export const defaultSettings: Settings = {
   openLastProject: true,
   aiPlayback: true,
   aiSpeed: 'normal',
+  markExternal: true,
   theme: 'dark',
 };
 
@@ -65,6 +67,7 @@ function normalize(raw: unknown): Settings {
     openLastProject: bool(r.openLastProject, d.openLastProject),
     aiPlayback: bool(r.aiPlayback, d.aiPlayback),
     aiSpeed: r.aiSpeed === 'slow' || r.aiSpeed === 'normal' || r.aiSpeed === 'fast' ? r.aiSpeed : d.aiSpeed,
+    markExternal: bool(r.markExternal, d.markExternal),
     theme: r.theme === 'dark' || r.theme === 'light' || r.theme === 'hc' ? r.theme : d.theme,
   };
 }

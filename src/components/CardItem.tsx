@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Card, CardOps, CardSectionId, Field, SchemaField } from '../model';
+import { Card, CardOps, CardSectionId, Field, SchemaField, cardTabId } from '../model';
 import { fieldIconDef } from '../fieldIcons';
 import { sectionMeta } from '../sections';
 import { RichTextView } from './RichTextEditor';
@@ -7,6 +7,7 @@ import NameInput from './NameInput';
 import Icon from './Icon';
 import FieldText from './FieldText';
 import { imageSrc } from '../images';
+import { hasMarks, useChangeMarks } from '../changeMarks';
 
 // 側邊欄的圖片欄位縮圖；讀不到圖（檔案不見、內容不是圖片路徑）就改成文字「找不到圖片」，不畫破圖
 function CardImage({ path, className }: { path: string; className?: string }) {
@@ -70,6 +71,7 @@ function FieldKey({ name, children }: { name: string; children: React.ReactNode 
 // 側邊欄裡的一張設定卡（只能看，不能改）
 // 點整列：展開／收起（欄位和詳細內容）；鉛筆圖示：在分頁開啟編輯；右鍵：選單（重新命名／刪除）
 export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '', schemaFields }: Props) {
+  useChangeMarks(); // 「外部修改」的黃點一變就重畫
   const [open, setOpen] = useState(false);
   const [openFields, setOpenFields] = useState<Set<number>>(new Set()); // 被點開的「收合欄位」
 
@@ -158,6 +160,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         ) : (
           <CardName section={section} name={card.name} />
         )}
+        {hasMarks(cardTabId(section, card.id)) && <span className="ext-dot" title="有其他人的修改" />}
         {!renaming && (
           <button
             className="icon-btn card-edit"

@@ -47,6 +47,7 @@ import { fileIcon } from './sampleData';
 import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
 import SectionsDialog from './components/SectionsDialog';
 import { setImageRoot } from './images';
+import { applyTextMinimal, clearAllMarks, markCardChange, markFileChange, suspendMarks } from './changeMarks';
 import {
   FLOAT_DEFAULT_H,
   FLOAT_DEFAULT_W,
@@ -333,35 +334,38 @@ export default function App() {
   const askConflict = (label: string) => new Promise<boolean>((resolve) => setConflict({ label, resolve }));
 
   // 劇本開著（有編輯器在用）的話，內容要直接改編輯器的，不然畫面不會變
+  // 只改有變的那幾行：沒變的行上的「外部修改」標記和游標位置都留著
   const setModelText = (fileId: string, text: string) => {
     const model = monaco.editor.getModels().find((m) => m.uri.path.replace(/^\//, '') === fileId);
-    if (model && model.getValue() !== text) {
-      model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => null);
-      model.pushStackElement();
-    }
+    if (model) applyTextMinimal(model, text);
   };
 
   // 一個劇本被外部改了（或新增）：切過去播放打字效果，或直接套用
   const applyFile = async (id: string, text: string) => {
     const { aiPlayback, aiSpeed } = getSettings();
+    const oldText = latest.current.contents[id] ?? '';
     if (aiPlayback) {
       openTab(id);
       const editor = await waitForEditor(id);
       if (editor) {
         playingRef.current.add(id);
+        const resumeMarks = suspendMarks(id); // 播放中先不追蹤標記，播完由 markFileChange 重新算位置
         try {
           await playEdit(editor, editor.getValue(), text, aiSpeed);
         } finally {
           playingRef.current.delete(id);
+          resumeMarks();
         }
       }
     } else setModelText(id, text);
     setContents((c) => ({ ...c, [id]: text }));
+    markFileChange(id, oldText, text);
   };
 
   // 一張設定卡被外部改了（或新增）：換成新內容，切過去讓改到的欄位亮一下
   const applyCard = async (section: CardSectionId, card: Card, isNew: boolean) => {
     const before = latest.current.cards[section].find((c) => c.id === card.id);
+    markCardChange(cardTabId(section, card.id), before, card);
     setCards((all) => ({
       ...all,
       [section]: isNew ? [...all[section], card] : all[section].map((c) => (c.id === card.id ? card : c)),
@@ -727,6 +731,7 @@ export default function App() {
     setSaveState('saved');
     setProject({ store, name: data.name });
     setImageRoot(store.root); // 圖片的相對路徑都接在這個資料夾後面
+    clearAllMarks(); // 上一個專案的「外部修改」標記不要帶過來
     // 監看專案資料夾：外部（例如 AI）改了檔案就讀進來
     window.api.watchProject(store.root).catch(reportError);
   };
@@ -748,6 +753,7 @@ export default function App() {
     dockRef.current?.saveLayout(); // 編輯區即將卸載，先把版面存起來
     setProject(null);
     setImageRoot(null);
+    clearAllMarks();
     setFiles({});
     setFolders(emptyFolders);
     setContents({});

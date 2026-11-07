@@ -818,7 +818,9 @@ del.search-match { text-decoration: line-through; background: rgba(255, 0, 0, 0.
 
 /* 劇本編輯器：左邊是編輯區，有標題時右邊多一欄大綱 */
 .script-editor { display: flex; height: 100%; min-width: 0; }
-.script-editor-main { flex: 1; min-width: 0; height: 100%; }
+.script-editor-main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+/* Monaco 的外框（@monaco-editor/react 寫死 height: 100%）：上面有提示條時改成填滿剩下的空間 */
+.script-editor-main > section { flex: 1; min-height: 0; height: auto !important; }
 /* 劇本裡的標題那一行（//# 大標題 等）整行加一點底色 */
 .monaco-editor .vns-h1-line { background: var(--h1-line); }
 .monaco-editor .vns-h2-line { background: var(--h2-line); }
@@ -928,3 +930,16 @@ body.image-resizing, body.image-resizing * { cursor: nwse-resize !important; use
 .rich-image-missing { padding: 6px 10px; border: 1px dashed var(--error-border); border-radius: 4px; color: var(--error); font-size: 12px; line-height: 1.5; }
 .rich-view .rich-image-box { max-height: 200px; }
 .rich-view .rich-image-box img { max-height: 200px; width: auto; }
+
+/* 外部（一起寫的人、AI）改過的地方：淡黃底，按分頁上方的「清除標記」才消失 */
+.monaco-editor .ext-change-line { background: rgba(230, 190, 60, 0.13); }
+.monaco-editor .ext-change-gutter { background: rgba(230, 190, 60, 0.9); width: 3px !important; margin-left: 2px; }
+.monaco-editor .ext-change-del::before { content: ''; position: absolute; top: -4px; left: 0; border: 4px solid transparent; border-left: 6px solid rgba(230, 90, 90, 0.95); }
+.rich-content .ext-changed-block { background: rgba(230, 190, 60, 0.13); box-shadow: -6px 0 0 rgba(230, 190, 60, 0.13), -9px 0 0 rgba(230, 190, 60, 0.8); border-radius: 2px; }
+.card-editor-row.ext-changed { background: rgba(230, 190, 60, 0.13); box-shadow: -6px 0 0 rgba(230, 190, 60, 0.13), -9px 0 0 rgba(230, 190, 60, 0.8); border-radius: 3px; }
+.card-editor .card-editor-name.ext-changed { background: rgba(230, 190, 60, 0.13); }
+.ext-dot { width: 7px; height: 7px; border-radius: 50%; background: rgb(230, 190, 60); flex-shrink: 0; margin: 0 6px; }
+.change-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 12px; color: var(--text); background: rgba(230, 190, 60, 0.16); border-bottom: 1px solid rgba(230, 190, 60, 0.45); flex-shrink: 0; }
+.change-bar-dot { width: 7px; height: 7px; border-radius: 50%; background: rgb(230, 190, 60); }
+.change-bar-btn { margin-left: auto; font: inherit; color: var(--accent); background: none; border: none; cursor: pointer; padding: 2px 4px; }
+.change-bar-btn:hover { text-decoration: underline; }

@@ -96,6 +96,7 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
         isCommand={cardRef.section === 'commands'}
         schemaFields={ctx.schemas[cardRef.section].fields}
         flashKeys={ctx.flash?.tabId === tabId ? ctx.flash.keys : undefined}
+        markKey={tabId}
         onChange={(patch) => ctx.onCardChange(cardRef.section, card.id, patch)}
       />
     );

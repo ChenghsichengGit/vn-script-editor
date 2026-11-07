@@ -8,6 +8,7 @@ import CardItem from './CardItem';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import NameInput from './NameInput';
 import Icon from './Icon';
+import { hasMarks, useChangeMarks } from '../changeMarks';
 
 const INDENT = 14; // 每深一層資料夾縮排多少像素
 const EXPAND_DELAY = 600; // 拖著東西停在摺起來的資料夾上多久（毫秒）就自動展開
@@ -81,6 +82,7 @@ interface Props extends TreeProps {
 
 // 一個區塊：標題列 + 檔案／設定卡的樹。放在左右側邊欄或浮動視窗裡都是同一個元件
 export default function SectionPanel(props: Props) {
+  useChangeMarks(); // 「外部修改」的黃點一變就重畫
   const { id, collapsed, setCollapsed } = props;
   const meta = sectionMeta(id);
 
@@ -457,6 +459,7 @@ export default function SectionPanel(props: Props) {
           ) : (
             <span className="tree-label">{file.name}</span>
           )}
+          {hasMarks(fileId) && <span className="ext-dot" title="有其他人的修改" />}
         </div>
       );
     };

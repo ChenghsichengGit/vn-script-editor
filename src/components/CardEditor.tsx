@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Card, Field, SchemaField } from '../model';
 import { fieldIconDef } from '../fieldIcons';
-import RichTextEditor, { useRichEditor } from './RichTextEditor';
+import RichTextEditor, { toMarkdown, useRichEditor } from './RichTextEditor';
+import ChangeBar from './ChangeBar';
+import { changeKey, changedBlocks, externalReplaceMeta, setChangedBlocksMeta } from './ChangeHighlight';
+import { blockMarks, clearFieldMark, fieldMarks, setBlockMarks, useChangeMarks } from '../changeMarks';
 import Outline, { Heading } from './Outline';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import SuggestInput from './SuggestInput';
@@ -19,21 +22,61 @@ export default function CardEditor({
   isCommand,
   schemaFields,
   flashKeys,
+  markKey,
   onChange,
 }: {
   card: Card;
+  markKey: string; // 這張卡的分頁 id：「外部修改」標記記在這個名字底下
   isCommand: boolean;
   schemaFields: SchemaField[];
   flashKeys?: string[]; // 剛被外部（AI）改過的欄位，亮一下；'__name' = 名稱、'__detail' = 詳細內容
   onChange: (patch: Partial<Card>) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const editor = useRichEditor(card.detail, (detail) => onChange({ detail }));
+  // 編輯器自己最近回報出去的內容：App 傳回來的 card.detail 是其中之一就是自己打的，不是外部改的
+  const emitted = useRef<string[]>([]);
+  const editor = useRichEditor(
+    card.detail,
+    (detail) => {
+      emitted.current = [...emitted.current.slice(-30), detail];
+      onChange({ detail });
+    },
+    (blocks) => setBlockMarks(markKey, blocks),
+  );
+  const marksVersion = useChangeMarks();
+  const changedFields = fieldMarks(markKey);
+
+  // 詳細內容被外部改了（一起寫的人存檔、AI、全專案取代）：編輯器換成新內容（不算你的修改，也不會再回報出去）
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    if (emitted.current.includes(card.detail) || toMarkdown(editor) === card.detail) return;
+    emitted.current = [];
+    editor
+      .chain()
+      .command(({ tr }) => {
+        externalReplaceMeta(tr);
+        return true;
+      })
+      .setContent(card.detail, false)
+      .run();
+  }, [editor, card.detail]);
+
+  // 詳細內容的「外部修改」標記：跟記錄不一樣就重新畫（剛打開、外部改了、按了清除標記）
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const want = blockMarks(markKey);
+    const state = changeKey.getState(editor.state);
+    const cur = state ? changedBlocks(editor.state.doc, state.set) : [];
+    if (cur.length === want.length && cur.every((b, i) => b === want[i])) return;
+    editor.view.dispatch(setChangedBlocksMeta(editor.state.tr, want));
+  }, [editor, marksVersion, card.detail]);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [active, setActive] = useState(0);
 
-  const setField = (i: number, patch: Partial<Field>) =>
+  const setField = (i: number, patch: Partial<Field>) => {
+    clearFieldMark(markKey, card.fields[i].key); // 你自己改了這個欄位：「外部修改」的標記拿掉
     onChange({ fields: card.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
+  };
   const addField = (key: string) => onChange({ fields: [...card.fields, { key, value: '' }] });
 
   // 指令卡：有特別用途的欄位名稱（用法、說明、格式裡的參數…）→ 作用說明
@@ -166,18 +209,30 @@ export default function CardEditor({
     // spellCheck 關掉：瀏覽器的英文拼字檢查會在 time:int 這種字底下畫紅線，跟劇本的錯誤提示搞混
     <div className={`card-editor${flashKeys?.includes('__name') ? ' ai-flash-name' : ''}${flashKeys?.includes('__detail') ? ' ai-flash-detail' : ''}`} spellCheck={false}>
       <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
+        <ChangeBar markKey={markKey} />
         <div className="card-editor-inner">
           {isCommand ? (
             // 指令卡的名稱就是指令格式：打 [ 可以選欄位設定裡的指令參數
             <SuggestInput
-              className="card-editor-name cmd-format cmd-name"
+              className={`card-editor-name cmd-format cmd-name${changedFields.includes('__name') ? ' ext-changed' : ''}`}
               value={card.name}
               placeholder="#指令 [參數]"
               suggest={bracketSuggest}
-              onChange={(name) => onChange({ name })}
+              onChange={(name) => {
+                clearFieldMark(markKey, '__name');
+                onChange({ name });
+              }}
             />
           ) : (
-            <input className="card-editor-name" value={card.name} placeholder="名稱" onChange={(e) => onChange({ name: e.target.value })} />
+            <input
+              className={`card-editor-name${changedFields.includes('__name') ? ' ext-changed' : ''}`}
+              value={card.name}
+              placeholder="名稱"
+              onChange={(e) => {
+                clearFieldMark(markKey, '__name');
+                onChange({ name: e.target.value });
+              }}
+            />
           )}
 
           <div className="card-editor-fields">
@@ -189,7 +244,7 @@ export default function CardEditor({
               // 滑鼠移到這一列時的說明：專用欄位的作用，加上範本欄位不能改名的提醒
               const tip = [use, locked ? '（範本欄位：名稱要到區塊的「欄位設定」裡改）' : ''].filter(Boolean).join('\n\n');
               return (
-              <div className={`card-editor-row${flashKeys?.includes(f.key) ? ' ai-flash' : ''}`} key={i} title={tip || undefined}>
+              <div className={`card-editor-row${flashKeys?.includes(f.key) ? ' ai-flash' : ''}${changedFields.includes(f.key) ? ' ext-changed' : ''}`} key={i} title={tip || undefined}>
                 {locked ? (
                   // 範本欄位的名稱：純文字標籤，看起來就不能改
                   <div className="field-key-locked">
