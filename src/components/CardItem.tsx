@@ -1,11 +1,21 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Card, CardOps, CardSectionId, SchemaField } from '../model';
+import { Card, CardOps, CardSectionId, Field, SchemaField } from '../model';
 import { fieldIconDef } from '../fieldIcons';
 import { sectionMeta } from '../sections';
 import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
 import Icon from './Icon';
 import FieldText from './FieldText';
+import { imageSrc } from '../images';
+
+// 側邊欄的圖片欄位縮圖；讀不到圖（檔案不見、內容不是圖片路徑）就改成文字「找不到圖片」，不畫破圖
+function CardImage({ path, className }: { path: string; className?: string }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [path]);
+  const cls = className ? ` ${className}` : '';
+  if (broken) return <span className={`card-image-missing${cls}`} title={path}>找不到圖片</span>;
+  return <img className={`card-image${cls}`} src={imageSrc(path)} alt={path} title={path} draggable={false} onError={() => setBroken(true)} />;
+}
 
 interface Props {
   section: CardSectionId;
@@ -77,6 +87,21 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     return anyIcon ? <span className="field-icon field-icon-slot" /> : null;
   };
 
+  // 圖片欄位：內容畫成縮圖（一律放在名稱下面）；沒放圖就空著
+  // 範本欄位看範本的類型，卡片自己加的欄位看它自己的 type
+  const isImage = (f: Field) => {
+    const s = schemaFields.find((s) => s.key === f.key);
+    return (s ? s.type : f.type) === 'image';
+  };
+  const fieldValue = (f: Field, className?: string) => {
+    const value = f.value;
+    return isImage(f) ? (
+      value.trim() ? <CardImage path={value} className={className} /> : null
+    ) : (
+      <FieldText className={className} text={value} />
+    );
+  };
+
   // 內容在右邊那欄排不下一行的欄位（第幾個）：改成名稱一行、內容從下一行開始
   // 用「內容文字的寬度」跟「右邊那欄的寬度」比，不看排出來有沒有折行：改成上下排之後變寬也不會跳回並排，畫面不會來回閃
   // 名稱欄寬由這張卡所有名稱決定（上下排的名稱也還在第一欄），所以右邊那欄的寬度不受上下排影響
@@ -96,7 +121,8 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
       ctx.font = getComputedStyle(value).font;
       const next = new Set<number>();
       card.fields.forEach((f, i) => {
-        if (!f.collapsed && (f.value.includes('\n') || ctx.measureText(f.value).width > room)) next.add(i);
+        if (f.collapsed) return;
+        if (isImage(f) ?f.value.trim() : f.value.includes('\n') || ctx.measureText(f.value).width > room) next.add(i);
       });
       setStacked((prev) => (prev.size === next.size && [...next].every((i) => prev.has(i)) ? prev : next));
     };
@@ -104,7 +130,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     const ro = new ResizeObserver(check);
     ro.observe(body);
     return () => ro.disconnect();
-  }, [open, card.fields]);
+  }, [open, card.fields, schemaFields]);
 
   const toggleField = (i: number) => {
     const next = new Set(openFields);
@@ -159,9 +185,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
                   </FieldKey>
                 </div>
                 {openFields.has(i) && (
-                  <div className="card-fold-value">
-                    <FieldText text={f.value} />
-                  </div>
+                  <div className="card-fold-value">{fieldValue(f)}</div>
                 )}
               </div>
             ) : (
@@ -170,7 +194,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
                   {fieldIcon(f.key)}
                   {f.key}
                 </FieldKey>
-                <FieldText className="card-value" text={f.value} />
+                {fieldValue(f, 'card-value')}
               </div>
             ),
           )}

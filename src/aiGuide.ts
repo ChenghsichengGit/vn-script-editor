@@ -25,6 +25,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('|---|---|');
   line('| `劇本/**/*.vns` | 劇本（純文字），子資料夾可以自由建立 |');
   for (const s of getCardSections()) line(`| \`${s.dir}/**/*.md\` | ${s.title}的設定卡，一張卡一個檔案 |`);
+  line('| `圖片/` | 卡片的圖片欄位和詳細內容裡用到的圖（編輯器貼上或選圖時自動放進來） |');
   line('| `project.json` | 專案設定（欄位設定 `schemas`、左側清單順序 `order`），一般不需要改 |');
   line(`| \`${AI_GUIDE_NAME}\` | 這份說明（自動產生） |`);
   line();
@@ -70,12 +71,17 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('## 各區塊的固定欄位');
   line();
   line('每張卡都一定要有這些欄位（順序照這裡）。標了「指令參數」的，它的內容（或卡片名稱）可以填進指令的 `[參數]`。');
+  line('標了「圖片」的欄位，`value` 是圖檔相對於專案資料夾的路徑（例如 `圖片/立繪.png`），沒有圖就留空。不在下面清單裡的欄位，如果有 `type: image`，也是圖片欄位。');
+  line('詳細內容裡的圖片寫成 `![](圖片/x.png)`，調過寬度的寫成 `<img src="圖片/x.png" width="400">`。');
   line();
   for (const s of getCardSections().map((d) => d.id)) {
     const schema = schemas[s] ?? { fields: [] };
     const items = [
       ...(schema.nameParam ? [`名稱（指令參數 \`[${schema.nameParam}]\`）`] : []),
-      ...schema.fields.map((f) => (f.param ? `${f.key}（指令參數 \`[${f.param}]\`）` : f.key)),
+      ...schema.fields.map((f) => {
+        const notes = [f.type === 'image' ? '圖片' : '', f.param ? `指令參數 \`[${f.param}]\`` : ''].filter(Boolean);
+        return notes.length > 0 ? `${f.key}（${notes.join('，')}）` : f.key;
+      }),
     ];
     line(`- **${sectionMeta(s).title}**：${items.length > 0 ? items.join('、') : '（沒有規定）'}`);
   }

@@ -182,6 +182,145 @@ fn fs_exists(state: State<AppState>, path: String) -> Result<bool, String> {
     }
 }
 
+// ───────────────────────── 圖片 ─────────────────────────
+// 圖片統一放在專案的「圖片/」資料夾；卡片和詳細內容裡記的是相對路徑（例如 圖片/立繪.png）
+// 畫面用 vnimg 協定載圖：http://vnimg.localhost/<整個絕對路徑做 encodeURIComponent>（Windows 的寫法），一樣只能讀允許的資料夾
+
+const IMAGE_DIR: &str = "圖片";
+const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"];
+
+fn image_mime(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_string_lossy().to_lowercase();
+    Some(match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        "avif" => "image/avif",
+        _ => return None,
+    })
+}
+
+// %XX 解碼（UTF-8）；格式不對回傳 None
+fn percent_decode(s: &str) -> Option<String> {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = std::str::from_utf8(bytes.get(i + 1..i + 3)?).ok()?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+// vnimg 協定：讀圖片檔回傳給 <img>；不是圖片、不在允許的資料夾裡、讀不到都回 404／403
+fn serve_image(app: &AppHandle, uri_path: &str) -> tauri::http::Response<Vec<u8>> {
+    let respond = |status: u16, mime: &str, body: Vec<u8>| {
+        tauri::http::Response::builder()
+            .status(status)
+            .header("Content-Type", mime)
+            .header("Cache-Control", "no-cache")
+            .body(body)
+            .unwrap()
+    };
+    let Some(path) = percent_decode(uri_path.trim_start_matches('/')) else {
+        return respond(400, "text/plain", Vec::new());
+    };
+    let state = app.state::<AppState>();
+    let Ok(target) = guard(&state, &path) else {
+        return respond(403, "text/plain", Vec::new());
+    };
+    let Some(mime) = image_mime(&target) else {
+        return respond(403, "text/plain", Vec::new());
+    };
+    match fs::read(&target) {
+        Ok(data) => respond(200, mime, data),
+        Err(_) => respond(404, "text/plain", Vec::new()),
+    }
+}
+
+// 圖片檔名：只留檔名本身、拿掉 Windows 不能用的字；副檔名一定要是圖片
+fn clean_image_name(raw: &str) -> Result<String, String> {
+    let name = Path::new(raw).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name: String = name.chars().filter(|c| !"<>:\"/\\|?*".contains(*c) && !c.is_control()).collect();
+    let name = name.trim().trim_end_matches('.').to_string();
+    let ok = Path::new(&name)
+        .extension()
+        .map(|e| IMAGE_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
+        .unwrap_or(false);
+    if !ok || Path::new(&name).file_stem().map(|s| s.is_empty()).unwrap_or(true) {
+        return Err(format!("不支援的圖片格式：{raw}"));
+    }
+    Ok(name)
+}
+
+// 在 dir 裡找一個沒用過的檔名：已經有同名的就變成「名稱-2.png」「名稱-3.png」…
+fn unique_in(dir: &Path, name: &str) -> PathBuf {
+    let p = Path::new(name);
+    let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = p.extension().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut target = dir.join(name);
+    let mut n = 2;
+    while target.exists() {
+        target = dir.join(format!("{stem}-{n}.{ext}"));
+        n += 1;
+    }
+    target
+}
+
+// 存進 root/圖片/，回傳相對路徑（用 / 分隔）
+fn store_image(root: &Path, name: &str, write: impl FnOnce(&Path) -> std::io::Result<()>) -> Result<String, String> {
+    let dir = root.join(IMAGE_DIR);
+    fs::create_dir_all(&dir).map_err(err)?;
+    let target = unique_in(&dir, &clean_image_name(name)?);
+    write(&target).map_err(err)?;
+    let file = target.file_name().unwrap().to_string_lossy();
+    Ok(format!("{IMAGE_DIR}/{file}"))
+}
+
+// 貼上或拖進來的圖片：內容直接放在 invoke 的 body（不轉成 JSON 陣列，大圖才不會慢）
+// header：x-root = 專案資料夾、x-name = 想用的檔名（都做過 encodeURIComponent，因為 header 只能放英數字）
+#[tauri::command]
+fn image_save(state: State<AppState>, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("圖片內容格式不對".into());
+    };
+    let header = |key: &str| -> Result<String, String> {
+        let v = request.headers().get(key).and_then(|v| v.to_str().ok()).ok_or("缺少參數")?;
+        percent_decode(v).ok_or_else(|| "參數格式不對".to_string())
+    };
+    let root = guard(&state, &header("x-root")?)?;
+    let name = header("x-name")?;
+    store_image(&root, &name, |target| fs::write(target, data))
+}
+
+// 「選擇圖片」：跳出選檔視窗，把選到的圖複製進 root/圖片/，回傳相對路徑；取消回傳 null
+// 選到的檔案本來就在 圖片/ 裡面時，直接用它，不再複製一份
+#[tauri::command]
+async fn image_import(app: AppHandle, state: State<'_, AppState>, root: String) -> Result<Option<String>, String> {
+    let root = guard(&state, &root)?;
+    let Some(picked) = app.dialog().file().set_title("選擇圖片").add_filter("圖片", IMAGE_EXTS).blocking_pick_file() else {
+        return Ok(None);
+    };
+    let source = normalize(&picked.into_path().map_err(|e| e.to_string())?);
+    let dir = root.join(IMAGE_DIR);
+    if let (Some(parent), Some(file)) = (source.parent(), source.file_name()) {
+        if same_path(parent, &dir) && image_mime(&source).is_some() {
+            return Ok(Some(format!("{IMAGE_DIR}/{}", file.to_string_lossy())));
+        }
+    }
+    let name = source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    store_image(&root, &name, |target| fs::copy(&source, target).map(|_| ())).map(Some)
+}
+
 // ───────────────────────── 最近的專案（應用程式資料夾/recent.json） ─────────────────────────
 
 const MAX_RECENT: usize = 8;
@@ -651,6 +790,8 @@ pub fn run() {
             next_window: AtomicUsize::new(0),
             watchers: Mutex::new(HashMap::new()),
         })
+        // 圖片：<img src="http://vnimg.localhost/..."> 由這裡讀檔回傳（見 serve_image）
+        .register_uri_scheme_protocol("vnimg", |ctx, request| serve_image(ctx.app_handle(), request.uri().path()))
         .invoke_handler(tauri::generate_handler![
             fs_list_dir,
             fs_read_text,
@@ -659,6 +800,8 @@ pub fn run() {
             fs_rename,
             fs_remove,
             fs_exists,
+            image_save,
+            image_import,
             project_pick_folder,
             export_save_text,
             project_pack,
@@ -775,5 +918,40 @@ mod pack_tests {
         let out = dir.join("out");
         assert!(extract_pack(&pack, &out).is_err());
         assert!(!out.exists(), "失敗時要清掉建出來的資料夾");
+    }
+}
+
+// ───────────────────────── 測試：圖片 ─────────────────────────
+#[cfg(test)]
+mod image_tests {
+    use super::*;
+
+    #[test]
+    fn decodes_percent_utf8() {
+        assert_eq!(percent_decode("F%3A%2F%E5%9C%96.png").as_deref(), Some("F:/圖.png"));
+        assert_eq!(percent_decode("bad%2"), None);
+        assert_eq!(percent_decode("bad%zz"), None);
+    }
+
+    #[test]
+    fn cleans_image_names() {
+        assert_eq!(clean_image_name(r"C:\x\立繪.PNG").unwrap(), "立繪.PNG");
+        assert_eq!(clean_image_name("../../a?.png").unwrap(), "a.png");
+        assert!(clean_image_name("readme.txt").is_err());
+        assert!(clean_image_name(".png").is_err());
+        assert!(clean_image_name("noext").is_err());
+    }
+
+    #[test]
+    fn stores_with_unique_names() {
+        let root = std::env::temp_dir().join(format!("vnse-img-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let a = store_image(&root, "立繪.png", |t| fs::write(t, b"1")).unwrap();
+        let b = store_image(&root, "立繪.png", |t| fs::write(t, b"2")).unwrap();
+        assert_eq!(a, "圖片/立繪.png");
+        assert_eq!(b, "圖片/立繪-2.png");
+        assert_eq!(fs::read(root.join("圖片").join("立繪.png")).unwrap(), b"1");
+        let _ = fs::remove_dir_all(&root);
     }
 }

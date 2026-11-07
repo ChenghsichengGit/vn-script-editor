@@ -11,6 +11,7 @@ export interface Field {
   key: string;
   value: string;
   collapsed?: boolean;
+  type?: 'image'; // 卡片自己加的欄位的類型：沒有 = 文字；image = 圖片（範本欄位的類型看範本，不看這裡）
 }
 
 // 一張設定卡 = 名稱 + 條列欄位 + 一大段詳細內容（Markdown：# 大標題、## 中標題、### 小標題）
@@ -29,6 +30,7 @@ export interface SchemaField {
   param?: string;
   icon?: string; // 欄位名稱前面的圖示（codicon 名稱，可選的列在 fieldIcons.ts）；沒有 = 不畫
   color?: string; // 圖示顏色的名稱（red、blue…）；沒有 = 跟文字同色
+  type?: 'image'; // 欄位類型：沒有 = 文字；image = 圖片（內容存圖片的相對路徑，例如 圖片/立繪.png）
 }
 // 一個區塊的範本：nameParam = 卡片「名稱」本身也可以當指令參數（例如角色名稱 → [名字]）；fields = 一定要有的欄位
 export interface SectionSchema {

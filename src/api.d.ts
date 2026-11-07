@@ -38,6 +38,10 @@ interface AppApi {
   remove(path: string, opts?: { recursive?: boolean }): Promise<void>;
   exists(path: string): Promise<boolean>;
 
+  // 圖片：存進專案的「圖片/」資料夾（撞名自動加 -2），回傳相對路徑（例如 圖片/立繪.png）
+  saveImage(root: string, name: string, data: Uint8Array): Promise<string>;
+  importImage(root: string): Promise<string | null>; // 跳出選圖片的視窗；取消回傳 null
+
   // 專案資料夾與最近的專案
   pickFolder(): Promise<string | null>; // 取消時回傳 null
   getRecent(): Promise<RecentProject[]>;

@@ -46,6 +46,7 @@ import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, 
 import { fileIcon } from './sampleData';
 import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
 import SectionsDialog from './components/SectionsDialog';
+import { setImageRoot } from './images';
 import {
   FLOAT_DEFAULT_H,
   FLOAT_DEFAULT_W,
@@ -725,6 +726,7 @@ export default function App() {
     setDirty(new Set(migrated));
     setSaveState('saved');
     setProject({ store, name: data.name });
+    setImageRoot(store.root); // 圖片的相對路徑都接在這個資料夾後面
     // 監看專案資料夾：外部（例如 AI）改了檔案就讀進來
     window.api.watchProject(store.root).catch(reportError);
   };
@@ -745,6 +747,7 @@ export default function App() {
     setStartInCreate(false);
     dockRef.current?.saveLayout(); // 編輯區即將卸載，先把版面存起來
     setProject(null);
+    setImageRoot(null);
     setFiles({});
     setFolders(emptyFolders);
     setContents({});
@@ -1054,8 +1057,14 @@ export default function App() {
   // 例外：那張卡本來就有你還沒存的編輯 → 編輯器裡的版本（你的編輯 + 這次調整）維持「還沒存」，
   //       另外把檔案裡上次存的版本也做同樣的調整寫回去；之後關分頁選「不儲存」，讀回來的也已經符合新範本
   const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[], removals: FieldRemoval[] = []) => {
-    // from 只是用來改名的，不存進範本；沒填的 param／icon／color 不寫出去
-    const schema = edits.map(({ key, param, icon, color }) => ({ key, ...(param && { param }), ...(icon && { icon }), ...(icon && color && { color }) }));
+    // from 只是用來改名的，不存進範本；沒填的 param／icon／color／type 不寫出去
+    const schema = edits.map(({ key, param, icon, color, type }) => ({
+      key,
+      ...(param && { param }),
+      ...(icon && { icon }),
+      ...(icon && color && { color }),
+      ...(type && { type }),
+    }));
     const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
     // 從範本刪掉、而且選了「連卡片上的一起刪」的欄位：先刪（用卡片上原本的名稱比對），再處理改名和補欄位
     const removeMode = new Map(removals.map((r) => [r.key, r.mode]));

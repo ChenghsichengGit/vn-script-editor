@@ -31,6 +31,11 @@ window.api = {
   remove: (path, opts) => invoke('fs_remove', { path, recursive: !!opts?.recursive }),
   exists: (path) => invoke('fs_exists', { path }),
 
+  // 圖片：內容直接當 body 傳（不轉 JSON），路徑和檔名放 header（要先編碼，header 只能放英數字）
+  saveImage: (root, name, data) =>
+    invoke('image_save', data, { headers: { 'x-root': encodeURIComponent(root), 'x-name': encodeURIComponent(name) } }),
+  importImage: (root) => invoke('image_import', { root }),
+
   // 專案資料夾與最近的專案
   pickFolder: () => invoke('project_pick_folder'),
   getRecent: () => invoke('project_get_recent'),

@@ -16,6 +16,7 @@ interface Row {
   param: string;
   icon?: string;
   color?: string;
+  type?: 'image'; // 沒有 = 文字
   from?: string;
 }
 
@@ -24,6 +25,7 @@ const BAD_PARAM = /[\s[\]|/#]/;
 
 const HELP =
   '這個區塊的每張卡都一定會有這些欄位：新增的卡會自動帶上，按「儲存」時已有的卡缺的欄位也會補上空白欄位。\n' +
+  '「類型」：文字或圖片。圖片欄位放一張圖（選擇、貼上或拖進來），圖檔存在專案的「圖片」資料夾。\n' +
   '「指令參數」：例如填「名字」，指令格式 #name [名字] 就能從所有卡的這個欄位（或名稱）裡選。\n' +
   '從範本刪掉的欄位不會從已有的卡上移除，只是不再強制。';
 
@@ -51,7 +53,7 @@ export default function SchemaDialog({
   // 本地副本：按「儲存」前都不會影響外面
   const [nameParam, setNameParam] = useState(schema.nameParam ?? '');
   const [rows, setRows] = useState<Row[]>(() =>
-    schema.fields.map((f, i) => ({ id: i, name: f.key, param: f.param ?? '', icon: f.icon, color: f.color, from: f.key })),
+    schema.fields.map((f, i) => ({ id: i, name: f.key, param: f.param ?? '', icon: f.icon, color: f.color, type: f.type, from: f.key })),
   );
   const [nextId, setNextId] = useState(schema.fields.length);
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -197,6 +199,7 @@ export default function SchemaDialog({
       if (param) edit.param = param;
       if (r.icon) edit.icon = r.icon;
       if (r.icon && r.color) edit.color = r.color;
+      if (r.type) edit.type = r.type;
       if (r.from !== undefined) edit.from = r.from;
       return edit;
     });
@@ -233,6 +236,7 @@ export default function SchemaDialog({
               <span className="schema-grip" />
               <span className="schema-icon" />
               <span className="schema-col">欄位名稱</span>
+              <span className="schema-type">類型</span>
               <span className="schema-col">指令參數</span>
               <span className="schema-del" />
             </div>
@@ -247,6 +251,7 @@ export default function SchemaDialog({
               <span className="schema-col">
                 <span className="schema-fixed">名稱</span>
               </span>
+              <span className="schema-type" />
               <span className="schema-col schema-name-cell">
                 <SuggestInput
                   type="text"
@@ -294,6 +299,15 @@ export default function SchemaDialog({
                     />
                     {specialOf(r.name) && <Icon icon="sparkle" className="field-special" />}
                   </span>
+                  {/* 欄位類型：點一下在「文字」和「圖片」之間切換 */}
+                  <button
+                    type="button"
+                    className={`schema-type schema-type-btn${r.type === 'image' ? ' image' : ''}`}
+                    title="點一下切換：文字欄位／圖片欄位（圖片欄位放一張圖，存在專案的「圖片」資料夾）"
+                    onClick={() => patch(r.id, { type: r.type === 'image' ? undefined : 'image' })}
+                  >
+                    {r.type === 'image' ? '圖片' : '文字'}
+                  </button>
                   <span className="schema-col schema-name-cell">
                     <SuggestInput
                       type="text"

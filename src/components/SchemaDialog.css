@@ -244,3 +244,18 @@ button.schema-del:hover { background: var(--error-bg); color: var(--error); }
 .schema-confirm-option.danger b { color: var(--error); }
 .schema-confirm-option.danger:hover:not(:disabled) { border-color: var(--error-border); }
 .schema-confirm-note { margin-top: 10px; font-size: 11px; color: var(--text-dim); }
+
+/* 欄位類型：文字／圖片的切換按鈕 */
+.schema-type { flex: none; width: 44px; text-align: center; }
+.schema-type-btn {
+  padding: 2px 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.schema-type-btn:hover { background: var(--bg-selected); color: var(--text); }
+.schema-type-btn.image { border-color: var(--accent); color: var(--accent); }

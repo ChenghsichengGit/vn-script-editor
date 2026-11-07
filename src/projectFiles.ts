@@ -62,7 +62,8 @@ function normalizeSchemas(raw: unknown, ids: CardSectionId[]): Schemas {
       const param = typeof f.param === 'string' && f.param.trim() ? f.param.trim() : undefined;
       const icon = cleanFieldIcon(f.icon);
       const color = icon ? cleanFieldColor(f.color) : undefined;
-      return [{ key, ...(param && { param }), ...(icon && { icon }), ...(color && { color }) }];
+      const type = f.type === 'image' ? ('image' as const) : undefined;
+      return [{ key, ...(param && { param }), ...(icon && { icon }), ...(color && { color }), ...(type && { type }) }];
     });
   }
   return out;
@@ -182,6 +183,7 @@ function parseCard(id: string, fileName: string, text: string): Card {
         value: r.value == null ? '' : String(r.value),
       };
       if (r.collapsed === true) field.collapsed = true;
+      if (r.type === 'image') field.type = 'image';
       fields.push(field);
     }
   }
@@ -195,6 +197,7 @@ function serializeCard(card: Card): string {
   const fields = card.fields.map((f) => {
     const out: Record<string, unknown> = { key: f.key, value: f.value };
     if (f.collapsed) out.collapsed = true; // 沒摺疊就不寫
+    if (f.type === 'image') out.type = 'image'; // 文字欄位不寫
     return out;
   });
   const yaml = dump({ name: card.name, fields }, { lineWidth: -1 });

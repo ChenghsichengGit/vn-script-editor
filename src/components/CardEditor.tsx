@@ -7,6 +7,7 @@ import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import SuggestInput from './SuggestInput';
 import Icon from './Icon';
 import FieldValueInput from './FieldValueInput';
+import ImageFieldInput from './ImageFieldInput';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
@@ -203,16 +204,30 @@ export default function CardEditor({
                 )}
                 {isCommand && f.key.trim() === '用法' ? (
                   usageEditor(i, f.value)
+                ) : (schemaField ? schemaField.type : f.type) === 'image' ? (
+                  <ImageFieldInput value={f.value} onChange={(value) => setField(i, { value })} />
                 ) : (
                   <FieldValueInput value={f.value} onChange={(value) => setField(i, { value })} />
                 )}
-                <button
-                  className={`fold-toggle${f.collapsed ? ' on' : ''}`}
-                  title="開啟後，側邊欄只顯示欄位名稱，點了才展開"
-                  onClick={() => setField(i, { collapsed: !f.collapsed })}
-                >
-                  <Icon icon={f.collapsed ? 'chevron-right' : 'chevron-down'} /> {f.collapsed ? '收合' : '展開'}
-                </button>
+                <div className="card-editor-btns">
+                  {/* 卡片自己加的欄位：切換文字／圖片；範本欄位的類型要到「欄位設定」改，按鈕藏起來但留位置，各列才對得齊 */}
+                  <button
+                    className={`fold-toggle${f.type === 'image' && !locked ? ' on' : ''}`}
+                    title="切換這個欄位是文字還是圖片"
+                    disabled={locked}
+                    style={locked ? { visibility: 'hidden' } : undefined}
+                    onClick={() => setField(i, { type: f.type === 'image' ? undefined : 'image' })}
+                  >
+                    {f.type === 'image' ? '圖片' : '文字'}
+                  </button>
+                  <button
+                    className={`fold-toggle${f.collapsed ? ' on' : ''}`}
+                    title="開啟後，側邊欄只顯示欄位名稱，點了才展開"
+                    onClick={() => setField(i, { collapsed: !f.collapsed })}
+                  >
+                    <Icon icon={f.collapsed ? 'chevron-right' : 'chevron-down'} /> {f.collapsed ? '收合' : '展開'}
+                  </button>
+                </div>
                 <button
                   className="icon-btn"
                   title={locked ? '範本欄位不能刪除' : '刪除欄位'}
