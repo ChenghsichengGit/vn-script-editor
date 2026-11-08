@@ -2,6 +2,7 @@ import { Fragment, useRef } from 'react';
 import { dragWith } from '../App';
 import type { Layout, Side } from '../layout';
 import { SectionId } from '../model';
+import { sectionOrder } from '../sections';
 import SectionPanel, { TreeProps } from './SectionPanel';
 
 interface Props extends TreeProps {
@@ -23,6 +24,20 @@ export default function Sidebar(props: Props) {
   const asideRef = useRef<HTMLElement>(null);
 
   const filler = sections[sections.length - 1]; // 負責填滿空間的那一塊
+
+  // 被活動列關掉的區塊空出來的高度，臨時加給它上面最近的那塊（最上面的被關掉就給下面那塊）
+  // 這樣其他區塊在畫面上的位置不動；再打開就收回去。只在畫面上算，不寫進記住的高度
+  const existing = new Set(sectionOrder());
+  const placed = layout[side].sections.filter((id) => sections.includes(id) || (layout.hidden.includes(id) && existing.has(id)));
+  const bonus: Partial<Record<SectionId, number>> = {};
+  placed.forEach((id, i) => {
+    if (sections.includes(id)) return;
+    const after = placed.slice(i + 1).find((s) => sections.includes(s));
+    if (!after) return; // 下面已經沒有顯示的區塊：最下面那塊本來就會填滿
+    const before = placed.slice(0, i).reverse().find((s) => sections.includes(s));
+    const to = before ?? after;
+    bonus[to] = (bonus[to] ?? 0) + (layout.sizes[id] ?? DEFAULT_HEIGHT) + 1; // + 1 = 分隔線
+  });
 
   // 拖曳第 index 條分隔線（在第 index 和 index+1 塊之間）
   // 一步一步推：每次滑鼠移動只套用這一小段位移，從目前的高度算起
@@ -62,7 +77,7 @@ export default function Sidebar(props: Props) {
       lineY += Math.sign(dy) * moved;
       const sizes = { ...layout.sizes };
       sections.forEach((id, i) => {
-        if (id !== filler && cur[i] !== start[i]) sizes[id] = cur[i];
+        if (id !== filler && cur[i] !== start[i]) sizes[id] = Math.max(MIN_HEIGHT, cur[i] - (bonus[id] ?? 0)); // 臨時加的高度不記
       });
       onLayoutChange({ sizes });
     });
@@ -73,7 +88,7 @@ export default function Sidebar(props: Props) {
       {sections.map((id, i) => (
         <Fragment key={id}>
           {i > 0 && <div className="section-sash" onMouseDown={(e) => startSectionResize(i - 1, e)} />}
-          <SectionPanel {...tree} id={id} fill={id === filler} height={layout.sizes[id] ?? DEFAULT_HEIGHT} />
+          <SectionPanel {...tree} id={id} fill={id === filler} height={(layout.sizes[id] ?? DEFAULT_HEIGHT) + (bonus[id] ?? 0)} />
         </Fragment>
       ))}
     </aside>
