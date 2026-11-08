@@ -14,6 +14,7 @@ export interface SectionDef {
   icon: string; // codicon 名稱
   color?: string; // 圖示顏色的名稱（fieldIcons.ts 的 FIELD_COLORS）；沒有 = 跟文字同色
   newName?: string; // 按 ＋ 時新卡片的預設名稱
+  memory?: boolean; // 這個區塊的卡片有「記憶」（例如角色：什麼時候認識誰、怎麼稱呼、印象）
 }
 
 // 區塊設定裡刪掉的區塊：deleteFolder = 連硬碟上的資料夾（和裡面的卡）一起刪
@@ -27,7 +28,7 @@ export const FILES_SECTION: SectionDef = { id: 'files', title: '檔案', dir: '�
 
 // 新專案、或舊專案的 project.json 裡還沒有 sections 時用的區塊
 export const DEFAULT_CARD_SECTIONS: SectionDef[] = [
-  { id: 'characters', title: '角色', dir: '角色', icon: 'person', color: 'green', newName: '新角色' },
+  { id: 'characters', title: '角色', dir: '角色', icon: 'person', color: 'green', newName: '新角色', memory: true },
   { id: 'world', title: '世界觀', dir: '世界觀', icon: 'globe', color: 'teal', newName: '新項目' },
   { id: COMMANDS_ID, title: '指令', dir: '指令', icon: 'terminal', color: 'purple', newName: '#新指令' },
 ];
@@ -80,6 +81,10 @@ export function normalizeSections(raw: unknown): SectionDef[] {
     if (isIcon(r.icon) || (typeof r.icon === 'string' && SECTION_ICONS.has(r.icon))) def.icon = r.icon as string;
     def.color = isColor(r.color) ? r.color : r.color === null ? undefined : def.color;
     if (id !== COMMANDS_ID && typeof r.newName === 'string' && r.newName.trim()) def.newName = r.newName.trim();
+    if (id !== COMMANDS_ID) {
+      if (r.memory === true) def.memory = true;
+      else delete def.memory;
+    }
     ids.add(id);
     dirs.add(def.dir.toLowerCase());
     out.push(def);

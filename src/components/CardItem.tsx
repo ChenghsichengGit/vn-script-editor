@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardOps, CardSectionId, Field, SchemaField, cardTabId } from '../model';
 import { fieldIconDef } from '../fieldIcons';
-import { sectionMeta } from '../sections';
+import { sectionDef, sectionMeta } from '../sections';
+import { relationSummary, relations } from '../memories';
+import { openMemoryViewer } from './MemoryViewer';
+import type { IconDef } from './Icon';
 import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
 import Icon from './Icon';
@@ -46,7 +49,13 @@ interface Props {
   rowProps?: React.HTMLAttributes<HTMLDivElement>; // 標題列額外的屬性：拖曳搬移用（draggable、dragstart、dragover…）
   rowClass?: string; // 標題列額外的 class：拖曳排序時畫上／下方的藍線
   schemaFields: SchemaField[]; // 這個區塊的欄位範本：欄位名稱前面畫它設定的圖示
+  targetIcon: (name: string) => IconDef | undefined; // 記憶的對象那張卡所在區塊的圖示
 }
+
+// 每張卡在側邊欄上次停在「資料」還是「記憶」（key = 分頁 id）
+const lastSideTab = new Map<string, 'data' | 'memory'>();
+// 側邊欄裡詳細內容被點開的卡（key = 分頁 id）
+const openDetails = new Set<string>();
 
 // 卡片名稱；指令卡的名稱是指令格式：第一段 #指令 和後面的參數分別上色
 function CardName({ section, name }: { section: CardSectionId; name: string }) {
@@ -84,9 +93,26 @@ function FieldKey({ name, children }: { name: string; children: React.ReactNode 
 
 // 側邊欄裡的一張設定卡（只能看，不能改）
 // 點整列：展開／收起（欄位和詳細內容）；鉛筆圖示：在分頁開啟編輯；右鍵：選單（重新命名／刪除）
-export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '', schemaFields }: Props) {
+export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '', schemaFields, targetIcon }: Props) {
   useChangeMarks(); // 「外部修改」的黃點一變就重畫
   const [open, setOpen] = useState(false);
+  // 有記憶的區塊：展開後上面有「資料｜記憶」切換
+  const hasMemory = !!sectionDef(section)?.memory;
+  const tabId = cardTabId(section, card.id);
+  const [sideTab, setSideTabState] = useState<'data' | 'memory'>(() => lastSideTab.get(tabId) ?? 'data');
+  const setSideTab = (t: 'data' | 'memory') => {
+    lastSideTab.set(tabId, t);
+    setSideTabState(t);
+  };
+  const showMem = hasMemory && sideTab === 'memory';
+  // 詳細內容展開了沒（每張卡各自記住；關掉程式就回到摺著）
+  const [detailOpen, setDetailOpenState] = useState(() => openDetails.has(tabId));
+  const setDetailOpen = (v: boolean) => {
+    if (v) openDetails.add(tabId);
+    else openDetails.delete(tabId);
+    setDetailOpenState(v);
+  };
+  const memories = card.memories ?? [];
   const [openFields, setOpenFields] = useState<Set<number>>(new Set()); // 被點開的「收合欄位」
 
   // 區塊標題按了「全部展開／收起」時跟著切換
@@ -125,7 +151,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
   const [stacked, setStacked] = useState<Set<number>>(new Set());
   useLayoutEffect(() => {
     const body = bodyRef.current;
-    if (!open || !body) return;
+    if (!open || showMem || !body) return;
     const ctx = document.createElement('canvas').getContext('2d');
     const check = () => {
       const key = body.querySelector<HTMLElement>(':scope > .card-row > .card-key');
@@ -146,7 +172,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     const ro = new ResizeObserver(check);
     ro.observe(body);
     return () => ro.disconnect();
-  }, [open, card.fields, schemaFields]);
+  }, [open, showMem, card.fields, schemaFields]);
 
   const toggleField = (i: number) => {
     const next = new Set(openFields);
@@ -191,6 +217,41 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
 
       {open && (
         <div className="card-body" ref={bodyRef} style={{ paddingLeft: 30 + depth * 14 }}>
+          {hasMemory && (
+            <div className="card-tabs">
+              <button type="button" className={showMem ? '' : 'on'} onClick={() => setSideTab('data')}>
+                資料
+              </button>
+              <button type="button" className={showMem ? 'on' : ''} onClick={() => setSideTab('memory')}>
+                記憶 {memories.length}
+              </button>
+            </div>
+          )}
+          {showMem ? (
+            // 記憶摘要：每個對象一行（最後的稱呼，沒有就印象）；點一下在畫面中央放大看
+            <div className="card-mem" title="點一下放大看時間線和關係" onClick={() => openMemoryViewer(section, card.id)}>
+              {memories.length === 0 ? (
+                <span className="memory-note">還沒有記憶</span>
+              ) : (
+                <>
+                  {relations(memories).map((r) => {
+                    const icon = targetIcon(r.target);
+                    return (
+                      <div key={r.target} className="card-mem-row">
+                        <span className="card-mem-icon">{icon && <Icon icon={icon} />}</span>
+                        <span className="card-mem-target">{r.target}</span>
+                        <span className="card-mem-text">{relationSummary(r)}</span>
+                      </div>
+                    );
+                  })}
+                  <span className="card-mem-more">
+                    放大 <Icon icon="screen-full" />
+                  </span>
+                </>
+              )}
+            </div>
+          ) : (
+            <>
           {card.fields.map((f, i) =>
             f.collapsed ? (
               // 收合欄位：只顯示名稱，點了才展開內容
@@ -215,11 +276,22 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
               </div>
             ),
           )}
-          {/* 欄位下面接著顯示詳細內容（沒寫就不顯示） */}
+          {/* 欄位下面是詳細內容（沒寫就不顯示）：預設摺著，點標題才展開；「全部展開」不管它 */}
           {card.detail.trim() && (
-            <div className="card-detail">
-              <RichTextView markdown={card.detail} />
+            <div className="card-fold card-detail-fold">
+              <div className="card-row clickable" onClick={() => setDetailOpen(!detailOpen)}>
+                <span className="card-key">
+                  <Icon icon={detailOpen ? 'chevron-down' : 'chevron-right'} className="fold-chevron" /> 詳細內容
+                </span>
+              </div>
+              {detailOpen && (
+                <div className="card-detail">
+                  <RichTextView markdown={card.detail} />
+                </div>
+              )}
             </div>
+          )}
+            </>
           )}
         </div>
       )}

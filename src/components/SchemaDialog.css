@@ -259,3 +259,7 @@ button.schema-del:hover { background: var(--error-bg); color: var(--error); }
 }
 .schema-type-btn:hover { background: var(--bg-selected); color: var(--text); }
 .schema-type-btn.image { border-color: var(--accent); color: var(--accent); }
+
+/* 區塊設定的「記憶」勾選欄 */
+.schema-memory { flex: none; width: 36px; text-align: center; }
+.schema-memory input { margin: 0; cursor: pointer; }

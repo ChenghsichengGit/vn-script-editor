@@ -10,6 +10,7 @@ import { diffLines, Hunk } from './aiPlayback';
 import { getSettings } from './settings';
 import { richExtensions } from './components/RichTextEditor';
 import type { Card } from './model';
+import { memoryMarkKey } from './memories';
 
 export interface LineMark {
   line: number; // 第幾行（從 1 開始）
@@ -256,6 +257,11 @@ export function markCardChange(key: string, before: Card | undefined, after: Car
     if (before?.fields.find((b) => b.key === f.key)?.value !== f.value || !before) fields.add(f.key);
   }
   if (!before || before.name !== after.name) fields.add('__name');
+  // 記憶：新出現（或內容變了）的那幾筆標起來；已經不在的拿掉
+  const memKeys = new Set((after.memories ?? []).map(memoryMarkKey));
+  const oldMem = new Set((before?.memories ?? []).map(memoryMarkKey));
+  for (const k of [...fields]) if (k.startsWith('__mem:') && !memKeys.has(k)) fields.delete(k);
+  for (const k of memKeys) if (!oldMem.has(k)) fields.add(k);
   let blocks = entry.blocks ?? [];
   const oldDetail = before?.detail ?? '';
   if (oldDetail !== after.detail) {

@@ -18,7 +18,10 @@ import 'dockview-react/dist/styles/dockview.css';
 import { Card, CardSectionId, Schemas, cardTabId, parseCardTab } from '../model';
 import ScriptEditor from './ScriptEditor';
 import CardEditor from './CardEditor';
+import type { MemoryLinks } from './MemoryPanel';
+import { findTargetCard, scriptPath, targetIcon } from '../memories';
 import Icon, { IconDef } from './Icon';
+import { sectionDef } from '../sections';
 
 // 編輯區：用 dockview 做 VS Code 式的分頁群組
 // 分頁可以拖曳排序、拖到別的群組、拖到群組邊緣分割（左右或上下並排），也可以拉成浮動視窗
@@ -75,6 +78,7 @@ interface EditorCtxValue {
   onFileChange: (id: string, text: string) => void;
   onCardChange: (section: CardSectionId, id: string, patch: Partial<Card>) => void;
   onCursor: (pos: { line: number; column: number }) => void;
+  openTab: (tabId: string) => void; // 打開（或切到）某個劇本或設定卡的分頁
 }
 const EditorCtx = createContext<EditorCtxValue | null>(null);
 
@@ -90,8 +94,27 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
   if (cardRef) {
     const card = ctx.cards[cardRef.section].find((c) => c.id === cardRef.id);
     if (!card) return null;
+    const memory: MemoryLinks | undefined = sectionDef(cardRef.section)?.memory
+      ? {
+          targetNames: [...new Set(Object.values(ctx.cards).flatMap((list) => list.map((c) => c.name)))].filter((n) => n !== card.name),
+          scripts: Object.values(ctx.files)
+            .map((f) => ({ path: scriptPath(f), label: scriptPath(f).replace(/\.[^./]+$/, '') }))
+            .sort((a, b) => a.path.localeCompare(b.path, 'zh-Hant')),
+          hasTarget: (name) => !!findTargetCard(ctx.cards, name, cardRef.section),
+          targetIcon: (name) => targetIcon(ctx.cards, name, cardRef.section),
+          onOpenTarget: (name) => {
+            const hit = findTargetCard(ctx.cards, name, cardRef.section);
+            if (hit) ctx.openTab(cardTabId(hit.section, hit.card.id));
+          },
+          onOpenSource: (path) => {
+            const id = Object.keys(ctx.files).find((k) => scriptPath(ctx.files[k]) === path);
+            if (id) ctx.openTab(id);
+          },
+        }
+      : undefined;
     return (
       <CardEditor
+        memory={memory}
         card={card}
         isCommand={cardRef.section === 'commands'}
         schemaFields={ctx.schemas[cardRef.section].fields}
@@ -268,6 +291,7 @@ interface Props {
   onFileChange: EditorCtxValue['onFileChange'];
   onCardChange: EditorCtxValue['onCardChange'];
   onCursor: EditorCtxValue['onCursor'];
+  openTab: EditorCtxValue['openTab'];
   onActiveTabChange: (tabId: string | null) => void; // 作用中的面板換了（沒有任何面板時是 null）
   confirmClose: (tabId: string) => Promise<boolean>; // 要關掉有沒存內容的分頁：問完回傳要不要關
   flash: EditorCtxValue['flash'];
@@ -421,6 +445,7 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
     onFileChange: props.onFileChange,
     onCardChange: props.onCardChange,
     onCursor: props.onCursor,
+    openTab: props.openTab,
   };
 
   // .editor-area 是「拖曳區塊變浮動視窗」的放置目標，要維持這個 class

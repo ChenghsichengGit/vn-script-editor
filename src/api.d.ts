@@ -41,6 +41,8 @@ interface AppApi {
   // 圖片：存進專案的「圖片/」資料夾（撞名自動加 -2），回傳相對路徑（例如 圖片/立繪.png）
   saveImage(root: string, name: string, data: Uint8Array): Promise<string>;
   importImage(root: string): Promise<string | null>; // 跳出選圖片的視窗；取消回傳 null
+  // 刪掉 圖片/ 裡檔名沒出現在 used、而且超過 minAgeSecs 秒沒動過的圖；回傳刪掉的檔名
+  removeUnusedImages(root: string, used: string, minAgeSecs: number): Promise<string[]>;
 
   // 專案資料夾與最近的專案
   pickFolder(): Promise<string | null>; // 取消時回傳 null

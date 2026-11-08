@@ -109,6 +109,7 @@ export default function SectionsDialog({
       const newName = s.newName?.trim();
       if (newName) def.newName = newName;
       else delete def.newName;
+      if (!def.memory) delete def.memory;
       return def;
     });
     onSave(out, removals);
@@ -143,6 +144,9 @@ export default function SectionsDialog({
               <span className="schema-icon" />
               <span className="schema-col">區塊名稱（資料夾）</span>
               <span className="schema-col">新項目的預設名稱</span>
+              <span className="schema-memory" title="勾了之後，這個區塊的卡片多一個「記憶」：什麼時候認識誰、怎麼稱呼、印象…">
+                記憶
+              </span>
               <span className="schema-del" />
             </div>
 
@@ -156,6 +160,7 @@ export default function SectionsDialog({
                 <span className="schema-fixed">檔案（劇本）</span>
               </span>
               <span className="schema-col" />
+              <span className="schema-memory" />
               <span className="schema-del" />
             </div>
 
@@ -208,6 +213,16 @@ export default function SectionsDialog({
                       placeholder={`新${r.title.trim() || '項目'}`}
                       onChange={(e) => patch(r.key, { newName: e.target.value })}
                     />
+                  </span>
+                  <span className="schema-memory">
+                    {!locked && (
+                      <input
+                        type="checkbox"
+                        checked={!!r.memory}
+                        title="這個區塊的卡片有「記憶」"
+                        onChange={(e) => patch(r.key, { memory: e.target.checked })}
+                      />
+                    )}
                   </span>
                   {locked ? (
                     <span className="schema-del" />

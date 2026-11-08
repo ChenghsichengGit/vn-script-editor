@@ -32,6 +32,7 @@ import UpdateDialog from './components/UpdateDialog';
 import HelpDialog, { HelpTopic } from './components/HelpDialog';
 import Tooltip from './components/Tooltip';
 import ImageViewerHost from './components/ImageViewer';
+import MemoryViewerHost from './components/MemoryViewer';
 import Icon from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
 import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
@@ -47,7 +48,8 @@ import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, 
 import { fileIcon } from './sampleData';
 import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
 import SectionsDialog from './components/SectionsDialog';
-import { setImageRoot } from './images';
+import { removeUnusedImages, setImageRoot } from './images';
+import { remapMemories, scriptPath } from './memories';
 import { applyTextMinimal, clearAllMarks, markCardChange, markFileChange, suspendMarks } from './changeMarks';
 import {
   FLOAT_DEFAULT_H,
@@ -377,6 +379,7 @@ export default function App() {
       .map((f) => f.key);
     if (!before || before.name !== card.name) keys.push('__name');
     if (!before || before.detail !== card.detail) keys.push('__detail');
+    if (JSON.stringify(before?.memories ?? []) !== JSON.stringify(card.memories ?? [])) keys.push('__memories');
     const tabId = cardTabId(section, card.id);
     openTab(tabId);
     setFlash({ tabId, keys });
@@ -489,18 +492,31 @@ export default function App() {
     </div>
   );
 
+  // 關閉專案前：全部都存好了才清掉沒用到的圖片（還有沒存的內容時，畫面上的和檔案裡的不一樣，判斷不準就不清）
+  const cleanupImages = async () => {
+    const { project, contents, cards, dirty } = latest.current;
+    if (!project || dirty.size > 0) return;
+    await removeUnusedImages(project.store.root, [JSON.stringify(cards), ...Object.values(contents)]);
+  };
+  const cleanupImagesRef = useRef(cleanupImages);
+  cleanupImagesRef.current = cleanupImages;
+
   // 關閉視窗：主程式會先通知這裡。全部存好了就直接關；還有沒存的就跳出「儲存／不儲存／取消」視窗
   useEffect(() => {
-    return window.api.onAppClosing(() => {
-      if (latest.current.dirty.size === 0) window.api.readyToClose();
-      else setClosePrompt(true);
+    return window.api.onAppClosing(async () => {
+      if (latest.current.dirty.size > 0) return setClosePrompt(true);
+      await cleanupImagesRef.current();
+      window.api.readyToClose();
     });
   }, []);
   const closeDialog = closePrompt && (
     <CloseDialog
       onSave={async () => {
         const error = await flushRef.current();
-        if (!error) window.api.readyToClose();
+        if (!error) {
+          await cleanupImages();
+          window.api.readyToClose();
+        }
         return error;
       }}
       onDiscard={() => window.api.readyToClose()}
@@ -750,6 +766,7 @@ export default function App() {
   // 關閉專案：先把還沒存的存完，再回到開始畫面
   const closeProject = async (): Promise<boolean> => {
     if (!(await flushBeforeLeave('有內容存檔失敗，確定要關閉專案嗎？'))) return false;
+    await cleanupImages();
     setStartInCreate(false);
     dockRef.current?.saveLayout(); // 編輯區即將卸載，先把版面存起來
     setProject(null);
@@ -1147,6 +1164,21 @@ export default function App() {
 
   const findCard = (section: CardSectionId, id: string) => cards[section].find((c) => c.id === id);
 
+  // 所有卡片的記憶一起改（卡片改名 → 對象跟著改；劇本改名或搬家 → 出處跟著改），改到的卡標成還沒存
+  const remapAllMemories = (change: Parameters<typeof remapMemories>[1]) =>
+    setCards((all) => {
+      const r = remapMemories(all, change);
+      for (const c of r.changed) markDirty(cardTabId(c.section, c.id));
+      return r.changed.length ? r.cards : all;
+    });
+  // 劇本路徑換了：舊路徑（或舊資料夾底下）的出處換成新的
+  const remapSources = (from: string, to: string, isFolder: boolean) =>
+    remapAllMemories((m) => {
+      if (m.source === from && !isFolder) return { ...m, source: to };
+      if (isFolder && isInFolder(m.source, from)) return { ...m, source: to + m.source.slice(from.length) };
+      return m;
+    });
+
   const cardOps: CardOps = {
     open: (section, id) => openTab(cardTabId(section, id)),
     add: (section, folder, rawName) => {
@@ -1168,6 +1200,9 @@ export default function App() {
       if (err) return err;
       cardOps.update(section, id, { name });
       renameInOrder(section, card.folder ?? '', card.name, name);
+      // 記憶的「對象」跟著改名（還有別張卡叫舊名字的話就不動，不知道指的是哪一張）
+      const stillUsed = Object.values(cards).some((list) => list.some((c) => c.id !== id && c.name === card.name));
+      if (!stillUsed) remapAllMemories((m) => (m.target === card.name ? { ...m, target: name } : m));
       return null;
     },
     update: (section, id, patch) => {
@@ -1248,6 +1283,7 @@ export default function App() {
       setFiles((all) => ({ ...all, [id]: { ...all[id], name } }));
       markDirty(fileKey(id));
       renameInOrder('files', file.folder, file.name, name);
+      remapSources(scriptPath(file), scriptPath({ ...file, name }), false);
       return null;
     },
     remove: (id) => {
@@ -1292,6 +1328,7 @@ export default function App() {
         renameFolderInOrder(section, folder, newRel);
         if (section === 'files') {
           setFiles((all) => Object.fromEntries(Object.entries(all).map(([id, f]) => [id, { ...f, folder: remap(f.folder) }])));
+          remapSources(folder, newRel, true);
         } else {
           setCards((all) => ({
             ...all,
@@ -1369,6 +1406,7 @@ export default function App() {
       if (item.kind === 'file') {
         await store.moveFile(item.id, toFolder);
         setFiles((all) => ({ ...all, [item.id]: { ...all[item.id], folder: toFolder } }));
+        remapSources(scriptPath(files[item.id]), scriptPath({ ...files[item.id], folder: toFolder }), false);
       } else if (item.kind === 'card') {
         await store.moveCard(section as CardSectionId, item.id, toFolder);
         setCards((all) => ({
@@ -1383,6 +1421,7 @@ export default function App() {
         renameFolderInOrder(section, item.folder, newRel);
         if (section === 'files') {
           setFiles((all) => Object.fromEntries(Object.entries(all).map(([id, f]) => [id, { ...f, folder: remap(f.folder) }])));
+          remapSources(item.folder, newRel, true);
         } else {
           setCards((all) => ({
             ...all,
@@ -1589,6 +1628,7 @@ export default function App() {
           }}
           onCardChange={cardOps.update}
           onCursor={setCursor}
+          openTab={openTab}
           onActiveTabChange={setActiveTab}
           confirmClose={confirmTabClose}
           flash={flash}
@@ -1663,6 +1703,7 @@ export default function App() {
       {help && <HelpDialog topic={help} onClose={() => setHelp(null)} />}
       <Tooltip />
       <ImageViewerHost />
+      <MemoryViewerHost cards={cards} files={files} openTab={openTab} />
       {tabCloseDialog()}
       {conflictDialog}
       {quickPickView}

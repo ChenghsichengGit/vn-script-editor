@@ -53,5 +53,25 @@ export async function saveImageFile(file: File): Promise<string> {
 // 「選擇圖片」：跳出選檔視窗並複製進 圖片/，回傳相對路徑；取消回傳 null
 export const pickImage = (): Promise<string | null> => (root ? window.api.importImage(root) : Promise.resolve(null));
 
+// 關閉專案時：刪掉 圖片/ 裡沒用到的圖。texts = 整個專案的文字（卡片、劇本），檔名沒出現在裡面就算沒用到
+// 只刪超過一天沒動過的（剛貼上或剛從雲端同步過來、引用它的卡片可能還沒到）；失敗就算了，不擋關閉
+const UNUSED_MIN_AGE = 24 * 60 * 60;
+export async function removeUnusedImages(root: string, texts: string[]): Promise<void> {
+  let used = texts.join('\n');
+  // 路徑可能被寫成 %E7%AB%8B.png 這種編碼，解開一份一起比對
+  used += '\n' + used.replace(/(%[0-9A-Fa-f]{2})+/g, (m) => {
+    try {
+      return decodeURIComponent(m);
+    } catch {
+      return m;
+    }
+  });
+  try {
+    await window.api.removeUnusedImages(root, used, UNUSED_MIN_AGE);
+  } catch {
+    // 不影響關閉
+  }
+}
+
 // 存圖片失敗（格式不支援、寫不進去…）時跳出訊息
 export const imageError = (e: unknown) => window.alert(`圖片存檔失敗：${e instanceof Error ? e.message : String(e)}`);

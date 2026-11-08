@@ -4,6 +4,7 @@ import { buildAiGuide } from './aiGuide';
 import { Card, CardSectionId, ItemOrder, Schemas, SectionId, orderEntries } from './model';
 import { parentFolder } from './projectFiles';
 import { cardSectionIds, sectionMeta } from './sections';
+import { sourceLabel } from './memories';
 
 export interface ExportInput {
   name: string;
@@ -74,6 +75,15 @@ export function buildProjectExport(input: ExportInput): string {
           else push(`- **${f.key}**：`, ...value.split(/\r?\n/).map((l) => `  ${l}`));
         }
         if (card.fields.length > 0) push('');
+        // 記憶：照時間順序一行一筆
+        if (card.memories?.length) {
+          push('記憶（由先到後）：');
+          for (const m of card.memories) {
+            const head = [m.time, m.target && `對${m.target}`, m.kind].filter(Boolean).join('・');
+            push(`- ${head}：${m.text}${m.source ? `（${sourceLabel(m.source)}）` : ''}`);
+          }
+          push('');
+        }
         const detail = card.detail.trim();
         // 詳細內容裡的標題降三級，才不會跟外面的章節搞混
         if (detail) push(...detail.split(/\r?\n/).map((l) => (/^#{1,3} /.test(l) ? `###${l}` : l)), '');

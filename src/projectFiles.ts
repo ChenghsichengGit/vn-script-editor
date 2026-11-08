@@ -7,7 +7,7 @@
 //   每個區塊底下可以有任意層的子資料夾；檔案／卡片屬於哪個資料夾由位置決定，不寫進 YAML
 
 import { dump, load } from 'js-yaml';
-import { Card, CardSectionId, Field, ItemOrder, SchemaField, Schemas, SectionId, defaultSchemas, perSection } from './model';
+import { Card, CardSectionId, Field, ItemOrder, MEMORY_KINDS, Memory, SchemaField, Schemas, SectionId, defaultSchemas, perSection } from './model';
 import { cleanFieldColor, cleanFieldIcon } from './fieldIcons';
 import { FILES_SECTION, SectionDef, SectionRemoval, normalizeSections } from './sections';
 
@@ -188,9 +188,20 @@ function parseCard(id: string, fileName: string, text: string): Card {
     }
   }
 
+  const memories: Memory[] = [];
+  if (Array.isArray(obj.memories)) {
+    const str = (v: unknown) => (v == null ? '' : String(v));
+    for (const x of obj.memories) {
+      if (x === null || typeof x !== 'object') continue;
+      const r = x as Record<string, unknown>;
+      const kind = MEMORY_KINDS.find((k) => k === r.kind) ?? '事件';
+      memories.push({ time: str(r.time), target: str(r.target), kind, text: str(r.text), source: str(r.source) });
+    }
+  }
+
   // 前言與內文之間的那一個空行不屬於內文
   const detail = text.slice(m[0].length).replace(/^\r?\n/, '');
-  return { id, name, fields, detail };
+  return { id, name, fields, detail, ...(memories.length > 0 && { memories }) };
 }
 
 function serializeCard(card: Card): string {
@@ -200,7 +211,13 @@ function serializeCard(card: Card): string {
     if (f.type === 'image') out.type = 'image'; // 文字欄位不寫
     return out;
   });
-  const yaml = dump({ name: card.name, fields }, { lineWidth: -1 });
+  // 記憶：沒填的欄位不寫（出處、對象常常是空的）；整個沒有就不寫 memories
+  const memories = (card.memories ?? []).map((mem) => {
+    const out: Record<string, string> = { time: mem.time, target: mem.target, kind: mem.kind, text: mem.text, source: mem.source };
+    for (const k of ['time', 'target', 'source'] as const) if (!out[k]) delete out[k];
+    return out;
+  });
+  const yaml = dump({ name: card.name, fields, ...(memories.length > 0 && { memories }) }, { lineWidth: -1 });
   return `---\n${yaml}---\n\n${card.detail}`;
 }
 

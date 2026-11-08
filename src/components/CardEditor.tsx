@@ -11,7 +11,18 @@ import SuggestInput from './SuggestInput';
 import Icon from './Icon';
 import FieldValueInput from './FieldValueInput';
 import ImageFieldInput from './ImageFieldInput';
+import MemoryPanel, { MemoryLinks } from './MemoryPanel';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
+
+// 每張卡上次看的是「詳細內容」還是「記憶」（key = 分頁 id；關掉程式就不記了）
+const lastPane = new Map<string, 'detail' | 'memory'>();
+const PANE_EVENT = 'vn-card-pane';
+
+// 讓某張卡（分頁 id）切到「記憶」：還沒打開的下次打開就是記憶，已經開著的馬上切過去（記憶放大視窗的「編輯」用）
+export function showCardMemory(tabId: string) {
+  lastPane.set(tabId, 'memory');
+  window.dispatchEvent(new CustomEvent<string>(PANE_EVENT, { detail: tabId }));
+}
 
 // 分頁裡的完整設定卡：左邊是名稱、欄位、詳細內容，右邊是詳細內容的標題目錄
 // 側邊欄只是預覽，所有修改都在這裡做
@@ -23,6 +34,7 @@ export default function CardEditor({
   schemaFields,
   flashKeys,
   markKey,
+  memory,
   onChange,
 }: {
   card: Card;
@@ -30,6 +42,7 @@ export default function CardEditor({
   isCommand: boolean;
   schemaFields: SchemaField[];
   flashKeys?: string[]; // 剛被外部（AI）改過的欄位，亮一下；'__name' = 名稱、'__detail' = 詳細內容
+  memory?: MemoryLinks; // 這個區塊有「記憶」時才有（區塊設定裡勾選）
   onChange: (patch: Partial<Card>) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -45,6 +58,30 @@ export default function CardEditor({
   );
   const marksVersion = useChangeMarks();
   const changedFields = fieldMarks(markKey);
+
+  // 有記憶的區塊：「詳細內容」和「記憶」切換顯示（詳細內容的編輯器一直留著，切回來游標和復原記錄都還在）
+  const [pane, setPaneState] = useState<'detail' | 'memory'>(() => lastPane.get(markKey) ?? 'detail');
+  const setPane = (p: 'detail' | 'memory') => {
+    lastPane.set(markKey, p);
+    setPaneState(p);
+  };
+  const showMemory = !!memory && pane === 'memory';
+  useEffect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === markKey) setPaneState('memory');
+    };
+    window.addEventListener(PANE_EVENT, on);
+    return () => window.removeEventListener(PANE_EVENT, on);
+  }, [markKey]);
+  // 外部改了哪一邊，就切過去讓你看到（亮一下的時候）
+  useEffect(() => {
+    if (!memory || !flashKeys) return;
+    if (flashKeys.includes('__detail')) setPane('detail');
+    else if (flashKeys.includes('__memories')) setPane('memory');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flashKeys]);
+  const detailMarked = blockMarks(markKey).length > 0;
+  const memoryMarked = changedFields.some((k) => k.startsWith('__mem:'));
 
   // 詳細內容被外部改了（一起寫的人存檔、AI、全專案取代）：編輯器換成新內容（不算你的修改，也不會再回報出去）
   useEffect(() => {
@@ -300,11 +337,34 @@ export default function CardEditor({
             </button>
           </div>
 
-          <div className="card-editor-label">詳細內容</div>
-          <RichTextEditor editor={editor} />
+          {memory ? (
+            <div className="card-editor-label card-pane-tabs">
+              <button type="button" className={pane === 'detail' ? 'on' : ''} onClick={() => setPane('detail')}>
+                詳細內容{detailMarked && pane !== 'detail' && <span className="ext-dot" title="有其他人的修改" />}
+              </button>
+              <button type="button" className={pane === 'memory' ? 'on' : ''} onClick={() => setPane('memory')}>
+                記憶{card.memories?.length ? ` (${card.memories.length})` : ''}
+                {memoryMarked && pane !== 'memory' && <span className="ext-dot" title="有其他人的修改" />}
+              </button>
+            </div>
+          ) : (
+            <div className="card-editor-label">詳細內容</div>
+          )}
+          {showMemory && (
+            <MemoryPanel
+              memories={card.memories ?? []}
+              markKey={markKey}
+              changed={changedFields}
+              onChange={(memories) => onChange({ memories })}
+              {...memory}
+            />
+          )}
+          <div style={showMemory ? { display: 'none' } : undefined}>
+            <RichTextEditor editor={editor} />
+          </div>
         </div>
       </div>
-      <Outline headings={headings} active={active} onJump={jump} />
+      {!showMemory && <Outline headings={headings} active={active} onJump={jump} />}
       {addMenu && <ContextMenu x={addMenu.x} y={addMenu.y} items={addMenu.items} onClose={() => setAddMenu(null)} />}
     </div>
   );

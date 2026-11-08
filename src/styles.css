@@ -365,6 +365,8 @@ body.dragging, body.dragging * { user-select: none; }
 .card-value { min-width: 0; line-height: 1.5; word-break: break-word; }
 .card-fold-value { padding: 2px 0 4px 14px; line-height: 1.6; color: var(--text); word-break: break-word; }
 .card-detail { margin-top: 6px; padding: 2px 8px; border-left: 2px solid var(--border); }
+.card-detail-fold { margin-top: 2px; }
+.card-detail-fold .card-detail { margin: 2px 0 4px 4px; }
 .empty-detail { color: var(--text-dim); font-style: italic; }
 
 /* 富文字（側邊欄預覽和編輯頁共用的標題樣式） */
@@ -950,3 +952,124 @@ body.image-resizing, body.image-resizing * { cursor: nwse-resize !important; use
 body.image-viewer-dragging, body.image-viewer-dragging .image-viewer-img { cursor: grabbing; }
 .image-viewer-info { position: absolute; right: 16px; bottom: 12px; padding: 3px 8px; border-radius: 3px; font-size: 12px; color: #ddd; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .image-viewer-missing { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 10px 16px; border: 1px dashed var(--error-border); border-radius: 4px; color: var(--error); background: var(--bg); }
+
+/* 設定卡的「記憶」：時間線（一筆一列，可以直接改）和關係表 */
+.card-editor select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-tab);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 4px 4px;
+  outline: none;
+  min-width: 0;
+}
+.card-editor select:focus { border-color: var(--accent); }
+.memory-panel { display: flex; flex-direction: column; gap: 6px; }
+.memory-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.memory-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.memory-seg button { border: none; background: none; color: var(--text-dim); font-size: 12px; padding: 4px 12px; cursor: pointer; }
+.memory-seg button + button { border-left: 1px solid var(--border); }
+.memory-seg button.on { background: var(--bg-selected); color: var(--text); }
+.memory-cut { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 12px; }
+.memory-cut select { max-width: 200px; }
+.memory-list { display: flex; flex-direction: column; gap: 4px; }
+.memory-list > .text-btn { align-self: flex-start; }
+.memory-row {
+  display: grid;
+  grid-template-columns: 16px 64px 120px 64px minmax(0, 1fr) 150px 24px;
+  gap: 6px;
+  align-items: center;
+  border-radius: 3px;
+}
+.memory-row.dragging { background: var(--bg-selected); outline: 1px solid var(--accent); outline-offset: 1px; }
+.memory-row input { min-width: 0; width: 100%; }
+.memory-grip { color: var(--text-dim); cursor: grab; opacity: 0.4; display: flex; justify-content: center; }
+.memory-row:hover .memory-grip { opacity: 1; }
+body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging) * { cursor: grabbing; }
+.memory-target, .memory-source { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.memory-target input, .memory-source select { flex: 1; min-width: 0; }
+.memory-target .icon-btn, .memory-source .icon-btn { flex: none; padding: 0 2px; }
+.memory-kind { font-size: 12px; }
+.memory-kind.kind-0 { color: var(--pal-purple); }
+.memory-kind.kind-1 { color: var(--pal-teal); }
+.memory-kind.kind-2 { color: var(--pal-orange); }
+.memory-note { color: var(--text-dim); font-size: 12px; padding: 2px 0; }
+.memory-dim { color: var(--text-placeholder); }
+.memory-link { border: none; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
+.memory-link:hover { text-decoration: underline; }
+.memory-link .codicon { font-size: 12px; vertical-align: -2px; }
+.memory-relations { display: flex; flex-direction: column; }
+.memory-rel-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1.4fr) 150px;
+  gap: 10px;
+  padding: 6px 4px;
+  border-top: 1px solid var(--border);
+  align-items: baseline;
+}
+.memory-rel-head { border-top: none; color: var(--text-dim); font-size: 12px; padding-top: 0; }
+.memory-first { display: flex; flex-wrap: wrap; gap: 6px; color: var(--text-dim); font-size: 12px; }
+
+/* 設定卡下面「詳細內容／記憶」的切換分頁（取代原本的小標題） */
+.card-pane-tabs { display: flex; gap: 16px; padding-bottom: 0; }
+.card-pane-tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 2px 4px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.card-pane-tabs button:hover { color: var(--text); }
+.card-pane-tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.card-pane-tabs .ext-dot { display: inline-block; margin: 0 0 0 6px; }
+
+/* 側邊欄卡片「資料／記憶」切換，和記憶分頁的摘要（CardItem.tsx） */
+.card-body > .card-tabs, .card-body > .card-mem { grid-column: 1 / -1; min-width: 0; }
+.card-tabs { display: flex; gap: 12px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+.card-tabs button { border: none; border-bottom: 2px solid transparent; background: none; color: var(--text-dim); font: inherit; font-size: 12px; padding: 0 1px 2px; margin-bottom: -1px; cursor: pointer; }
+.card-tabs button:hover { color: var(--text); }
+.card-tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.card-mem { display: flex; flex-direction: column; gap: 1px; padding: 2px 4px; border-radius: 3px; cursor: zoom-in; }
+.card-mem:hover { background: var(--bg-hover); }
+.card-mem-row { display: flex; gap: 6px; min-width: 0; white-space: nowrap; }
+.card-mem-icon { flex: none; width: 14px; display: inline-flex; align-items: center; }
+.card-mem-icon .codicon { font-size: 12px; }
+.card-mem-target { flex: none; }
+.card-mem-text { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.card-mem-more { color: var(--accent); font-size: 12px; }
+
+/* 記憶放大視窗（MemoryViewer.tsx） */
+.memory-viewer { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 32px; }
+.memory-viewer-box { width: min(760px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--bg-editor); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
+.memory-viewer-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border); }
+.memory-viewer-title { font-weight: 600; }
+.memory-viewer-spacer { flex: 1; }
+.memory-viewer select { font: inherit; color: var(--text); background: var(--bg-tab); border: 1px solid var(--border); border-radius: 3px; padding: 2px 4px; }
+.memory-viewer-body { overflow: auto; padding: 14px 16px 16px; }
+.memory-tl { display: flex; flex-direction: column; }
+.memory-tl-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 2.2fr); column-gap: 8px; min-height: 26px; }
+.memory-tl-left { text-align: right; padding-top: 4px; overflow-wrap: anywhere; }
+.memory-tl-row.source .memory-tl-left { color: var(--text-dim); font-size: 12px; padding-top: 10px; }
+.memory-tl-row.source { min-height: 34px; }
+.memory-tl-time { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.memory-tl-axis { position: relative; display: flex; justify-content: center; }
+.memory-tl-axis::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: var(--border); }
+.memory-tl-axis.first::before { top: 50%; }
+.memory-tl-axis.last::before { bottom: calc(100% - 13px); }
+.memory-tl-axis.first.last::before { display: none; }
+.memory-tl-dot { position: relative; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; border: 2px solid currentColor; background: var(--bg-editor); box-sizing: border-box; color: var(--text-dim); }
+.memory-tl-dot.big { width: 14px; height: 14px; margin-top: 10px; border: none; background: var(--text-dim); }
+.memory-tl-row.source .memory-tl-axis.first::before { top: 17px; }
+.memory-tl-text { padding: 4px 0; overflow-wrap: anywhere; }
+.memory-tl-kind { font-size: 12px; margin-right: 8px; }
+.memory-tl-dot.kind-0, .memory-tl-kind.kind-0 { color: var(--pal-purple); }
+.memory-tl-dot.kind-1, .memory-tl-kind.kind-1 { color: var(--pal-teal); }
+.memory-tl-dot.kind-2, .memory-tl-kind.kind-2 { color: var(--pal-orange); }
+.memory-viewer .memory-relations { font-size: 13px; }

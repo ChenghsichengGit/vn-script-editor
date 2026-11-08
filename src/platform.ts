@@ -35,6 +35,7 @@ window.api = {
   saveImage: (root, name, data) =>
     invoke('image_save', data, { headers: { 'x-root': encodeURIComponent(root), 'x-name': encodeURIComponent(name) } }),
   importImage: (root) => invoke('image_import', { root }),
+  removeUnusedImages: (root, used, minAgeSecs) => invoke('image_remove_unused', { root, used, minAgeSecs }),
 
   // 專案資料夾與最近的專案
   pickFolder: () => invoke('project_pick_folder'),

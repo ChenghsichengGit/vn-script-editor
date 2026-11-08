@@ -3,6 +3,7 @@ import type { FileOps, FolderOps } from '../App';
 import { Card, CardOps, CardSectionId, ItemOrder, Schemas, SectionId, cardTabId, folderOrderKey, orderEntries } from '../model';
 import { fileIcon } from '../sampleData';
 import { sectionMeta } from '../sections';
+import { targetIcon } from '../memories';
 import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
@@ -481,6 +482,7 @@ export default function SectionPanel(props: Props) {
         rowProps={{ ...dragSource({ kind: 'card', id: card.id }, card.name), ...rowDropTarget(folder, card.id, card.name) }}
         rowClass={lineClass(card.id)}
         schemaFields={props.schemas[section as CardSectionId].fields}
+        targetIcon={(name) => targetIcon(props.cards, name, section as CardSectionId)}
       />
     );
 

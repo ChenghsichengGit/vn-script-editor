@@ -321,6 +321,32 @@ async fn image_import(app: AppHandle, state: State<'_, AppState>, root: String) 
     store_image(&root, &name, |target| fs::copy(&source, target).map(|_| ())).map(Some)
 }
 
+// 關閉專案時清掉沒用到的圖片：root/圖片/ 裡的圖片檔，檔名沒出現在 used（整個專案的文字）裡、
+// 而且超過 min_age_secs 秒沒有變動的，直接刪掉；回傳刪掉的檔名
+// 剛貼上或剛從雲端同步過來的圖不刪（共用資料夾時，圖檔可能比引用它的卡片早到）
+#[tauri::command]
+fn image_remove_unused(state: State<AppState>, root: String, used: String, min_age_secs: u64) -> Result<Vec<String>, String> {
+    let dir = guard(&state, &root)?.join(IMAGE_DIR);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Ok(Vec::new()); // 沒有 圖片/ 資料夾
+    };
+    let min_age = std::time::Duration::from_secs(min_age_secs);
+    let mut removed = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() || image_mime(&path).is_none() || used.contains(&name) {
+            continue;
+        }
+        let old = meta.modified().ok().and_then(|t| t.elapsed().ok()).map(|age| age >= min_age).unwrap_or(false);
+        if old && fs::remove_file(&path).is_ok() {
+            removed.push(name);
+        }
+    }
+    Ok(removed)
+}
+
 // ───────────────────────── 最近的專案（應用程式資料夾/recent.json） ─────────────────────────
 
 const MAX_RECENT: usize = 8;
@@ -802,6 +828,7 @@ pub fn run() {
             fs_exists,
             image_save,
             image_import,
+            image_remove_unused,
             project_pick_folder,
             export_save_text,
             project_pack,

@@ -2,7 +2,7 @@
 // 寫清楚資料夾結構、劇本語法、設定卡格式、目前所有的指令，AI 先讀這份就能照規則修改，不會寫出編輯器讀不懂的格式
 // 指令或欄位設定一改就重新產生（App 負責寫檔）
 import { Card, CardSectionId, Schemas } from './model';
-import { getCardSections, sectionMeta } from './sections';
+import { FILES_SECTION, getCardSections, sectionMeta } from './sections';
 
 export const AI_GUIDE_NAME = 'AI說明.md';
 
@@ -67,6 +67,33 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('- `fields`：條列欄位，照順序排；`value` 多行時用 `|-`。`collapsed: true` = 側邊欄只顯示欄位名稱（可省略）。');
   line('- 同一個資料夾裡的卡片名稱不能重複。');
   line();
+
+  const memorySections = getCardSections().filter((d) => d.memory);
+  if (memorySections.length > 0) {
+    line('## 記憶（' + memorySections.map((d) => d.title).join('、') + '）');
+    line();
+    line('這些區塊的卡片可以有 `memories`：這張卡（例如角色）記得的事。**清單順序就是時間順序**，新的記憶接在後面，插在中間要照劇情先後。');
+    line();
+    line('```yaml');
+    line('memories:');
+    line("  - time: '4/12'");
+    line('    target: 小明');
+    line('    kind: 事件');
+    line('    text: 在咖啡廳第一次見面');
+    line('    source: 第一章/序章.vns');
+    line("  - time: '4/12'");
+    line('    target: 小明');
+    line('    kind: 稱呼');
+    line('    text: 「那個店員」');
+    line('    source: 第一章/序章.vns');
+    line('```');
+    line();
+    line('- `kind`：`事件`（發生過的事）、`稱呼`（從這時候起怎麼叫對方）、`印象`（從這時候起對對方的看法）。稱呼和印象改變時新增一筆，不要改舊的。');
+    line('- `target`：對象的卡片名稱（可省略）。`time`：故事裡的日期，格式隨意（可省略）。');
+    line(`- \`source\`：出處，劇本相對於 \`${FILES_SECTION.dir}/\` 的路徑（可省略）。`);
+    line('- 記憶是單向的：A 卡上記的是 A 的記憶，B 怎麼看 A 要記在 B 卡上。');
+    line();
+  }
 
   line('## 各區塊的固定欄位');
   line();
