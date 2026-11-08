@@ -13,11 +13,12 @@ const range = (line: number, from: number, to: number) => new monaco.Range(line,
 function lineDecorations(text: string, n: number, editing: boolean): monaco.editor.IModelDeltaDecoration[] {
   const out: monaco.editor.IModelDeltaDecoration[] = [];
   if (!editing) {
-    const h = /^(\s*)(\/\/#{1,3})\s*/.exec(text);
-    if (h && HEADING.test(text)) {
-      const level = h[2].length - 2;
-      out.push({ range: range(n, h[1].length, h[0].length), options: hide });
-      out.push({ range: range(n, h[0].length, text.length), options: { inlineClassName: `vns-title${level}`, inlineClassNameAffectsLetterSpacing: true } });
+    const h = HEADING.exec(text);
+    if (h) {
+      const markEnd = h[1].length + (h[2]?.length ?? 0) + h[3].length + h[4].length;
+      const cls = `vns-title${h[3].length}${h[2] ? ' vns-title-commented' : ''}`;
+      out.push({ range: range(n, h[1].length, markEnd), options: hide });
+      out.push({ range: range(n, markEnd, text.length), options: { inlineClassName: cls, inlineClassNameAffectsLetterSpacing: true } });
     }
   }
   for (const r of findRubies(text)) {

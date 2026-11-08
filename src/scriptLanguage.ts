@@ -104,6 +104,14 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
     for (const field of fields) if (field.param) collect(field.param, section, (card) => fieldOf(card, field.key)), addSource(field.param, `${title}的「${field.key}」`);
   }
   for (const model of monaco.editor.getModels()) refresh(model);
+  for (const cb of [...dataListeners]) cb();
+}
+
+// 指令資料變動的通知（Notion 式編輯器重算提示和紅線）
+const dataListeners = new Set<() => void>();
+export function onScriptDataChange(cb: () => void): () => void {
+  dataListeners.add(cb);
+  return () => void dataListeners.delete(cb);
 }
 
 const codeOf = (text: string) => {
@@ -146,6 +154,7 @@ export type ScriptProblem = { line: number; startColumn: number; endColumn: numb
 export function checkScript(lines: string[]): ScriptProblem[] {
   const problems: ScriptProblem[] = [];
   lines.forEach((raw, index) => {
+    if (HEADING.test(raw)) return;
     const text = codeOf(raw);
     const mark = (message: string, start: number, end: number) => problems.push({ line: index + 1, startColumn: start + 1, endColumn: end + 1, message });
     for (const p of rubyProblems(text)) mark(p.message, p.start, p.end);
@@ -172,7 +181,18 @@ function validate(model: monaco.editor.ITextModel) {
   monaco.editor.setModelMarkers(model, LANGUAGE_ID, markers);
 }
 
+type ScriptView = { el: () => HTMLElement; reveal: (line: number, column: number, endColumn?: number) => void };
+const scriptViews = new Map<string, Set<ScriptView>>();
+// Notion 式劇本編輯器登記自己（回傳取消登記的函式）
+export function registerScriptView(fileId: string, view: ScriptView) {
+  const set = scriptViews.get(fileId) ?? scriptViews.set(fileId, new Set()).get(fileId)!;
+  set.add(view);
+  return () => void set.delete(view);
+}
+
 export function revealInEditor(fileId: string, line: number, column: number, endColumn?: number, tries = 30) {
+  const view = [...(scriptViews.get(fileId) ?? [])].find((v) => v.el().offsetParent !== null);
+  if (view) return view.reveal(line, column, endColumn);
   const editor = monaco.editor.getEditors().find((e) => e.getModel()?.uri.path.replace(/^\//, '') === fileId && e.getContainerDomNode().offsetParent !== null);
   if (!editor) return void (tries > 0 && setTimeout(() => revealInEditor(fileId, line, column, endColumn, tries - 1), 50));
   if (endColumn) editor.setSelection({ startLineNumber: line, startColumn: column, endLineNumber: line, endColumn });
@@ -196,21 +216,68 @@ function missingLabel(text: string): { label: string; more: number } | null {
   return { label: rests[0], more: rests.length - 1 };
 }
 
-export const HEADING = /^\s*\/\/(#{1,3})(?!#)\s*(.*)$/;
+// 標題：「= 大」「== 中」「=== 小」（=後面要有空白），前面加 // 是被註解掉的標題（大綱仍會列出）。群組：縮排、//、=們、空白、文字
+export const HEADING = /^(\s*)(\/\/)?(={1,3})(?!=)(\s+)(.*)$/;
 
-const headingLevel = (line: string) => HEADING.exec(line)?.[1].length ?? 0;
+const headingLevel = (line: string) => HEADING.exec(line)?.[3].length ?? 0;
 export const scriptHeadings = (lines: string[]) =>
   lines.flatMap((line, i) => {
     const m = HEADING.exec(line);
-    return m ? [{ level: m[1].length, text: m[2].trim(), pos: i + 1 }] : [];
+    return m ? [{ level: m[3].length, text: m[5].trim(), pos: i + 1 }] : [];
   });
 
 export function setHeadingLevel(line: string, level: number): string {
   const m = HEADING.exec(line);
   const indent = /^\s*/.exec(line)![0];
-  const text = m ? m[2] : line.trim();
-  return level === 0 ? indent + text : `${indent}//${'#'.repeat(level)} ${text}`;
+  const text = m ? m[5] : line.trim();
+  const comment = m?.[2] ?? '';
+  if (level === 0) return comment ? `${indent}// ${text}` : indent + text;
+  return `${indent}${comment}${'='.repeat(level)} ${text}`;
 }
+
+// 補齊：before = 這一行游標前面的文字；from = 要被取代的那一段從第幾個字開始（0 起算）
+// 行首打指令名稱時列出指令；指令後面列出這個位置的參數可以選什麼（retrigger = 選完還有下一個參數，要接著再開清單）
+export type ScriptCompletion = { kind: 'command' | 'value'; label: string; detail: string; documentation?: string; insertText: string; retrigger: boolean };
+export function completionsAt(before: string): { from: number; items: ScriptCompletion[] } {
+  const none = { from: before.length, items: [] };
+  if (before.includes('//') || HEADING.test(before)) return none; // 在註解或標題裡
+  const line = parseLine(before);
+  if (!line) return none;
+  if (line.rest === '') {
+    const items = commands.map((c): ScriptCompletion => {
+      const hasParams = c.usages.some((u) => u.params.length > 0);
+      return {
+        kind: 'command',
+        label: c.name,
+        detail: c.usages.length > 1 ? `${c.usages[0].format}（共 ${c.usages.length} 種寫法）` : c.usages[0].format,
+        documentation: [c.description, ...c.usages.map((u) => (u.description ? `${u.format}：${u.description}` : u.format))].filter(Boolean).join('\n'),
+        insertText: hasParams ? `${c.name} ` : c.name,
+        retrigger: hasParams,
+      };
+    });
+    return { from: line.indent, items };
+  }
+  const cmd = findCommand(line.name);
+  if (!cmd) return none;
+  const typing = line.endsWithSpace ? '' : (line.words[line.words.length - 1] ?? '');
+  const done = line.endsWithSpace ? line.words : line.words.slice(0, -1);
+  const merged = new Map<string, { choice: Choice; hasMore: boolean }>();
+  for (const u of matchUsages(cmd, done)) {
+    const p = u.params[done.length];
+    if (!p) continue;
+    const hasMore = u.params.length > done.length + 1;
+    for (const c of paramChoices(u, p)) {
+      const seen = merged.get(c.label);
+      if (seen) seen.hasMore ||= hasMore;
+      else merged.set(c.label, { choice: c, hasMore });
+    }
+  }
+  const items = [...merged.values()].map(({ choice: c, hasMore }): ScriptCompletion => ({ kind: 'value', label: c.label, detail: c.detail, insertText: hasMore ? `${c.label} ` : c.label, retrigger: hasMore }));
+  return { from: before.length - typing.length, items };
+}
+
+// 行尾的參數提示：這一行（不含 // 註解）還缺哪些參數；more = 另外還有幾種寫法
+export const missingHint = (line: string) => missingLabel(codeOf(line));
 
 const hintIds = new WeakMap<monaco.editor.ITextModel, string[]>();
 
@@ -270,9 +337,9 @@ export function registerScriptLanguage() {
   monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, {
     tokenizer: {
       root: [
-        [/\s*\/\/###(?!#).*/, 'heading3'],
-        [/\s*\/\/##(?!#).*/, 'heading2'],
-        [/\s*\/\/#(?!#).*/, 'heading1'],
+        [/^\s*===(?!=)\s.*/, 'heading3'],
+        [/^\s*==(?!=)\s.*/, 'heading2'],
+        [/^\s*=(?!=)\s.*/, 'heading1'],
         [/\/\/.*/, 'comment'],
         [/(\s*)(#(?:[^\s/]|\/(?!\/))*)((?:[^/]|\/(?!\/))*)/, ['', 'command', 'argument']],
         [/(?:[^/]|\/(?!\/))+/, ''],
@@ -296,54 +363,14 @@ export function registerScriptLanguage() {
   monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
     triggerCharacters: ['#', ' '],
     provideCompletionItems(model, position) {
-      const before = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
-      if (before.includes('//')) return { suggestions: [] }; // 在註解裡
-      const line = parseLine(before);
-      if (!line) return { suggestions: [] };
-      if (line.rest === '') {
-        const range = new monaco.Range(position.lineNumber, line.indent + 1, position.lineNumber, position.column);
-        return {
-          suggestions: commands.map((c, i) => {
-            const hasParams = c.usages.some((u) => u.params.length > 0);
-            return {
-              label: c.name,
-              kind: monaco.languages.CompletionItemKind.Keyword,
-              detail: c.usages.length > 1 ? `${c.usages[0].format}（共 ${c.usages.length} 種寫法）` : c.usages[0].format,
-              documentation: [c.description, ...c.usages.map((u) => (u.description ? `${u.format}：${u.description}` : u.format))]
-                .filter(Boolean)
-                .join('\n'),
-              insertText: hasParams ? `${c.name} ` : c.name,
-              command: hasParams ? { id: 'editor.action.triggerSuggest', title: '' } : undefined,
-              range,
-              sortText: String(i).padStart(4, '0'),
-            };
-          }),
-        };
-      }
-      const cmd = findCommand(line.name);
-      if (!cmd) return { suggestions: [] };
-      const typing = line.endsWithSpace ? '' : line.words[line.words.length - 1] ?? '';
-      const done = line.endsWithSpace ? line.words : line.words.slice(0, -1);
-      const index = done.length;
-      const merged = new Map<string, { choice: Choice; hasMore: boolean }>();
-      for (const u of matchUsages(cmd, done)) {
-        const p = u.params[index];
-        if (!p) continue;
-        const hasMore = u.params.length > index + 1;
-        for (const c of paramChoices(u, p)) {
-          const seen = merged.get(c.label);
-          if (seen) seen.hasMore ||= hasMore;
-          else merged.set(c.label, { choice: c, hasMore });
-        }
-      }
-      const range = new monaco.Range(position.lineNumber, position.column - typing.length, position.lineNumber, position.column);
+      const { from, items } = completionsAt(model.getLineContent(position.lineNumber).slice(0, position.column - 1));
+      const range = new monaco.Range(position.lineNumber, from + 1, position.lineNumber, position.column);
+      const { Keyword, Value } = monaco.languages.CompletionItemKind;
       return {
-        suggestions: [...merged.values()].map(({ choice: c, hasMore }, i) => ({
-          label: c.label,
-          kind: monaco.languages.CompletionItemKind.Value,
-          detail: c.detail,
-          insertText: hasMore ? `${c.label} ` : c.label,
-          command: hasMore ? { id: 'editor.action.triggerSuggest', title: '' } : undefined,
+        suggestions: items.map((c, i) => ({
+          ...c,
+          kind: c.kind === 'command' ? Keyword : Value,
+          command: c.retrigger ? { id: 'editor.action.triggerSuggest', title: '' } : undefined,
           range,
           sortText: String(i).padStart(4, '0'), // 照欄位裡寫的順序排，不要被改成字母順序
         })),

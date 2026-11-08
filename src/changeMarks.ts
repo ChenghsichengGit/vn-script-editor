@@ -29,6 +29,7 @@ const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => listeners.delete(fn);
 };
+export const subscribeMarks = subscribe;
 export const useChangeMarks = () => useSyncExternalStore(subscribe, () => version);
 
 const enabled = () => getSettings().markExternal;
@@ -42,6 +43,13 @@ function update(key: string, patch: Partial<Entry>) {
 }
 
 export const hasMarks = (key: string) => !isEmpty(store.get(key));
+export const getLineMarks = (key: string): LineMark[] => store.get(key)?.lines ?? [];
+// 取代這個檔的行標記（Notion 式劇本編輯器編輯後同步用；內容相同就不通知）
+export function setLineMarks(key: string, lines: LineMark[]) {
+  const before = store.get(key)?.lines ?? [];
+  if (lines.length === before.length && lines.every((m, i) => m.line === before[i].line && m.kind === before[i].kind)) return;
+  update(key, { lines });
+}
 export const fieldMarks = (key: string): string[] => store.get(key)?.fields ?? [];
 export const blockMarks = (key: string): number[] => store.get(key)?.blocks ?? [];
 

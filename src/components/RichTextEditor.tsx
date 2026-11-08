@@ -6,10 +6,10 @@ import { Markdown } from 'tiptap-markdown';
 import { ImageBlock, insertImageFiles } from './ImageNode';
 import { ChangeHighlight } from './ChangeHighlight';
 import { imageError, imageFiles, pickImage } from '../images';
-import { RubyMark, promptRuby } from './RubyMark';
+import { RubyNode, promptRuby } from './RubyMark';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 
-export const richExtensions = [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), ImageBlock, RubyMark, Markdown];
+export const richExtensions = [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), ImageBlock, RubyNode, Markdown];
 const extensions = richExtensions;
 
 export const toMarkdown = (editor: Editor): string => editor.storage.markdown.getMarkdown();

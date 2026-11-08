@@ -132,6 +132,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => updateSettings({ scriptFontFamily: e.target.value })}
             />
           </Row>
+          <Row label="Notion 式劇本編輯器" hint="標題、標音直接顯示效果，看不到符號；關掉就改回原本的程式碼式編輯器"><Toggle checked={s.richScript} onChange={(v) => updateSettings({ richScript: v })} /></Row>
           <Row label="自動換行"><Toggle checked={s.wordWrap} onChange={(v) => updateSettings({ wordWrap: v })} /></Row>
           <Row label="小地圖" hint="右側的縮圖">
             <div className="settings-segment">

@@ -40,7 +40,8 @@ import ProblemsPanel, { ProblemGroup } from './components/ProblemsPanel';
 import BottomPanel, { PanelTab } from './components/BottomPanel';
 import SearchPanel, { SearchState, emptySearch } from './components/SearchPanel';
 import { SearchGroup, SearchHit, SearchMatch, SearchTarget, replaceAllInText, replaceOneInText } from './projectSearch';
-import { playEdit, waitForEditor } from './aiPlayback';
+import { playEdit } from './aiPlayback';
+import { waitForPlayback } from './components/VnsPlayback';
 import monaco from './monaco';
 import type { DiskChanges } from './projectFiles';
 import { dragWith, errorText, useKeys, useLatest, writeJSON } from './hooks';
@@ -213,7 +214,7 @@ export default function App() {
     const timer = setTimeout(() => flushRef.current(), SAVE_DELAY);
     return () => clearTimeout(timer);
   }, [dirty, contents, cards, files, settings.autoSave, closePrompt, tabClose, conflict]);
-  useEffect(() => window.api.setZoom(settings.uiZoom), [settings.uiZoom]);
+  useEffect(() => void window.api.setZoom(settings.uiZoom), [settings.uiZoom]);
   useEffect(() => {
     if (settings.theme === 'dark') delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = settings.theme;
@@ -280,12 +281,13 @@ export default function App() {
     const oldText = latest.current.contents[id] ?? '';
     if (aiPlayback) {
       openTab(id);
-      const editor = await waitForEditor(id);
-      if (editor) {
+      const target = await waitForPlayback(id);
+      if (target) {
         playingRef.current.add(id);
         const resumeMarks = suspendMarks(id); // 播放中先不追蹤標記，播完由 markFileChange 重新算位置
         try {
-          await playEdit(editor, editor.getValue(), text, aiSpeed);
+          if (target.player) await target.player.play(text, aiSpeed);
+          else await playEdit(target.editor!, target.editor!.getValue(), text, aiSpeed);
         } finally {
           playingRef.current.delete(id);
           resumeMarks();

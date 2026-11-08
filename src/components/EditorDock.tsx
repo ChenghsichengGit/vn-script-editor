@@ -17,6 +17,8 @@ import {
 import 'dockview-react/dist/styles/dockview.css';
 import { Card, CardSectionId, Schemas, cardTabId, parseCardTab } from '../model';
 import ScriptEditor from './ScriptEditor';
+import VnsEditor from './VnsEditor';
+import { useSettings } from '../settings';
 import CardEditor from './CardEditor';
 import type { MemoryLinks } from './MemoryPanel';
 import { findTargetCard, scriptPath, targetIcon } from '../memories';
@@ -67,6 +69,7 @@ const EditorCtx = createContext<EditorCtxValue | null>(null);
 
 function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
   const ctx = useContext(EditorCtx)!;
+  const settings = useSettings();
   const { tabId } = params;
   const cardRef = parseCardTab(tabId);
   if (cardRef) {
@@ -103,6 +106,8 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
     );
   }
   if (!ctx.files[tabId]) return null;
+  if (settings.richScript && /\.vns$/i.test(ctx.files[tabId].name))
+    return <VnsEditor fileId={tabId} text={ctx.contents[tabId] ?? ''} onChange={(text) => ctx.onFileChange(tabId, text)} onCursor={ctx.onCursor} active={ctx.activePanelId === api.id} />;
   return (
     <ScriptEditor
       fileId={tabId}

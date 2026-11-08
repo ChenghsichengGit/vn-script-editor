@@ -16,6 +16,7 @@ export interface Settings {
   aiSpeed: 'slow' | 'normal' | 'fast'; // 打字效果的速度
   markExternal: boolean; // 外部（一起寫的人、AI）改過的地方用淡黃底標出來，直到按「清除標記」
   theme: 'dark' | 'light' | 'hc'; // 顏色主題：深色、淺色、高對比
+  richScript: boolean; // 劇本用 Notion 式編輯器
 }
 
 const KEY = 'vn-editor-settings';
@@ -36,6 +37,7 @@ export const defaultSettings: Settings = {
   aiSpeed: 'normal',
   markExternal: true,
   theme: 'dark',
+  richScript: true,
 };
 
 export const LIMITS = {
@@ -67,6 +69,7 @@ function normalize(raw: unknown): Settings {
     aiSpeed: r.aiSpeed === 'slow' || r.aiSpeed === 'normal' || r.aiSpeed === 'fast' ? r.aiSpeed : d.aiSpeed,
     markExternal: bool(r.markExternal, d.markExternal),
     theme: r.theme === 'dark' || r.theme === 'light' || r.theme === 'hc' ? r.theme : d.theme,
+    richScript: bool(r.richScript, d.richScript),
   };
 }
 

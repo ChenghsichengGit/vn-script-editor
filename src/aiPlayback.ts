@@ -3,9 +3,9 @@ import monaco from './monaco';
 
 export type PlaybackSpeed = 'slow' | 'normal' | 'fast';
 
-const MAX_TICKS: Record<PlaybackSpeed, number> = { slow: 150, normal: 70, fast: 25 };
-const TICK = 20;
-const DELETE_PAUSE: Record<PlaybackSpeed, number> = { slow: 500, normal: 280, fast: 120 };
+export const MAX_TICKS: Record<PlaybackSpeed, number> = { slow: 150, normal: 70, fast: 25 };
+export const TICK = 20;
+export const DELETE_PAUSE: Record<PlaybackSpeed, number> = { slow: 500, normal: 280, fast: 120 };
 
 export interface Hunk {
   oldStart: number;
@@ -56,7 +56,7 @@ export function diffLines(a: string[], b: string[]): Hunk[] {
   return hunks;
 }
 
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function lineOffset(lines: string[], line: number): number {
   let offset = 0;
@@ -138,12 +138,15 @@ export async function playEdit(editor: monaco.editor.IStandaloneCodeEditor, oldT
   }, 1500);
 }
 
+export const findEditor = (fileId: string) =>
+  monaco.editor.getEditors().find((e) => e.getModel()?.uri.path.replace(/^\//, '') === fileId && e.getContainerDomNode().offsetParent !== null) as
+    | monaco.editor.IStandaloneCodeEditor
+    | undefined;
+
 export async function waitForEditor(fileId: string): Promise<monaco.editor.IStandaloneCodeEditor | null> {
   for (let tries = 0; tries < 30; tries++) {
-    const editor = monaco.editor
-      .getEditors()
-      .find((e) => e.getModel()?.uri.path.replace(/^\//, '') === fileId && e.getContainerDomNode().offsetParent !== null);
-    if (editor) return editor as monaco.editor.IStandaloneCodeEditor;
+    const editor = findEditor(fileId);
+    if (editor) return editor;
     await wait(50);
   }
   return null;
