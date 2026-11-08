@@ -1,13 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-// 按鈕的提示框（取代瀏覽器內建的 title：那個要停很久才出現，字也很小）
-// 用法：在任何元素上加 data-tip="說明文字"；滑鼠停 0.4 秒就在它下方（下方放不下就上方）顯示
-// 整個畫面只放一個 <Tooltip />（在 App 裡）
 export default function Tooltip() {
   const [tip, setTip] = useState<{ text: string; anchor: DOMRect } | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     let timer: number | undefined;
     let current: HTMLElement | null = null;
@@ -34,8 +30,6 @@ export default function Tooltip() {
       window.removeEventListener('wheel', hide, true);
     };
   }, []);
-
-  // 量出提示框大小再決定位置：置中在按鈕下方，超出視窗左右邊就往內推；下方放不下改放上方
   useLayoutEffect(() => {
     if (!tip || !ref.current) return setPos(null);
     const { width, height } = ref.current.getBoundingClientRect();
@@ -44,11 +38,8 @@ export default function Tooltip() {
     const top = a.bottom + 6 + height > window.innerHeight ? a.top - 6 - height : a.bottom + 6;
     setPos({ left, top });
   }, [tip]);
-
   if (!tip) return null;
   return (
-    <div ref={ref} className="tooltip" style={pos ?? { left: -9999, top: -9999 }}>
-      {tip.text}
-    </div>
+    <div ref={ref} className="tooltip" style={pos ?? { left: -9999, top: -9999 }}>{tip.text}</div>
   );
 }

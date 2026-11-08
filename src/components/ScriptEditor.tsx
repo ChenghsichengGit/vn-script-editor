@@ -1,7 +1,10 @@
+import { useLatest } from '../hooks';
 import { useEffect, useRef, useState } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { DEFAULT_FONT_FAMILY, getSettings, updateSettings, useSettings } from '../settings';
-import { LANGUAGE_ID, registerScriptLanguage, scriptHeadings, setHeadingLevel } from '../scriptLanguage';
+import { LANGUAGE_ID, registerScriptLanguage, scriptHeadings } from '../scriptLanguage';
+import { BubbleState, addScriptActions, attachPreview, promptScriptRuby, setHeadingLines, trackSelectionBubble } from '../scriptPreview';
+import type monacoApi from '../monaco';
 import Outline, { Heading } from './Outline';
 import { SAVE_ALL_EVENT } from '../model';
 import { attachModel } from '../changeMarks';
@@ -16,22 +19,16 @@ interface Props {
   fileName: string; // .vns 才用劇本語言（指令上色、補齊、提示），其他當純文字
 }
 
-// 劇本編輯器（Monaco，VS Code 的編輯器核心）
 export default function ScriptEditor(props: Props) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
   const modelRef = useRef<ReturnType<Parameters<OnMount>[0]['getModel']>>(null);
-
-  // 事件只在編輯器建立時訂閱一次，所以用 ref 讀最新的 active 和 onCursor
-  const activeRef = useRef(props.active);
-  activeRef.current = props.active;
-  const onCursorRef = useRef(props.onCursor);
-  onCursorRef.current = props.onCursor;
-
+  const activeRef = useLatest(props.active);
+  const onCursorRef = useLatest(props.onCursor);
   const settings = useSettings();
   const isScript = /\.vns$/i.test(props.fileName);
-
-  // 大綱：劇本裡的 //# 標題（pos = 第幾行）；active = 游標所在的段落（跟 VS Code 一樣跟著游標）
+  const mainRef = useRef<HTMLDivElement>(null);
+  const [bubble, setBubble] = useState<BubbleState | null>(null);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [active, setActive] = useState(0);
   const headingsRef = useRef<Heading[]>([]);
@@ -53,20 +50,13 @@ export default function ScriptEditor(props: Props) {
     editor.setPosition({ lineNumber: h.pos, column: 1 });
     editor.focus();
   };
-
   const report = () => {
     const pos = editorRef.current?.getPosition();
     if (pos) onCursorRef.current({ line: pos.lineNumber, column: pos.column });
   };
-
-  // 變成作用中的面板時（切分頁、點到另一個群組），把自己的游標位置報給狀態列
   useEffect(() => {
     if (props.active) report();
   }, [props.active]);
-
-  // 面板關掉時，如果沒有別的編輯器（例如分割出來的另一個畫面）還在用這份內容，就把它釋放掉
-  // 不能交給 @monaco-editor/react 自己釋放：分割時兩個畫面共用同一份內容，關掉一個就會害另一個壞掉
-  // 晚一個 tick 才檢查，等元件庫先把這個編輯器本身銷毀
   useEffect(
     () => () => {
       const model = modelRef.current;
@@ -78,12 +68,10 @@ export default function ScriptEditor(props: Props) {
     },
     [],
   );
-
   return (
     <div className="script-editor">
-      <div className="script-editor-main">
+      <div className="script-editor-main" ref={mainRef}>
         <ChangeBar markKey={props.fileId} />
-        {/* path 讓每個檔案有各自的內容和復原紀錄；同一個檔案開在兩個畫面時共用同一份，內容自動同步 */}
         <Editor
           path={props.fileId}
           defaultValue={props.initialText}
@@ -98,7 +86,6 @@ export default function ScriptEditor(props: Props) {
             modelRef.current = editor.getModel();
             if (modelRef.current) attachModel(props.fileId, modelRef.current); // 畫上「外部修改」的標記
             if (isScript) {
-              // 大綱：內容一改就重新找標題；游標一動就更新目前所在的段落
               const collect = () => {
                 headingsRef.current = scriptHeadings(editor.getModel()?.getLinesContent() ?? []);
                 setHeadings(headingsRef.current);
@@ -107,40 +94,15 @@ export default function ScriptEditor(props: Props) {
               collect();
               editor.onDidChangeModelContent(collect);
               editor.onDidChangeCursorPosition(syncActive);
-              // 右鍵選單：把游標所在（或選取的每一）行設成大／中／小標題，或取消標題
-              const levels = ['取消標題', '設為大標題', '設為中標題', '設為小標題'];
-              [1, 2, 3, 0].forEach((level, order) =>
-                editor.addAction({
-                  id: `vns.heading${level}`,
-                  label: levels[level],
-                  contextMenuGroupId: '0_heading',
-                  contextMenuOrder: order,
-                  run: (ed) => {
-                    const model = ed.getModel();
-                    const selections = ed.getSelections();
-                    if (!model || !selections) return;
-                    const lines = new Set<number>();
-                    for (const s of selections) for (let n = s.startLineNumber; n <= s.endLineNumber; n++) lines.add(n);
-                    ed.executeEdits(
-                      'heading',
-                      [...lines].map((n) => ({
-                        range: new monaco.Range(n, 1, n, model.getLineMaxColumn(n)),
-                        text: setHeadingLevel(model.getLineContent(n), level),
-                      })),
-                    );
-                  },
-                }),
-              );
+              attachPreview(editor);
+              addScriptActions(editor);
+              trackSelectionBubble(editor, () => mainRef.current, setBubble);
             }
-            // Ctrl+K S：全部存檔（跟 VS Code 一樣）。登記成編輯器的組合鍵，編輯器按完 Ctrl+K 等第二個鍵時才不會卡住
             editor.addCommand(monaco.KeyMod.chord(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, monaco.KeyCode.KeyS), () =>
               window.dispatchEvent(new Event(SAVE_ALL_EVENT)),
             );
-            // 游標移動：只有作用中的面板才回報（另一個畫面編輯同一份內容時，這邊的游標也會被推動，不能算）
             editor.onDidChangeCursorPosition(() => activeRef.current && report());
             if (activeRef.current) report();
-            // Ctrl＋滾輪：調整設定裡的「劇本文字大小」（所有劇本分頁一起變，也會記住）
-            // 用捕捉階段先攔下來，不讓編輯器把它當成一般的捲動
             editor.getDomNode()?.addEventListener(
               'wheel',
               (e) => {
@@ -159,8 +121,6 @@ export default function ScriptEditor(props: Props) {
             lineHeight: Math.round(settings.scriptFontSize * 1.75), // 行距跟著字的大小等比例
             wordWrap: settings.wordWrap ? 'on' : 'off',
             minimap: { enabled: settings.minimap, scale: settings.minimapScale },
-            // 左邊的空白會跟著字體變寬，所以盡量收窄：行號先留 3 位數（超過會自動變寬）、
-            // 不要放中斷點的符號欄、行號和文字之間的間距縮小；摺疊箭頭保留，之後分段可以用
             lineNumbersMinChars: 3,
             glyphMargin: false,
             lineDecorationsWidth: 6,
@@ -169,9 +129,30 @@ export default function ScriptEditor(props: Props) {
             automaticLayout: true, // 容器大小改變時跟著重新排版（不然縮放後會變很窄、小地圖消失）
           }}
         />
+        {bubble && editorRef.current && (
+          <ScriptBubble editor={editorRef.current} multiLine={bubble.multiLine} style={{ left: bubble.x, top: bubble.y }} />
+        )}
       </div>
-      {/* 有標題才顯示大綱 */}
       {headings.length > 0 && <Outline headings={headings} active={active} onJump={jump} />}
+    </div>
+  );
+}
+
+function ScriptBubble({ editor, multiLine, style }: { editor: monacoApi.editor.ICodeEditor; multiLine: boolean; style: React.CSSProperties }) {
+  const buttons = [
+    { label: '標音', hidden: multiLine, run: () => promptScriptRuby(editor) },
+    { label: '大標題', run: () => setHeadingLines(editor, 1) },
+    { label: '中標題', run: () => setHeadingLines(editor, 2) },
+    { label: '小標題', run: () => setHeadingLines(editor, 3) },
+    { label: '註解', run: () => editor.trigger('bubble', 'editor.action.commentLine', null) },
+  ];
+  return (
+    <div className="bubble-toolbar script-bubble" style={style}>
+      {buttons
+        .filter((b) => !b.hidden)
+        .map((b) => (
+          <button key={b.label} onMouseDown={(e) => e.preventDefault()} onClick={b.run}>{b.label}</button>
+        ))}
     </div>
   );
 }

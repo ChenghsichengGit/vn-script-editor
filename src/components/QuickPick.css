@@ -1,4 +1,3 @@
-/* VS Code 式的快速選單（Ctrl+P／Ctrl+Shift+P）：畫面上方中間 */
 .qp-backdrop { position: fixed; inset: 0; z-index: 1250; }
 .qp-panel {
   position: absolute;

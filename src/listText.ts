@@ -1,7 +1,5 @@
 // 欄位內容裡的條列：行首「- 」是 • 清單、「1. 」是編號清單（跟 Markdown 一樣，存的就是打的字）
-// 這裡負責：把文字拆成「一般文字／清單」好顯示，以及輸入框裡按 Enter／Backspace 時自動補項目、拿掉記號
 
-// 一行是不是清單項目：marker = 「-」或數字；rest = 項目文字
 const ITEM = /^(-|(\d+)\.) (.*)$/;
 
 export type ListItem = { ordered: boolean; num: number; text: string };
@@ -13,10 +11,8 @@ export function parseItem(line: string): ListItem | null {
   return { ordered: m[1] !== '-', num: m[2] ? Number(m[2]) : 0, text: m[3] };
 }
 
-// 有沒有任何一行是清單項目（沒有的話照一般文字顯示就好）
 export const hasList = (text: string) => text.split('\n').some((l) => ITEM.test(l.replace(/\r$/, '')));
 
-// 拆成一段一段：連續的同一種清單項目合成一個清單，其他行是一般文字
 export function parseBlocks(text: string): TextBlock[] {
   const blocks: TextBlock[] = [];
   for (const raw of text.split('\n')) {
@@ -32,7 +28,6 @@ export function parseBlocks(text: string): TextBlock[] {
   return blocks;
 }
 
-// 從第 index 行所在的那一串編號清單開頭起，重新編號成 1、2、3…（插入或刪掉項目後用）
 function renumber(lines: string[], index: number): string[] {
   const out = [...lines];
   const isOrdered = (i: number) => parseItem(out[i] ?? '')?.ordered === true;
@@ -45,7 +40,6 @@ function renumber(lines: string[], index: number): string[] {
   return out;
 }
 
-// 輸入框裡按了 Enter 或 Backspace：要特別處理就回傳新文字和游標位置，不用處理回傳 null（照一般輸入）
 export function listKey(text: string, cursor: number, key: 'Enter' | 'Backspace'): { text: string; cursor: number } | null {
   const lineStart = text.lastIndexOf('\n', cursor - 1) + 1;
   const lineEndRaw = text.indexOf('\n', cursor);
@@ -56,21 +50,16 @@ export function listKey(text: string, cursor: number, key: 'Enter' | 'Backspace'
   const markerLen = line.length - item.text.length; // 「- 」或「12. 」的長度
   const lines = text.split('\n');
   const lineIndex = text.slice(0, lineStart).split('\n').length - 1;
-
   if (key === 'Backspace') {
-    // 游標剛好在記號後面：拿掉記號，這一行變回一般文字
     if (cursor !== lineStart + markerLen) return null;
     lines[lineIndex] = item.text;
     const next = renumber(lines, Math.min(lineIndex + 1, lines.length - 1)).join('\n');
     return { text: next, cursor: lineStart };
   }
-
-  // Enter 在空的項目上：結束清單（拿掉記號，留一個空行）
   if (item.text.trim() === '') {
     lines[lineIndex] = '';
     return { text: lines.join('\n'), cursor: lineStart };
   }
-  // Enter：游標後面的字跟著換到新的一項，新項目接著編號
   const before = text.slice(0, cursor);
   const after = text.slice(cursor);
   const marker = item.ordered ? `${item.num + 1}. ` : '- ';

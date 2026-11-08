@@ -1,4 +1,3 @@
-/* 輸入框下面的選項清單（樣子跟劇本的補齊清單相近） */
 .suggest-list {
   position: fixed;
   z-index: 1200; /* 比對話框和右鍵選單都高 */

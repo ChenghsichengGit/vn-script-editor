@@ -4,7 +4,6 @@ export interface Heading {
   pos: number; // 在文件裡的位置，用來跳過去
 }
 
-// 右側目錄：依標題層級縮排，目前所在段落會反白，點了就跳過去
 export default function Outline(props: { headings: Heading[]; active: number; onJump: (i: number) => void }) {
   return (
     <nav className="outline">

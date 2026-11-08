@@ -1,7 +1,4 @@
 // 劇本編輯器（Monaco）只載入用得到的部分
-// 整包的 'monaco-editor' 會帶進幾十種程式語言的上色和 JSON／CSS／HTML／TypeScript 的語言功能，劇本都用不到
-// 這裡只載入編輯器核心 + 下面列的功能；其他檔案一律 import monaco from './monaco'，不要直接 import 'monaco-editor'
-// 要加功能時，到 node_modules/monaco-editor/esm/vs/editor/editor.all.js 找對應的那一行加進來
 import 'monaco-editor/esm/vs/editor/browser/coreCommands.js'; // 基本游標移動、選取、刪除
 import 'monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js'; // 編輯器本體
 import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching.js'; // 括號配對

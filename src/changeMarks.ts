@@ -1,8 +1,4 @@
 // 「被別人（外部）改過的地方」的標記：一起寫的人存檔後，改到的地方用淡黃底標出來，直到按「清除標記」
-//   劇本：改到的行（add）、刪掉東西的位置（del）
-//   設定卡：改到的欄位（'__name' = 名稱）、詳細內容改到的區塊（最上層的第幾塊）
-// 只記在記憶體裡，不存檔；關掉程式或專案就沒了
-// 分不出是誰改的：AI 在程式外面改的也一樣會標
 import { useSyncExternalStore } from 'react';
 import { Editor as CoreEditor } from '@tiptap/core';
 import monaco from './monaco';
@@ -22,7 +18,6 @@ interface Entry {
   blocks?: number[];
 }
 
-// key = 分頁 id（劇本 = 檔案 id；設定卡 = card:區塊:id）
 const store = new Map<string, Entry>();
 let version = 0;
 const listeners = new Set<() => void>();
@@ -34,7 +29,6 @@ const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => listeners.delete(fn);
 };
-// 標記一變就重畫（側邊欄的圓點、分頁上方的提示條）
 export const useChangeMarks = () => useSyncExternalStore(subscribe, () => version);
 
 const enabled = () => getSettings().markExternal;
@@ -51,7 +45,6 @@ export const hasMarks = (key: string) => !isEmpty(store.get(key));
 export const fieldMarks = (key: string): string[] => store.get(key)?.fields ?? [];
 export const blockMarks = (key: string): number[] => store.get(key)?.blocks ?? [];
 
-// 清除一個分頁的標記（提示條的「清除標記」）
 export function clearMarks(key: string) {
   const model = findModel(key);
   if (model) setDecorations(model, []);
@@ -59,14 +52,10 @@ export function clearMarks(key: string) {
   emit();
 }
 
-// 關專案：全部清掉
 export function clearAllMarks() {
   for (const key of [...store.keys()]) clearMarks(key);
 }
 
-// ── 比對 ──────────────────────────────
-
-// 舊的第 i 個（行或區塊，從 0 開始）在新內容裡變成第幾個；它本身被改掉了就回傳 null
 function shiftIndex(i: number, hunks: Hunk[]): number | null {
   let delta = 0;
   for (const h of hunks) {
@@ -77,7 +66,6 @@ function shiftIndex(i: number, hunks: Hunk[]): number | null {
   return i + delta;
 }
 
-// 新內容裡被改到的是哪幾個（從 0 開始）；純刪除的放在 deleted（刪掉的位置 = 新內容的第幾個前面）
 function changedIndexes(hunks: Hunk[], newLength: number) {
   const changed: number[] = [];
   const deleted: number[] = [];
@@ -90,17 +78,13 @@ function changedIndexes(hunks: Hunk[], newLength: number) {
 
 const splitLines = (text: string) => text.split(/\r?\n/);
 
-// ── 劇本（Monaco） ──────────────────────────────
-
 const findModel = (fileId: string) => monaco.editor.getModels().find((m) => m.uri.path.replace(/^\//, '') === fileId && !m.isDisposed());
 
 const decoIds = new WeakMap<monaco.editor.ITextModel, string[]>();
 const attached = new WeakSet<monaco.editor.ITextModel>();
-// 播放打字效果中：編輯器的改動先不管（最後整份替換會把標記全弄亂）；播完的位置要從記錄重新算（stale）
 const suspended = new WeakSet<monaco.editor.ITextModel>();
 const stale = new WeakSet<monaco.editor.ITextModel>();
 
-// 播放打字效果前呼叫；播完呼叫回傳的函式，接著由 markFileChange 從記錄重新算出標記的位置
 export function suspendMarks(fileId: string): () => void {
   const model = findModel(fileId);
   if (!model) return () => {};
@@ -126,7 +110,6 @@ const decoOptions = (kind: LineMark['kind']): monaco.editor.IModelDecorationOpti
         overviewRuler: { color: 'rgba(230, 90, 90, 0.9)', position: monaco.editor.OverviewRulerLane.Left },
         stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
       };
-
 function setDecorations(model: monaco.editor.ITextModel, marks: LineMark[]) {
   const max = model.getLineCount();
   const ids = model.deltaDecorations(
@@ -138,7 +121,6 @@ function setDecorations(model: monaco.editor.ITextModel, marks: LineMark[]) {
   decoIds.set(model, ids);
 }
 
-// 編輯器上目前的標記（跟著內容移動過的位置）
 function modelMarks(model: monaco.editor.ITextModel): LineMark[] {
   const out: LineMark[] = [];
   for (const id of decoIds.get(model) ?? []) {
@@ -149,7 +131,6 @@ function modelMarks(model: monaco.editor.ITextModel): LineMark[] {
   return out;
 }
 
-// 劇本編輯器建立時呼叫：把記著的標記畫上去；之後內容一改，被改到的那幾行標記就拿掉
 export function attachModel(fileId: string, model: monaco.editor.ITextModel) {
   if (attached.has(model)) return;
   attached.add(model);
@@ -175,7 +156,6 @@ export function attachModel(fileId: string, model: monaco.editor.ITextModel) {
   });
 }
 
-// 把編輯器上的標記位置寫回記錄（分頁關掉、編輯器被釋放後，重新打開還找得到）
 function syncFromModel(fileId: string, model: monaco.editor.ITextModel) {
   const lines = modelMarks(model);
   const before = store.get(fileId)?.lines ?? [];
@@ -183,7 +163,6 @@ function syncFromModel(fileId: string, model: monaco.editor.ITextModel) {
   update(fileId, { lines });
 }
 
-// 外部改了一個劇本：標出改到的行。內容要先換好（編輯器開著的話，用 applyTextMinimal 只改有變的行）
 export function markFileChange(fileId: string, oldText: string, newText: string) {
   const model = findModel(fileId);
   const isStale = !!model && stale.has(model);
@@ -209,7 +188,6 @@ export function markFileChange(fileId: string, oldText: string, newText: string)
   update(fileId, { lines });
 }
 
-// 把編輯器的內容換成 newText，但只改有變的那幾行（沒變的行上的標記和游標都留著）；可以用 Ctrl+Z 復原
 export function applyTextMinimal(model: monaco.editor.ITextModel, newText: string) {
   const LF = monaco.editor.EndOfLinePreference.LF;
   if (model.getValue(LF) === newText) return;
@@ -231,14 +209,10 @@ export function applyTextMinimal(model: monaco.editor.ITextModel, newText: strin
     return { range: new monaco.Range(L, maxCol(L), L, maxCol(L)), text: `\n${text}` };
   });
   model.pushEditOperations([], edits, () => null);
-  // 保險：算錯的話整份換掉
   if (model.getValue(LF) !== newText) model.pushEditOperations([], [{ range: model.getFullModelRange(), text: newText }], () => null);
   model.pushStackElement();
 }
 
-// ── 設定卡 ──────────────────────────────
-
-// 在背景把詳細內容讀成文件，列出最上層每一塊的內容（拿來比對改了哪幾塊）
 let parser: CoreEditor | null = null;
 function blockSignatures(markdown: string): string[] {
   parser ??= new CoreEditor({ extensions: richExtensions });
@@ -248,7 +222,6 @@ function blockSignatures(markdown: string): string[] {
   return out;
 }
 
-// 外部改了（或新增了）一張設定卡：標出改到的欄位、名稱、詳細內容的區塊
 export function markCardChange(key: string, before: Card | undefined, after: Card) {
   if (!enabled()) return;
   const entry = store.get(key) ?? {};
@@ -257,7 +230,6 @@ export function markCardChange(key: string, before: Card | undefined, after: Car
     if (before?.fields.find((b) => b.key === f.key)?.value !== f.value || !before) fields.add(f.key);
   }
   if (!before || before.name !== after.name) fields.add('__name');
-  // 記憶：新出現（或內容變了）的那幾筆標起來；已經不在的拿掉
   const memKeys = new Set((after.memories ?? []).map(memoryMarkKey));
   const oldMem = new Set((before?.memories ?? []).map(memoryMarkKey));
   for (const k of [...fields]) if (k.startsWith('__mem:') && !memKeys.has(k)) fields.delete(k);
@@ -277,14 +249,12 @@ export function markCardChange(key: string, before: Card | undefined, after: Car
   update(key, { fields: [...fields], blocks });
 }
 
-// 你自己改了某個欄位：那個欄位的標記拿掉
 export function clearFieldMark(key: string, field: string) {
   const fields = store.get(key)?.fields;
   if (!fields?.includes(field)) return;
   update(key, { fields: fields.filter((f) => f !== field) });
 }
 
-// 詳細內容的編輯器回報：標記現在在第幾塊（被你打字蓋掉的已經拿掉了）
 export function setBlockMarks(key: string, blocks: number[]) {
   const before = store.get(key)?.blocks ?? [];
   if (before.length === blocks.length && before.every((b, i) => b === blocks[i])) return;

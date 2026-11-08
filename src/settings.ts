@@ -1,6 +1,6 @@
 // 程式的設定（UI 大小、字體大小等）：全程式共用一份，不跟著專案走，記在 localStorage
-// 任何元件都可以用 useSettings() 讀；改用 updateSettings()，所有用到的元件會自動重畫
 import { useSyncExternalStore } from 'react';
+import { readJSON, writeJSON } from './hooks';
 
 export interface Settings {
   uiZoom: number; // 整個程式的縮放比例（1 = 100%）
@@ -38,7 +38,6 @@ export const defaultSettings: Settings = {
   theme: 'dark',
 };
 
-// 每個數值的允許範圍：讀檔、設定視窗、Ctrl＋滾輪都用同一套
 export const LIMITS = {
   uiZoom: { min: 0.8, max: 1.5, step: 0.1 },
   scriptFontSize: { min: 10, max: 40, step: 1 },
@@ -50,7 +49,6 @@ const clamp = (k: keyof typeof LIMITS, v: unknown, fallback: number) => {
   return Math.min(LIMITS[k].max, Math.max(LIMITS[k].min, v));
 };
 
-// 把讀到的東西整理成合法的設定：認得的欄位才採用，數值超出範圍就夾回來
 function normalize(raw: unknown): Settings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const d = defaultSettings;
@@ -72,15 +70,8 @@ function normalize(raw: unknown): Settings {
   };
 }
 
-function load(): Settings {
-  try {
-    return normalize(JSON.parse(localStorage.getItem(KEY) ?? 'null'));
-  } catch {
-    return { ...defaultSettings };
-  }
-}
 
-let current = load();
+let current = normalize(readJSON(KEY));
 const listeners = new Set<() => void>();
 
 export function getSettings(): Settings {
@@ -89,11 +80,7 @@ export function getSettings(): Settings {
 
 export function updateSettings(patch: Partial<Settings>) {
   current = normalize({ ...current, ...patch });
-  try {
-    localStorage.setItem(KEY, JSON.stringify(current));
-  } catch {
-    /* 存不了就算了，這次執行期間仍然有效 */
-  }
+  writeJSON(KEY, current);
   listeners.forEach((fn) => fn());
 }
 

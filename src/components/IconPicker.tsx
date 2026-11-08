@@ -1,19 +1,7 @@
 import { FIELD_COLORS, FIELD_ICONS } from '../fieldIcons';
 import Icon from './Icon';
 
-// 圖示選擇面板（欄位設定、區塊設定共用）：上面選圖示，下面選顏色（第一格「預設」＝跟文字同色）；點面板外面就關掉
-// allowNone = 第一格放「無」（欄位可以沒有圖示；區塊一定要有）；extraIcons = 額外可選的圖示（例如區塊原本的 terminal）
-// 樣式在 SchemaDialog.css
-export default function IconPicker({
-  x,
-  y,
-  icon,
-  color,
-  allowNone,
-  extraIcons = [],
-  onChange,
-  onClose,
-}: {
+export default function IconPicker({ x, y, icon, color, allowNone, extraIcons = [], onChange, onClose }: {
   x: number;
   y: number;
   icon?: string;
@@ -75,7 +63,6 @@ export default function IconPicker({
   );
 }
 
-// 面板要出現的位置：按鈕正下方，放不下就往上
 export function pickerPosition(button: HTMLElement): { x: number; y: number } {
   const box = button.getBoundingClientRect();
   const PANEL_H = 280;

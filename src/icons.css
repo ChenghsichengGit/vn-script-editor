@@ -1,5 +1,3 @@
-/* VS Code 的線條圖示（codicon）：字型由 Monaco 附的 codicon.css 載入（見 src/monaco.ts）
-   這裡只列出用到的圖示；要加新的，到 node_modules/monaco-editor/esm/vs/base/common/codiconsLibrary.js 找名稱和編號 */
 .codicon-files::before { content: "\eaf0"; }
 .codicon-person::before { content: "\ea67"; }
 .codicon-globe::before { content: "\eb01"; }
@@ -51,7 +49,6 @@
 .codicon-replace::before { content: "\eb3d"; }
 .codicon-replace-all::before { content: "\eb3c"; }
 .codicon-clear-all::before { content: "\eabf"; }
-/* 欄位設定裡可以選的欄位圖示（清單在 src/fieldIcons.ts），以及拖曳排序的握把 */
 .codicon-gripper::before { content: "\eb04"; }
 .codicon-heart::before { content: "\eb05"; }
 .codicon-star-full::before { content: "\eb59"; }

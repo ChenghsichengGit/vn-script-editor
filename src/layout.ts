@@ -1,12 +1,10 @@
 // 版面：四個區塊各自放在哪裡（左側欄、右側欄、浮動視窗）、哪些被隱藏、各自多高、側邊欄多寬
-// 會記在瀏覽器的 localStorage；這個檔案只放資料的形狀和純函式，不碰畫面
 import { SectionId } from './model';
 import { sectionOrder } from './sections';
+import { readJSON } from './hooks';
 
 export type Side = 'left' | 'right';
 
-// 一個浮動面板：座標與大小都相對於主區域（活動列 + 側邊欄 + 編輯區那一塊）
-// z 越大越上面（點一下就把 z 設成最大，不改陣列順序，避免 DOM 被搬動）
 export interface FloatPanel {
   id: SectionId;
   x: number;
@@ -53,14 +51,10 @@ const defaultLayout = (): Layout => ({
   panelTab: 'problems',
 });
 
-// 區塊 id 是專案自訂的：任何非空字串都留著（別的專案才有的區塊，版面位置也記著，換回那個專案時還在）
 const isSection = (x: unknown): x is SectionId => typeof x === 'string' && x !== '';
 const num = (x: unknown, fallback: number) => (typeof x === 'number' && Number.isFinite(x) ? x : fallback);
 const clampWidth = (w: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
 
-// 把讀到的任何東西整理成合法的 Layout：
-//  - 舊格式（{open, sizes, width}）→ 全部放左邊，沒在 open 裡的算隱藏，width 沿用到左邊
-//  - 新格式：去掉不認得／重複的區塊；漏掉的區塊補回左邊，確保每個區塊剛好出現一次
 function normalizeLayout(raw: unknown): Layout {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, any>;
   const base = defaultLayout();
@@ -71,14 +65,11 @@ function normalizeLayout(raw: unknown): Layout {
       seen.add(s);
       return true;
     });
-
   const sizes: Layout['sizes'] = {};
   for (const id of Object.keys(r.sizes ?? {})) {
     const v = r.sizes?.[id];
     if (typeof v === 'number' && Number.isFinite(v) && v > 0) sizes[id] = v;
   }
-
-  // 舊格式
   if (!r.left || typeof r.left !== 'object') {
     const open: SectionId[] = Array.isArray(r.open) ? r.open.filter(isSection) : sectionOrder();
     return {
@@ -88,7 +79,6 @@ function normalizeLayout(raw: unknown): Layout {
       sizes,
     };
   }
-
   const left = take(r.left.sections);
   const right = take(r.right?.sections);
   const floating: FloatPanel[] = [];
@@ -105,7 +95,6 @@ function normalizeLayout(raw: unknown): Layout {
     });
   }
   for (const id of sectionOrder()) if (!seen.has(id)) left.push(id); // 漏掉的補回左邊
-
   return {
     left: { sections: left, width: clampWidth(num(r.left.width, 300)) },
     right: { sections: right, width: clampWidth(num(r.right?.width, 300)) },
@@ -119,17 +108,8 @@ function normalizeLayout(raw: unknown): Layout {
   };
 }
 
-export function loadLayout(): Layout {
-  try {
-    return normalizeLayout(JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? 'null'));
-  } catch {
-    return defaultLayout();
-  }
-}
+export const loadLayout = (): Layout => normalizeLayout(readJSON(LAYOUT_KEY));
 
-// ── 純函式：搬動區塊（都回傳新的 Layout，不改原本的）──
-
-// 把區塊從目前的位置（左、右、浮動）拿掉
 const detach = (l: Layout, id: SectionId): Layout => ({
   ...l,
   left: { ...l.left, sections: l.left.sections.filter((s) => s !== id) },
@@ -139,7 +119,6 @@ const detach = (l: Layout, id: SectionId): Layout => ({
 
 const unhide = (l: Layout, id: SectionId): Layout => ({ ...l, hidden: l.hidden.filter((s) => s !== id) });
 
-// 放進某個側邊欄，插在 before 這個區塊前面（null = 放到最後）；放下去就一定會顯示出來
 export function dockSection(l: Layout, id: SectionId, side: Side, before: SectionId | null): Layout {
   const next = detach(l, id);
   const list = [...next[side].sections];
@@ -148,14 +127,12 @@ export function dockSection(l: Layout, id: SectionId, side: Side, before: Sectio
   return unhide({ ...next, [side]: { ...next[side], sections: list } }, id);
 }
 
-// 變成浮動面板（放到最上層）
 export function floatSection(l: Layout, id: SectionId, rect: { x: number; y: number; w: number; h: number }): Layout {
   const next = detach(l, id);
   const z = Math.max(0, ...l.floating.map((f) => f.z)) + 1;
   return unhide({ ...next, floating: [...next.floating, { id, ...rect, z }] }, id);
 }
 
-// 打開專案後：這個專案有、但版面裡哪裡都沒記的區塊（例如剛新增的），補到左側欄最下面
 export function reconcileLayout(l: Layout, ids: SectionId[]): Layout {
   const placed = new Set([...l.left.sections, ...l.right.sections, ...l.floating.map((f) => f.id)]);
   const missing = ids.filter((id) => !placed.has(id));

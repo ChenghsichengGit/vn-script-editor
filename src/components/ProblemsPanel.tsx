@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import Icon from './Icon';
-import { fileIcon } from '../sampleData';
+import Icon, { fileIcon } from './Icon';
 import type { ScriptProblem } from '../scriptLanguage';
 
-// 一個劇本的所有問題
 export interface ProblemGroup {
   fileId: string;
   name: string;
@@ -12,25 +10,18 @@ export interface ProblemGroup {
   problems: ScriptProblem[];
 }
 
-// 下方面板的「問題」分頁（跟 VS Code 一樣）：所有劇本的錯誤依檔案分組，點一下跳到那一行
-// 外框（分頁標籤、拖曳調整高度、關閉）在 BottomPanel
-export default function ProblemsPanel({
-  groups,
-  onJump,
-}: {
+export default function ProblemsPanel({ groups, onJump }: {
   groups: ProblemGroup[];
   onJump: (fileId: string, line: number, column: number) => void;
 }) {
   const [folded, setFolded] = useState<Set<string>>(new Set()); // 被收起來的檔案
   const total = groups.reduce((n, g) => n + g.problems.length, 0);
-
   const toggle = (fileId: string) =>
     setFolded((f) => {
       const next = new Set(f);
       if (!next.delete(fileId)) next.add(fileId);
       return next;
     });
-
   return (
     <div className="problems-body">
       {total === 0 && <div className="problems-empty">沒有發現問題</div>}
@@ -45,18 +36,11 @@ export default function ProblemsPanel({
           </div>
           {!folded.has(g.fileId) &&
             g.problems.map((p, i) => (
-              <div
-                key={i}
-                className="problems-row"
-                onClick={() => onJump(g.fileId, p.line, p.startColumn)}
-                title={g.lines[p.line - 1]}
-              >
+              <div key={i} className="problems-row" onClick={() => onJump(g.fileId, p.line, p.startColumn)} title={g.lines[p.line - 1]}>
                 <Icon icon="error" className="problems-error" />
                 <span>{p.message}</span>
                 <span className="problems-dim problems-code">{g.lines[p.line - 1]?.trim()}</span>
-                <span className="problems-dim">
-                  [{p.line}, {p.startColumn}]
-                </span>
+                <span className="problems-dim">[{p.line}, {p.startColumn}]</span>
               </div>
             ))}
         </div>

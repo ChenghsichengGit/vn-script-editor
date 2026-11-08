@@ -1,5 +1,3 @@
-/* 顏色集中在這裡：:root 是深色主題（預設），下面兩段是淺色、高對比要換掉的顏色
-   主題由 <html data-theme="..."> 決定（設定裡的「顏色主題」），劇本編輯器的配色在 scriptLanguage.ts 另外定義 */
 :root {
   --bg-activity: #333333;
   --bg-sidebar: #252526;
@@ -45,7 +43,6 @@
   --icon-characters: #89d185;
   --icon-world: #4ec9b0;
   --icon-commands: #c586c0;
-  /* 欄位圖示可以選的顏色（src/fieldIcons.ts） */
   --pal-red: #f48771;
   --pal-orange: #e8a35c;
   --pal-yellow: #e2c08d;
@@ -55,8 +52,6 @@
   --pal-purple: #c586c0;
   --pal-gray: #9d9d9d;
 }
-
-/* 淺色主題（參考 VS Code 的 Light） */
 :root[data-theme='light'] {
   --bg-activity: #f3f3f3;
   --bg-sidebar: #f3f3f3;
@@ -108,8 +103,6 @@
   --pal-purple: #9b3bb3;
   --pal-gray: #6f6f6f;
 }
-
-/* 高對比主題（參考 VS Code 的 High Contrast）：黑底、亮色邊框、字最亮 */
 :root[data-theme='hc'] {
   --bg-activity: #000000;
   --bg-sidebar: #000000;
@@ -156,9 +149,7 @@
   --pal-purple: #e4a0ff;
   --pal-gray: #d0d0d0;
 }
-
 * { box-sizing: border-box; }
-
 html, body, #root {
   margin: 0;
   height: 100%;
@@ -168,20 +159,9 @@ html, body, #root {
   font-size: 13px;
   overflow: hidden;
 }
-
-/* 整體：上面是主區域，下面固定一條狀態列 */
 .app { display: grid; grid-template-rows: 1fr 22px; grid-template-columns: minmax(0, 1fr); height: 100%; }
-/* overflow: hidden：視窗窄到連最小寬度都放不下時，寧可裁掉也不要出現水平捲軸 */
 .main { display: flex; min-height: 0; min-width: 0; position: relative; overflow: hidden; } /* position：浮動面板和放置提示以它為準 */
-
-/* 活動列 */
-.activity-bar {
-  width: 48px;
-  flex-shrink: 0;
-  background: var(--bg-activity);
-  display: flex;
-  flex-direction: column;
-}
+.activity-bar { width: 48px; flex-shrink: 0; background: var(--bg-activity); display: flex; flex-direction: column; }
 .activity-bar button {
   height: 48px;
   border: none;
@@ -194,21 +174,8 @@ html, body, #root {
 }
 .activity-bar button:hover { opacity: 0.85; }
 .activity-bar button.active { opacity: 1; border-left-color: var(--text); }
-/* 收起／打開左側欄的按鈕：推到最下面 */
 .activity-bar button.activity-collapse { margin-top: auto; font-size: 20px; }
-
-/* 側邊欄：區塊上下疊，展開的區塊依比例分高度 */
-.sidebar {
-  /* 寬度是使用者拖出來的寬度（inline width，當作 flex-basis）。視窗太窄時，左右側邊欄按比例一起縮小，
-     最窄 120px；記住的寬度不變，視窗變寬就恢復。編輯區則保持最小寬度（見 .editor-area） */
-  flex: 0 1 auto;
-  min-width: 120px;
-  background: var(--bg-sidebar);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-/* 固定高度的區塊平常維持自己的高度；只有空間不夠時才會按比例暫時縮小（最矮 60px） */
+.sidebar { flex: 0 1 auto; min-width: 120px; background: var(--bg-sidebar); display: flex; flex-direction: column; overflow: hidden; }
 .section { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 60px; overflow: hidden; }
 .section.filler { flex: 1 1 0; min-height: 120px; }
 .section-header {
@@ -222,7 +189,6 @@ html, body, #root {
   font-weight: 700;
   letter-spacing: 0.06em;
   user-select: none;
-  /* 比內容亮一階，下緣一條細線，標題和內容分得出來 */
   background: var(--bg-tab);
   border-bottom: 1px solid var(--border);
 }
@@ -230,8 +196,6 @@ html, body, #root {
 .section-actions { display: flex; opacity: 0; }
 .section-header:hover .section-actions { opacity: 1; }
 .section-body { flex: 1; overflow-y: auto; padding-bottom: 6px; }
-/* 調整大小的線：看起來只有 1px，但用 ::before 往兩側各多 5px 當「可抓取範圍」；
-   滑鼠停上去一下（0.15 秒）才用 ::after 亮出 3px 藍線，和 VS Code 一樣 */
 .section-sash { height: 1px; flex-shrink: 0; background: var(--border); position: relative; z-index: 5; }
 .section-sash::before { content: ''; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; cursor: row-resize; }
 .section-sash::after {
@@ -248,12 +212,8 @@ html, body, #root {
 }
 .section-sash:hover::after, .section-sash:active::after { opacity: 1; }
 body.dragging, body.dragging * { user-select: none; }
-
-/* 拖曳搬移檔案／資料夾：目標資料夾（或區塊空白處 = 根目錄）加藍色框線與淡藍底 */
 .tree-row.drop-target { background: var(--drop-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 .section-body.drop-target { background: var(--drop-bg-soft); outline: 1px solid var(--accent); outline-offset: -1px; }
-
-/* 浮動面板：蓋在主區域上的一層。這層不擋滑鼠，只有面板本身接收 */
 .float-layer { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
 .float-panel {
   position: absolute;
@@ -265,10 +225,8 @@ body.dragging, body.dragging * { user-select: none; }
   box-shadow: 0 6px 20px var(--shadow);
 }
 .float-panel .section.floating { flex: 1 1 0; min-height: 0; }
-/* 標題列同時是視窗的標題列：可以按住拖動 */
 .section.floating .section-header { background: var(--bg-tab); cursor: move; }
 .float-handle { position: absolute; z-index: 2; }
-/* 浮動視窗的邊緣：可抓取範圍 10px（一半在框內、一半在框外），角落 16px */
 .float-handle.n, .float-handle.s { left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
 .float-handle.e, .float-handle.w { top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
 .float-handle.n { top: -5px; }
@@ -280,18 +238,9 @@ body.dragging, body.dragging * { user-select: none; }
 .float-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
 .float-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
 .float-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
-
-/* 拖曳整個區塊時的提示（都是 fixed／不擋滑鼠） */
 .section-header { cursor: grab; }
 .drop-line { position: fixed; z-index: 100; background: var(--accent); pointer-events: none; }
-.drop-zone {
-  position: fixed;
-  z-index: 100;
-  background: var(--drop-bg);
-  border: 2px solid var(--accent);
-  pointer-events: none;
-}
-/* 沒有側邊欄的那一邊，拖曳時露出的放置區 */
+.drop-zone { position: fixed; z-index: 100; background: var(--drop-bg); border: 2px solid var(--accent); pointer-events: none; }
 .dock-zone { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 30; pointer-events: none; background: var(--drop-bg-soft); }
 .dock-zone.left { left: 48px; }
 .dock-zone.right { right: 0; }
@@ -307,8 +256,6 @@ body.dragging, body.dragging * { user-select: none; }
   pointer-events: none;
   white-space: nowrap;
 }
-
-/* 小按鈕 */
 .icon-btn {
   border: none;
   background: none;
@@ -322,44 +269,21 @@ body.dragging, body.dragging * { user-select: none; }
   padding: 0;
 }
 .icon-btn:hover { background: var(--border); color: var(--text); }
-/* 區塊標題列的「新增檔案／新增資料夾」：兩個字元寬 */
 .icon-btn.wide { width: auto; padding: 0 3px; font-size: 12px; }
-.text-btn {
-  border: none;
-  background: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 0;
-  text-align: left;
-}
+.text-btn { border: none; background: none; color: var(--text-dim); cursor: pointer; font-size: 12px; padding: 2px 0; text-align: left; }
 .text-btn:hover { color: var(--text); }
-
-/* 側邊欄裡的設定卡 */
 .card-header { padding-left: 4px; }
 .card-header .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .card-edit { font-size: 12px; flex-shrink: 0; }
 .card-edit:hover { background: var(--bg-selected); outline: 1px solid var(--border); }
-/* 展開的設定卡：兩欄的格線。欄位名稱那一欄 = 這張卡最長的名稱有多寬就多寬，最多 45%（同一張卡的內容會對齊）
-   一般欄位那一列用 display: contents，名稱和內容直接排進格線；收合欄位、詳細內容橫跨兩欄 */
 .card-body { display: grid; grid-template-columns: fit-content(45%) 1fr; column-gap: 8px; row-gap: 3px; align-items: start; padding: 2px 10px 8px 30px; }
 .card-body > .card-row { display: contents; }
 .card-body > .card-fold, .card-body > .card-detail { grid-column: 1 / -1; min-width: 0; }
-/* 內容一行排不下的欄位：名稱自己一行，內容從下一行開始、橫跨兩欄（往右縮一點，跟收合欄位展開的內容一樣） */
 .card-body > .card-row.stacked > .card-value { grid-column: 1 / -1; padding: 0 0 2px 14px; white-space: pre-wrap; }
 .card-row { display: flex; align-items: flex-start; gap: 8px; min-height: 20px; line-height: 1.5; }
 .card-row.clickable { cursor: pointer; }
 .card-row.clickable:hover .card-key { color: var(--text); }
-/* 欄位名稱不換行：太長就在右邊淡出切掉（滑鼠停著會顯示完整名稱） */
-.card-key {
-  min-width: 0;
-  min-height: 20px;
-  line-height: 1.5;
-  white-space: nowrap;
-  overflow: hidden;
-  color: var(--field-key);
-  font-weight: 600;
-}
+.card-key { min-width: 0; min-height: 20px; line-height: 1.5; white-space: nowrap; overflow: hidden; color: var(--field-key); font-weight: 600; }
 .card-key.overflow { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
 .card-fold .card-key { flex: 1; }
 .card-value { min-width: 0; line-height: 1.5; word-break: break-word; }
@@ -368,8 +292,6 @@ body.dragging, body.dragging * { user-select: none; }
 .card-detail-fold { margin-top: 2px; }
 .card-detail-fold .card-detail { margin: 2px 0 4px 4px; }
 .empty-detail { color: var(--text-dim); font-style: italic; }
-
-/* 富文字（側邊欄預覽和編輯頁共用的標題樣式） */
 .tiptap { outline: none; line-height: 1.7; word-break: break-word; }
 .tiptap h1, .tiptap h2, .tiptap h3 { font-weight: 600; line-height: 1.35; }
 .tiptap p { margin: 0.4em 0; }
@@ -378,23 +300,12 @@ body.dragging, body.dragging * { user-select: none; }
 .rich-view .tiptap h2 { font-size: 13.5px; margin: 0.7em 0 0.2em; }
 .rich-view .tiptap h3 { font-size: 13px; margin: 0.6em 0 0.2em; color: var(--text-dim); }
 .rich-view .tiptap > :first-child { margin-top: 0.2em; }
-
-.tree-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding-right: 8px;
-  cursor: pointer;
-  white-space: nowrap;
-}
+.tree-row { display: flex; align-items: center; gap: 4px; height: 24px; padding-right: 8px; cursor: pointer; white-space: nowrap; }
 .tree-row:hover { background: var(--bg-hover); }
 .tree-row.selected { background: var(--bg-selected); }
 .chevron { width: 18px; flex-shrink: 0; text-align: center; color: var(--text-dim); font-size: 18px; line-height: 1; }
 .tree-label { flex-shrink: 0; }
-/* 名稱前面的類型圖示：固定寬度，名稱才會對齊 */
 .tree-icon { width: 18px; flex-shrink: 0; margin-right: 4px; text-align: center; font-size: 12px; }
-/* 先命名的輸入框：錯誤訊息浮在輸入框正下方（紅字），不推開下面的列 */
 .name-input-wrap { position: relative; flex: 1; min-width: 0; display: block; }
 .name-input-wrap .rename-input { width: 100%; box-sizing: border-box; height: 20px; }
 .name-input-wrap .rename-input.invalid { border-color: var(--error-border); }
@@ -412,9 +323,6 @@ body.dragging, body.dragging * { user-select: none; }
   background: var(--error-bg);
   border: 1px solid var(--error-border);
 }
-
-/* 可拖曳的分隔線 */
-/* 側邊欄寬度線：同 .section-sash 的做法，只是方向是左右 */
 .splitter { width: 1px; flex-shrink: 0; background: var(--border); position: relative; z-index: 5; }
 .splitter::before { content: ''; position: absolute; top: 0; bottom: 0; left: -5px; right: -5px; cursor: col-resize; }
 .splitter::after {
@@ -430,21 +338,14 @@ body.dragging, body.dragging * { user-select: none; }
   transition: opacity 0.1s 0.15s;
 }
 .splitter:hover::after, .splitter:active::after { opacity: 1; }
-
-/* 編輯區：最小寬度 240px，空間不夠時先縮側邊欄（見 .sidebar） */
 .editor-area { flex: 1 1 0; min-width: 240px; display: flex; flex-direction: column; position: relative; }
-/* isolation：dockview 內部的 z-index（浮動群組、拖曳提示最高到 999）只在這一塊裡比，不會蓋過側邊欄浮動面板那一層（.float-layer） */
 .dock-host { flex: 1; min-height: 0; min-width: 0; position: relative; isolation: isolate; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--text-dim); }
-
-/* dockview（分頁群組）：以它的深色主題為底，換成這個編輯器的 VS Code 配色。
-   寫兩個 class 疊起來，優先權才會高過 dockview 自己的樣式表 */
 .dockview-theme-dark.dockview-theme-vn {
   --dv-group-view-background-color: var(--bg-editor);
   --dv-tabs-and-actions-container-background-color: var(--bg-sidebar);
   --dv-tabs-and-actions-container-height: 35px;
   --dv-tabs-and-actions-container-font-size: 13px;
-  /* 分頁：作用中的是編輯器底色，其餘是 --bg-tab；沒有焦點的群組文字比較暗 */
   --dv-activegroup-visiblepanel-tab-background-color: var(--bg-editor);
   --dv-activegroup-hiddenpanel-tab-background-color: var(--bg-tab);
   --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-editor);
@@ -456,11 +357,9 @@ body.dragging, body.dragging * { user-select: none; }
   --dv-tab-divider-color: var(--bg-sidebar);
   --dv-separator-border: var(--border);
   --dv-icon-hover-background-color: var(--border);
-  /* 群組之間的分隔線：平常細細的一條，滑過去變藍色 */
   --dv-sash-color: var(--border);
   --dv-active-sash-color: var(--accent);
   --dv-active-sash-transition-delay: 0.15s; /* 預設 0.5 秒才變藍，太慢 */
-  /* 拖曳分頁時的放置提示：半透明藍色，和區塊拖曳的提示一致 */
   --dv-drag-over-background-color: var(--drop-bg);
   --dv-drag-over-border-color: var(--accent);
   --dv-edge-dock-indicator-color: var(--accent);
@@ -468,7 +367,6 @@ body.dragging, body.dragging * { user-select: none; }
   --dv-floating-box-shadow: 0 6px 20px var(--shadow);
   --dv-floating-titlebar-background-color: var(--bg-tab);
 }
-/* 分割線的可抓取範圍：dockview 只在觸控螢幕才加寬，這裡讓滑鼠也一樣，左右（上下）各多 5px */
 .dockview-theme-vn .dv-split-view-container > .dv-sash-container > .dv-sash:not(.dv-disabled)::before {
   content: '';
   position: absolute;
@@ -486,7 +384,6 @@ body.dragging, body.dragging * { user-select: none; }
   top: -5px;
   bottom: -5px;
 }
-/* 作用中的分頁：頂端一條藍線（沒有焦點的群組改成暗灰色），和 VS Code 一樣 */
 .dockview-theme-vn .dv-tab { padding: 0; }
 .dockview-theme-vn .dv-tab.dv-active-tab { box-shadow: inset 0 1px 0 var(--border); }
 .dockview-theme-vn .dv-groupview.dv-active-group .dv-tab.dv-active-tab { box-shadow: inset 0 1px 0 var(--accent); }
@@ -494,8 +391,6 @@ body.dragging, body.dragging * { user-select: none; }
 .dockview-theme-vn .dv-default-tab .dv-default-tab-content { flex-grow: 0; margin-right: 0; }
 .dockview-theme-vn .dv-default-tab .dv-default-tab-action { width: 18px; height: 18px; padding: 0; border-radius: 4px; font-size: 14px; line-height: 1; }
 .dockview-theme-vn .dv-watermark { background: var(--bg-editor); }
-
-/* 分頁裡的完整設定卡：左邊捲動內容，右邊目錄 */
 .card-editor { flex: 1; min-height: 0; display: flex; }
 .card-editor-scroll { flex: 1; min-width: 0; overflow-y: auto; }
 .card-editor-inner { max-width: 820px; padding: 20px 32px 70vh; display: flex; flex-direction: column; gap: 10px; }
@@ -510,7 +405,6 @@ body.dragging, body.dragging * { user-select: none; }
 }
 .card-editor input:focus, .card-editor textarea:focus { border-color: var(--accent); }
 .card-editor input::placeholder, .card-editor textarea::placeholder { color: var(--text-placeholder); font-style: italic; }
-/* 每列第一格是欄位名稱：可以改的是淡藍色輸入框；範本欄位是金色純文字標籤（看起來就不能改） */
 .field-key-cell { position: relative; display: flex; }
 .field-key-cell input { flex: 1; min-width: 0; color: var(--field-key); font-weight: 600; padding-right: 20px; }
 .field-key-locked {
@@ -523,11 +417,9 @@ body.dragging, body.dragging * { user-select: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 專用欄位名稱（用法、說明、參數選項…）的記號；滑鼠移到這一列會顯示它的作用 */
 .field-special { color: var(--field-key-locked); font-size: 11px; margin-left: 4px; }
 .field-key-cell .field-special { position: absolute; right: 6px; top: 7px; pointer-events: none; }
 .card-editor textarea { resize: none; field-sizing: content; line-height: 1.5; min-height: 30px; }
-/* 欄位內容有條列、又沒在編輯時：顯示成排好的清單，外觀跟輸入框一樣，點了變回輸入框 */
 .field-value-view {
   min-height: 30px;
   padding: 5px 8px;
@@ -540,11 +432,8 @@ body.dragging, body.dragging * { user-select: none; }
   outline: none;
 }
 .field-value-view:hover { border-color: var(--border); }
-
-/* 欄位內容（側邊欄、卡片分頁共用）：一般文字照原本換行；清單的記號往左突出，項目文字對齊，折行的第二行也對齊項目文字 */
 .field-text { display: block; }
 .field-text-plain { display: block; white-space: pre-wrap; }
-/* 同一個清單的記號共用一欄（9. 和 10. 寬度不同，項目文字照樣對齊） */
 .field-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 5px; }
 .field-list-item { display: contents; }
 .field-list-marker { color: var(--text-dim); text-align: right; min-width: 0.8em; }
@@ -567,17 +456,7 @@ body.dragging, body.dragging * { user-select: none; }
 .card-editor-row .icon-btn { margin-top: 4px; }
 .card-editor-btns { display: flex; gap: 6px; }
 .card-editor-label { margin-top: 12px; color: var(--text-dim); font-size: 12px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
-
-/* Notion 式編輯器 */
-.rich-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  gap: 4px;
-  padding: 6px 0;
-  background: var(--bg-editor);
-}
+.rich-toolbar { position: sticky; top: 0; z-index: 1; display: flex; gap: 4px; padding: 6px 0; background: var(--bg-editor); }
 .rich-toolbar button {
   border: 1px solid transparent;
   background: none;
@@ -589,13 +468,59 @@ body.dragging, body.dragging * { user-select: none; }
 }
 .rich-toolbar button:hover { background: var(--bg-hover); color: var(--text); }
 .rich-toolbar button.on { color: var(--accent); border-color: var(--border); }
-/* 內文大小由設定決定（App 設定 --card-font-size）；標題用 em，跟著內文等比例 */
 .rich-content .tiptap { font-size: var(--card-font-size, 15px); min-height: 200px; }
 .rich-content .tiptap h1 { font-size: 1.73em; margin: 1.1em 0 0.3em; }
 .rich-content .tiptap h2 { font-size: 1.4em; margin: 1em 0 0.3em; }
 .rich-content .tiptap h3 { font-size: 1.13em; margin: 0.9em 0 0.3em; }
-
-/* 右側目錄 */
+.tiptap .ruby { position: relative; }
+.tiptap .ruby::before {
+  content: attr(data-rt);
+  position: absolute;
+  bottom: 88%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.5em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.tiptap :is(p, li, h1, h2, h3):has(.ruby) { line-height: 2.1; }
+.bubble-toolbar {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.bubble-toolbar button { border: none; background: none; color: var(--text); border-radius: 4px; padding: 3px 8px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.bubble-toolbar button:hover { background: var(--bg-hover); }
+.bubble-toolbar button.on { color: var(--accent); }
+.script-editor-main { position: relative; }
+.script-bubble { position: absolute; z-index: 20; }
+.monaco-editor .vns-hide { font-size: 0; letter-spacing: 0; }
+.monaco-editor .vns-title1 { font-size: 1.4em; }
+.monaco-editor .vns-title2 { font-size: 1.2em; }
+.monaco-editor .vns-title3 { font-size: 1.05em; }
+.monaco-editor .vns-ruby-syntax { opacity: 0.45; }
+.monaco-editor .vns-ruby-rt {
+  display: inline-block;
+  width: 0;
+  vertical-align: top;
+  position: relative;
+  top: -0.6em;
+  line-height: 1;
+  font-size: 0.55em;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+.ruby-prompt { position: fixed; z-index: 1100; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg-sidebar); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
+.ruby-prompt-base { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 12px; }
+.ruby-prompt input { width: 140px; font: inherit; color: var(--text); background: var(--bg-editor); border: 1px solid var(--accent); border-radius: 3px; padding: 3px 6px; outline: none; }
+.ruby-prompt-btn { border: none; background: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 3px 4px; }
+.ruby-prompt-btn:hover { text-decoration: underline; }
 .outline {
   width: 220px;
   flex-shrink: 0;
@@ -620,19 +545,8 @@ body.dragging, body.dragging * { user-select: none; }
 .outline-item:hover { color: var(--text); }
 .outline-item.active { background: var(--bg-tab); color: var(--link); }
 .outline-empty { color: var(--text-dim); font-size: 12px; padding: 6px 10px; }
-
-/* 狀態列 */
-.status-bar {
-  background: var(--accent);
-  color: var(--on-accent);
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  font-size: 12px;
-}
+.status-bar { background: var(--accent); color: var(--on-accent); display: flex; align-items: center; padding: 0 10px; font-size: 12px; }
 .status-right { margin-left: auto; }
-
-/* 開始畫面 */
 .welcome { height: 100%; display: grid; place-items: center; background: var(--bg-editor); }
 .welcome-panel { width: min(520px, calc(100% - 32px)); }
 .welcome h1 { font-size: 28px; font-weight: 300; margin: 0; color: var(--text-strong); }
@@ -670,26 +584,16 @@ body.dragging, body.dragging * { user-select: none; }
 .welcome button.link:hover:not(:disabled) { background: none; text-decoration: underline; }
 .welcome-folder { color: var(--text-dim); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .welcome .icon-btn { padding: 0; border: none; background: none; }
-
-/* 分頁上的「還沒存檔」圓點 */
 .tab-dirty { color: var(--text); font-size: 10px; }
-
-/* 捲軸：細細的深色捲軸（VS Code 風格） */
 ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 ::-webkit-scrollbar-thumb:active { background: var(--scrollbar-active); }
-
-
-/* 指令卡的名稱 = 指令格式：等寬字、#指令和參數分別上色 */
 .cmd-format { font-family: 'Cascadia Code', 'Microsoft JhengHei UI', monospace; }
 .cmd-format .cmd-name { color: var(--cmd-name); font-weight: 600; }
 .cmd-format .cmd-arg { color: var(--cmd-arg); }
 .card-editor input.cmd-name { color: var(--cmd-name); }
-
-/* 劇本行尾的參數提示色塊（指令還缺哪些參數） */
-/* 文字由 ::before（參數提示）和 ::after（+N 還有幾種寫法）的 content 決定，見 scriptLanguage.ts 的 hintClass */
 .monaco-editor .vns-hint::before {
   color: var(--hint-fg);
   background: var(--hint-bg);
@@ -708,20 +612,13 @@ body.dragging, body.dragging * { user-select: none; }
   font-size: 0.75em;
 }
 .monaco-editor .vns-hint-before-comment { margin-right: 6px; }
-/* 補齊清單選中項目右邊的「展開說明」小箭頭：不顯示（要看說明可以按 Ctrl+Space） */
 .monaco-editor .suggest-widget .readMore { display: none !important; }
-
-/* 指令卡的「用法」：一種寫法一格 */
 .usage-list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .usage-row { display: flex; gap: 4px; align-items: center; }
 .usage-row .usage-input { flex: 1; min-width: 0; color: var(--cmd-arg); }
 .usage-list .text-btn { align-self: flex-start; }
-
-/* 拖曳排序：放開後會插在這一列的上面或下面 */
 .tree-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
-
-/* 關閉程式時「要先儲存嗎？」的視窗 */
 .close-backdrop { position: fixed; inset: 0; z-index: 1300; background: var(--overlay); display: grid; place-items: center; }
 .close-panel {
   min-width: 360px;
@@ -746,41 +643,29 @@ body.dragging, body.dragging * { user-select: none; }
 .close-btn:hover:not(:disabled) { background: var(--bg-hover); }
 .close-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .close-btn:disabled { opacity: 0.6; cursor: default; }
-
-/* VS Code 線條圖示（codicon）在各處的大小：Monaco 的樣式預設 16px，這裡依位置調整 */
 .activity-bar .codicon { font-size: 24px; }
 .tree-row .codicon.chevron { font-size: 16px; }
 .tree-row .codicon.tree-icon { font-size: 15px; }
 .codicon.tab-icon { font-size: 14px; margin-right: 6px; vertical-align: -2px; }
 .codicon.field-lock { font-size: 13px; vertical-align: -2px; }
-/* 欄位名稱前面、欄位設定裡選的圖示（側邊欄的設定卡、卡片分頁） */
 .codicon.field-icon { font-size: 13px; vertical-align: -2px; margin-right: 3px; font-weight: normal; }
-/* 圖示和空位都固定寬度：有沒有圖示，欄位名稱都從同一個位置開始 */
 .card-key .field-icon { display: inline-block; width: 14px; text-align: center; }
 .field-icon-slot { margin-right: 3px; }
-
 .codicon.field-special { font-size: 12px; }
 .codicon.fold-chevron { font-size: 12px; vertical-align: -1px; }
 .fold-toggle .codicon { font-size: 12px; vertical-align: -2px; }
 .icon-btn .codicon { font-size: 16px; }
 .welcome button .codicon, .drag-ghost .codicon { vertical-align: -3px; margin-right: 4px; }
-
-/* 狀態列最左邊的問題數 */
 .status-problems { font: inherit; color: inherit; background: none; border: none; padding: 0 8px 0 0; margin-right: 8px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
 .status-problems:hover { background: rgba(255, 255, 255, 0.12); }
 .status-problems .codicon { font-size: 14px; }
-
-/* 編輯區下方的問題面板 */
 .problems { position: relative; flex-shrink: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); background: var(--bg-editor); }
 .problems-resize { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; z-index: 1; }
 .problems-header { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; height: 32px; flex-shrink: 0; font-size: 11px; letter-spacing: 0.5px; }
 .problems-title { border-bottom: 1px solid var(--text); padding: 6px 0 5px; }
-/* 下方面板的分頁：問題｜搜尋 */
 .panel-tab { font: inherit; letter-spacing: inherit; color: var(--text-dim); background: none; border: none; border-bottom: 1px solid transparent; padding: 6px 2px 5px; margin-right: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .panel-tab:hover { color: var(--text); }
 .panel-tab.active { color: var(--text-strong); border-bottom-color: var(--text); }
-
-/* 搜尋分頁 */
 .search-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .search-inputs { display: flex; align-items: flex-start; gap: 2px; padding: 2px 12px 4px 6px; flex-shrink: 0; }
 .search-toggle { margin-top: 2px; }
@@ -817,41 +702,27 @@ del.search-match { text-decoration: line-through; background: rgba(255, 0, 0, 0.
 .problems-dim { color: var(--text-dim); font-size: 12px; }
 .problems-code { overflow: hidden; text-overflow: ellipsis; min-width: 0; font-family: 'Cascadia Code', 'Microsoft JhengHei UI', monospace; }
 .problems-error.codicon { color: var(--error-icon); }
-
-/* 劇本編輯器：左邊是編輯區，有標題時右邊多一欄大綱 */
 .script-editor { display: flex; height: 100%; min-width: 0; }
 .script-editor-main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
-/* Monaco 的外框（@monaco-editor/react 寫死 height: 100%）：上面有提示條時改成填滿剩下的空間 */
 .script-editor-main > section { flex: 1; min-height: 0; height: auto !important; }
-/* 劇本裡的標題那一行（//# 大標題 等）整行加一點底色 */
 .monaco-editor .vns-h1-line { background: var(--h1-line); }
 .monaco-editor .vns-h2-line { background: var(--h2-line); }
 .monaco-editor .vns-h3-line { background: var(--h3-line); }
-
-/* 外部改動（AI）的打字效果：要刪掉的先標紅；打完的行亮一下再淡掉 */
 .monaco-editor .vns-ai-delete { background: rgba(244, 71, 71, 0.35); }
 .monaco-editor .vns-ai-changed { background: rgba(80, 160, 255, 0.22); transition: background 1.2s; }
 .monaco-editor .vns-ai-changed.vns-ai-fade { background: transparent; }
-
-/* 設定卡被外部（AI）改過：改到的欄位、名稱、詳細內容亮一下 */
 @keyframes ai-flash { from { background: rgba(80, 160, 255, 0.28); } to { background: transparent; } }
 .card-editor-row.ai-flash { animation: ai-flash 1.8s ease-out; border-radius: 4px; }
 .card-editor.ai-flash-name .card-editor-name { animation: ai-flash 1.8s ease-out; border-radius: 4px; }
 .card-editor.ai-flash-detail .rich-content { animation: ai-flash 1.8s ease-out; border-radius: 4px; }
-
-/* 自動更新的視窗：更新內容、下載進度條 */
 .update-panel { width: 420px; }
 .update-notes { white-space: pre-wrap; color: var(--text-dim); font-size: 12px; margin: -8px 0 14px; max-height: 200px; overflow-y: auto; }
 .update-progress { position: relative; height: 20px; margin: -4px 0 14px; background: var(--bg-tab); border-radius: 3px; overflow: hidden; font-size: 12px; }
 .update-bar { position: absolute; inset: 0 auto 0 0; background: var(--accent); transition: width 0.2s; }
 .update-progress span { position: relative; padding-left: 8px; line-height: 20px; }
-
-/* 每組分頁右上角的分割按鈕 */
 .group-actions { display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 6px; }
 .group-actions .icon-btn { opacity: 0.7; }
 .group-actions .icon-btn:hover { opacity: 1; }
-
-/* 按鈕的提示框（data-tip，見 components/Tooltip.tsx） */
 .tooltip {
   position: fixed;
   z-index: 1400;
@@ -866,8 +737,6 @@ del.search-match { text-decoration: line-through; background: rgba(255, 0, 0, 0.
   pointer-events: none;
   white-space: pre-line;
 }
-
-/* 「說明」選單的視窗 */
 .help-panel { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 80px); display: flex; flex-direction: column; }
 .help-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
 .help-table { border-collapse: collapse; font-size: 13px; overflow-y: auto; display: block; margin-bottom: 14px; }
@@ -884,13 +753,9 @@ del.search-match { text-decoration: line-through; background: rgba(255, 0, 0, 0.
 .help-about { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; font-size: 13px; }
 .help-app { font-size: 16px; font-weight: 600; }
 .help-dim { color: var(--text-dim); user-select: text; }
-
-/* ── 圖片 ── */
-/* 側邊欄預覽：縮圖放在欄位名稱下面，最寬撐滿、最高 160px */
 .card-image { display: block; max-width: 100%; max-height: 160px; object-fit: contain; border-radius: 3px; box-sizing: border-box; cursor: zoom-in; }
 .card-fold-value .card-image { margin-top: 2px; }
 .card-image-missing { display: block; color: var(--error); font-size: 12px; }
-/* 卡片分頁的圖片欄位：有圖顯示圖和「換一張／移除」；沒圖是虛線框，可以點、拖進來、貼上 */
 .image-field { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; border-radius: 4px; outline: none; }
 .image-field:focus-visible, .image-field.drop { outline: 2px solid var(--accent); outline-offset: 2px; }
 .image-field-img { display: block; max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 4px; cursor: zoom-in; background: var(--bg-hover); }
@@ -910,7 +775,6 @@ del.search-match { text-decoration: line-through; background: rgba(255, 0, 0, 0.
 .image-field.drop .image-field-placeholder { background: var(--drop-bg-soft); }
 .image-field-actions { display: flex; gap: 10px; }
 .image-field-missing { padding: 6px 10px; border: 1px dashed var(--error-border); border-radius: 4px; color: var(--error); font-size: 12px; }
-/* 詳細內容裡的圖片區塊：選取時藍框；右下角的小方塊拖曳調整寬度（側邊欄的唯讀預覽沒有） */
 .rich-image { margin: 0.5em 0; line-height: 0; }
 .rich-image-box { position: relative; display: inline-block; max-width: 100%; }
 .rich-image-box img { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 4px; }
@@ -932,8 +796,6 @@ body.image-resizing, body.image-resizing * { cursor: nwse-resize !important; use
 .rich-image-missing { padding: 6px 10px; border: 1px dashed var(--error-border); border-radius: 4px; color: var(--error); font-size: 12px; line-height: 1.5; }
 .rich-view .rich-image-box { max-height: 200px; }
 .rich-view .rich-image-box img { max-height: 200px; width: auto; }
-
-/* 外部（一起寫的人、AI）改過的地方：淡黃底，按分頁上方的「清除標記」才消失 */
 .monaco-editor .ext-change-line { background: rgba(230, 190, 60, 0.13); }
 .monaco-editor .ext-change-gutter { background: rgba(230, 190, 60, 0.9); width: 3px !important; margin-left: 2px; }
 .monaco-editor .ext-change-del::before { content: ''; position: absolute; top: -4px; left: 0; border: 4px solid transparent; border-left: 6px solid rgba(230, 90, 90, 0.95); }
@@ -945,15 +807,11 @@ body.image-resizing, body.image-resizing * { cursor: nwse-resize !important; use
 .change-bar-dot { width: 7px; height: 7px; border-radius: 50%; background: rgb(230, 190, 60); }
 .change-bar-btn { margin-left: auto; font: inherit; color: var(--accent); background: none; border: none; cursor: pointer; padding: 2px 4px; }
 .change-bar-btn:hover { text-decoration: underline; }
-
-/* 點圖片放大：畫面變暗，圖片在中央；滾輪縮放、拖曳移動（ImageViewer.tsx） */
 .image-viewer { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.55); overflow: hidden; cursor: zoom-out; }
 .image-viewer-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; cursor: grab; user-select: none; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
 body.image-viewer-dragging, body.image-viewer-dragging .image-viewer-img { cursor: grabbing; }
 .image-viewer-info { position: absolute; right: 16px; bottom: 12px; padding: 3px 8px; border-radius: 3px; font-size: 12px; color: #ddd; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .image-viewer-missing { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 10px 16px; border: 1px dashed var(--error-border); border-radius: 4px; color: var(--error); background: var(--bg); }
-
-/* 設定卡的「記憶」：時間線（一筆一列，可以直接改）和關係表 */
 .card-editor select {
   font: inherit;
   color: var(--text);
@@ -1010,8 +868,6 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 }
 .memory-rel-head { border-top: none; color: var(--text-dim); font-size: 12px; padding-top: 0; }
 .memory-first { display: flex; flex-wrap: wrap; gap: 6px; color: var(--text-dim); font-size: 12px; }
-
-/* 設定卡下面「詳細內容／記憶」的切換分頁（取代原本的小標題） */
 .card-pane-tabs { display: flex; gap: 16px; padding-bottom: 0; }
 .card-pane-tabs button {
   border: none;
@@ -1029,8 +885,6 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .card-pane-tabs button:hover { color: var(--text); }
 .card-pane-tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
 .card-pane-tabs .ext-dot { display: inline-block; margin: 0 0 0 6px; }
-
-/* 側邊欄卡片「資料／記憶」切換，和記憶分頁的摘要（CardItem.tsx） */
 .card-body > .card-tabs, .card-body > .card-mem { grid-column: 1 / -1; min-width: 0; }
 .card-tabs { display: flex; gap: 12px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
 .card-tabs button { border: none; border-bottom: 2px solid transparent; background: none; color: var(--text-dim); font: inherit; font-size: 12px; padding: 0 1px 2px; margin-bottom: -1px; cursor: pointer; }
@@ -1044,8 +898,6 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .card-mem-target { flex: none; }
 .card-mem-text { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .card-mem-more { color: var(--accent); font-size: 12px; }
-
-/* 記憶放大視窗（MemoryViewer.tsx） */
 .memory-viewer { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 32px; }
 .memory-viewer-box { width: min(760px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--bg-editor); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
 .memory-viewer-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--border); }

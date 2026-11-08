@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
+import { useKeys } from '../hooks';
 
 export type HelpTopic = 'shortcuts' | 'syntax' | 'about';
 
-// 「說明」選單的視窗：鍵盤快捷鍵、劇本語法說明、關於
 const SHORTCUTS: [string, string][] = [
   ['Ctrl+P', '快速開啟劇本或設定卡'],
   ['Ctrl+Shift+P', '指令面板（找所有功能）'],
@@ -38,18 +38,8 @@ const SYNTAX: [string, string][] = [
 
 export default function HelpDialog({ topic, onClose }: { topic: HelpTopic; onClose: () => void }) {
   const [version, setVersion] = useState('');
-  useEffect(() => {
-    getVersion().then(setVersion).catch(() => setVersion(''));
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || (topic === 'about' && e.key === 'Enter')) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [topic, onClose]);
-
+  useEffect(() => void getVersion().then(setVersion, () => setVersion('')), []);
+  useKeys((e) => (e.key === 'Escape' || (topic === 'about' && e.key === 'Enter')) && (onClose(), true), [topic, onClose]);
   const title = topic === 'shortcuts' ? '鍵盤快捷鍵' : topic === 'syntax' ? '劇本語法說明' : '關於';
   return (
     <div className="close-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -60,9 +50,7 @@ export default function HelpDialog({ topic, onClose }: { topic: HelpTopic; onClo
             <tbody>
               {SHORTCUTS.map(([key, what]) => (
                 <tr key={key}>
-                  <td>
-                    <kbd>{key}</kbd>
-                  </td>
+                  <td><kbd>{key}</kbd></td>
                   <td>{what}</td>
                 </tr>
               ))}
@@ -74,9 +62,7 @@ export default function HelpDialog({ topic, onClose }: { topic: HelpTopic; onClo
             <tbody>
               {SYNTAX.map(([code, what]) => (
                 <tr key={code}>
-                  <td>
-                    <code>{code}</code>
-                  </td>
+                  <td><code>{code}</code></td>
                   <td>{what}</td>
                 </tr>
               ))}
@@ -90,11 +76,7 @@ export default function HelpDialog({ topic, onClose }: { topic: HelpTopic; onClo
             <div className="help-dim">https://github.com/ChenghsichengGit/vn-script-editor</div>
           </div>
         )}
-        <div className="close-buttons">
-          <button type="button" className="close-btn primary" onClick={onClose} autoFocus>
-            關閉
-          </button>
-        </div>
+        <div className="close-buttons"><button type="button" className="close-btn primary" onClick={onClose} autoFocus>關閉</button></div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import './ContextMenu.css';
+import { useEscape, useOutsideClick } from '../hooks';
 
 export interface ContextMenuItem {
   label: string;
@@ -15,47 +16,20 @@ interface Props {
   onClose: () => void;
 }
 
-// 右鍵選單：出現在滑鼠位置，點外面、按 Esc、選了項目之後都會關閉
 export default function ContextMenu({ x, y, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
-
-  // 量出選單大小，如果會超出視窗就往回推，避免被切掉
   useLayoutEffect(() => {
     const rect = ref.current!.getBoundingClientRect();
-    setPos({
-      left: Math.max(0, Math.min(x, window.innerWidth - rect.width)),
-      top: Math.max(0, Math.min(y, window.innerHeight - rect.height)),
-    });
+    setPos({ left: Math.max(0, Math.min(x, window.innerWidth - rect.width)), top: Math.max(0, Math.min(y, window.innerHeight - rect.height)) });
   }, [x, y]);
-
-  useEffect(() => {
-    // 點在選單外面就關掉（用 capture，才不會被其他元件的 stopPropagation 擋住）
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation(); // 只關選單，不要連外面的對話框也一起關掉
-        onClose();
-      }
-    };
-    window.addEventListener('mousedown', onDown, true);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('mousedown', onDown, true);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [onClose]);
-
+  useOutsideClick(ref, onClose);
+  useEscape(onClose); // 只關選單，不會連外面的對話框也一起關掉
   return (
-    <div className="context-menu" ref={ref} style={pos} onContextMenu={(e) => e.preventDefault()}>
-      <MenuItems items={items} onClose={onClose} />
-    </div>
+    <div className="context-menu" ref={ref} style={pos} onContextMenu={(e) => e.preventDefault()}><MenuItems items={items} onClose={onClose} /></div>
   );
 }
 
-// 一層選單的項目；有 children 的項目滑鼠移上去，在右邊展開下一層
 function MenuItems({ items, onClose }: { items: ContextMenuItem[]; onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
@@ -76,9 +50,7 @@ function MenuItems({ items, onClose }: { items: ContextMenuItem[]; onClose: () =
             {item.label}
             {item.children && <span className="context-menu-arrow">▸</span>}
             {sub && open === item.label && (
-              <div className="context-menu context-submenu">
-                <MenuItems items={item.children!} onClose={onClose} />
-              </div>
+              <div className="context-menu context-submenu"><MenuItems items={item.children!} onClose={onClose} /></div>
             )}
           </div>
         );

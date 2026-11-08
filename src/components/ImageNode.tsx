@@ -5,10 +5,6 @@ import type { EditorView } from '@tiptap/pm/view';
 import { TextSelection } from '@tiptap/pm/state';
 import { imageError, imageSrc, saveImageFile } from '../images';
 
-// 詳細內容裡的圖片（像 Notion）：自己佔一個區塊；點一下選取（Delete 刪掉），拖右下角調整寬度，按住圖片可以拖到別的位置
-// src 記相對路徑（圖片/x.png），顯示時才轉成 vnimg 網址
-// Markdown：沒調過寬度 → ![](圖片/x.png)；調過 → <img src="圖片/x.png" width="400">（Markdown 本身沒有寬度的寫法）
-
 const MIN_WIDTH = 60;
 
 function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) {
@@ -17,7 +13,6 @@ function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) 
   const [dragWidth, setDragWidth] = useState<number | null>(null); // 拖曳中的寬度（放開才寫回文件，復原只會記一步）
   const [broken, setBroken] = useState(false);
   const shown = dragWidth ?? width ?? undefined;
-
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -42,7 +37,6 @@ function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) 
     window.addEventListener('mouseup', up);
     document.body.classList.add('image-resizing');
   };
-
   return (
     <NodeViewWrapper className={`rich-image${selected && editor.isEditable ? ' selected' : ''}`} data-drag-handle="">
       {broken ? (
@@ -57,7 +51,6 @@ function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) 
   );
 }
 
-// 路徑裡有空白或括號時，Markdown 要用 <...> 包起來
 const mdPath = (src: string) => (/[\s()<>]/.test(src) ? `<${src}>` : src);
 const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
@@ -66,7 +59,6 @@ export const ImageBlock = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
-      // Markdown 讀進來時，![](圖片/小圖.png) 的路徑會被編碼成 %E5%9C%96…，這裡解回原本的字（存回去才會是中文路徑）
       src: {
         default: null,
         parseHTML: (el) => {
@@ -108,8 +100,6 @@ export const ImageBlock = Image.extend({
   },
 }).configure({ inline: false, allowBase64: false });
 
-// 貼上或拖進來的圖片檔：先存進「圖片」資料夾，再插在游標（拖放時是放開的位置）
-// 存檔要等一下，所以位置在存好後才算；有好幾張就依序接在後面
 export async function insertImageFiles(view: EditorView, files: File[], at?: number) {
   let pos = at;
   for (const file of files) {
