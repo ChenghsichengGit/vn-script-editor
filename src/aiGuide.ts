@@ -107,11 +107,13 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line();
   line('## 指令卡的寫法');
   line();
-  line('- 卡片名稱就是指令格式，例如 `#name [名字]`；同一個指令有好幾種寫法時，名稱寫 `#fade`，在「用法」欄位一行寫一種，冒號後面是說明：');
+  line('- 卡片名稱就是指令格式，例如 `#name [名字]`；同一個指令有好幾種寫法時，名稱寫 `#fade`，在「用法」欄位一行寫一種：');
   line('  ```');
-  line('  #fade in [time:int=0]：淡入');
-  line('  #fade default [color] [time:int=0]：淡到指定顏色');
+  line('  #fade in：淡入 [time:int?：漸變時間]');
+  line('  #fade out：淡出 [time:int?：漸變時間]');
+  line('  #fade default [color] [time:int=0] ：淡到指定顏色');
   line('  ```');
+  line('- 說明的寫法：字後面緊接冒號（`in：淡入`）是那個字的說明；`[ ]` 裡冒號後面（`[time:int?：漸變時間]`）是參數說明；冒號前面有空格（` ：淡到指定顏色`）是整行用法的說明。補齊清單和行尾提示會顯示這些說明。');
   line('- 參數寫法：`[名字]` 從清單選；`[time:int]` 整數、`[x:float]` 小數、`[t:text]` 文字；`[time:int=0]`、`[note?]` 可以不填；`in/out` 或 `in|out` 只能選其中一個；其他字照抄。');
   line('- `[參數]` 可以選的值：指令卡上同名的欄位（一行一個選項，`in：淡入` 冒號後面是說明），沒有的話用上面「固定欄位」裡設成那個指令參數的內容。');
   line('- 「說明」欄位：這個指令是做什麼的。');

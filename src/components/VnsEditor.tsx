@@ -1,13 +1,13 @@
 // Notion 式的劇本編輯器（.vns）：一行一個區塊，永遠顯示處理過的樣子
 //   標題是真的大字、標音的讀音排在字的上方、註解照原文（看得到 //）、指令照原文但上色
 //   打字時自動換區塊：行首打 # → 指令；打 // → 註解；打「= 」「== 」「=== 」→ 標題；註解裡打「//= 」→ 被註解掉的標題
-//   在標題開頭按退格 → 變回一般文字（被註解掉的標題 → 註解）
+//   標題看不到的 = 不會被退格／Delete 刪掉，要改回一般文字用工具列或右鍵
 // 存回去的文字由 vnsDoc.ts 轉換，跟原本的 .vns 格式完全一樣
 import { useEffect, useRef, useState } from 'react';
 import { BubbleMenu, Editor, EditorContent, useEditor } from '@tiptap/react';
 import { Extension, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { EditorState, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { RubyNode, promptRuby } from './RubyMark';
@@ -19,7 +19,7 @@ import Outline, { Heading } from './Outline';
 import ChangeBar from './ChangeBar';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import { VnsDiagnostics } from './VnsDiagnostics';
-import { VnsCompletion, VnsCompletionPopup } from './VnsCompletion';
+import { VnsCompletion, VnsCompletionPopup, completionKey } from './VnsCompletion';
 import { VNS_EXTERNAL_META, VnsChangeMarks } from './VnsChangeMarks';
 import { createVnsPlayer, registerVnsPlayer } from './VnsPlayback';
 
@@ -140,36 +140,23 @@ const VnsBehavior = Extension.create({
   },
   addProseMirrorPlugins() {
     return [
-      // 打字時依那一行開頭的寫法換區塊種類
+      // 打字時依那一行開頭的寫法換區塊種類；輸入法選字中先不換（換了會重複輸入，例如 # 變 ##），選完再換
       new Plugin({
         appendTransaction(trs, _old, state) {
-          if (!trs.some((t) => t.docChanged)) return null;
-          const $h = state.selection.$head;
-          if ($h.depth < 1) return null;
-          const block = $h.node(1);
-          const pos = $h.before(1);
-          // 只看第一段純文字（後面可能有標音）
-          const t = block.firstChild?.isText ? block.firstChild.text! : '';
-          const plain = block.childCount === 0 || block.content.content.every((n) => n.isText);
-          const { nodes } = state.schema;
-          const to = (type: typeof nodes.paragraph, attrs: Record<string, unknown> | null, strip: number) => {
-            const tr = state.tr.setNodeMarkup(pos, type, attrs);
-            return strip ? tr.delete(pos + 1, pos + 1 + strip) : tr;
-          };
-          // 「= 」「//= 」：標記去掉，變成標題（記住縮排和空白）
-          const heading = (re: RegExp, comment: boolean) => {
-            const h = re.exec(t);
-            return h && to(nodes.heading, { level: h[2].length, indent: h[1], sep: h[3], comment }, h[0].length);
-          };
-          if (block.type.name === 'paragraph') {
-            const h = heading(/^(\s*)(={1,3})(?!=)(\s+)/, false);
-            if (h) return h;
-            if (plain && isCommentText(t)) return to(nodes.vnsComment, null, 0);
-            if (plain && isCommandText(t)) return to(nodes.vnsCommand, null, 0);
-          }
-          if (block.type.name === 'vnsComment') return heading(/^(\s*)\/\/(={1,3})(?!=)(\s+)/, true) || (isCommentText(t) ? null : to(nodes.paragraph, null, 0));
-          if (block.type.name === 'vnsCommand' && !isCommandText(t)) return to(nodes.paragraph, null, 0);
-          return null;
+          if (!trs.some((t) => t.docChanged) || trs.some((t) => t.getMeta('composition'))) return null;
+          return retype(state);
+        },
+        props: {
+          handleDOMEvents: {
+            compositionend: (view) => {
+              setTimeout(() => {
+                const tr = view.isDestroyed || view.composing ? null : retype(view.state);
+                // 換成指令行時順便打開自動補齊（不是指令行會自己關掉）
+                if (tr) view.dispatch(tr.setMeta(completionKey, { type: 'open' }));
+              }, 30);
+              return false;
+            },
+          },
         },
       }),
       // 指令上色：#指令名稱、參數、行尾的 // 註解
@@ -184,6 +171,36 @@ const VnsBehavior = Extension.create({
     ];
   },
 });
+
+// 依游標那一行開頭的寫法換區塊種類（沒有要換就回傳 null）
+function retype(state: EditorState) {
+  const $h = state.selection.$head;
+  if ($h.depth < 1) return null;
+  const block = $h.node(1);
+  const pos = $h.before(1);
+  // 只看第一段純文字（後面可能有標音）
+  const t = block.firstChild?.isText ? block.firstChild.text! : '';
+  const plain = block.childCount === 0 || block.content.content.every((n) => n.isText);
+  const { nodes } = state.schema;
+  const to = (type: typeof nodes.paragraph, attrs: Record<string, unknown> | null, strip: number) => {
+    const tr = state.tr.setNodeMarkup(pos, type, attrs);
+    return strip ? tr.delete(pos + 1, pos + 1 + strip) : tr;
+  };
+  // 「= 」「//= 」：標記去掉，變成標題（記住縮排和空白）
+  const heading = (re: RegExp, comment: boolean) => {
+    const h = re.exec(t);
+    return h && to(nodes.heading, { level: h[2].length, indent: h[1], sep: h[3], comment }, h[0].length);
+  };
+  if (block.type.name === 'paragraph') {
+    const h = heading(/^(\s*)(={1,3})(?!=)(\s+)/, false);
+    if (h) return h;
+    if (plain && isCommentText(t)) return to(nodes.vnsComment, null, 0);
+    if (plain && isCommandText(t)) return to(nodes.vnsCommand, null, 0);
+  }
+  if (block.type.name === 'vnsComment') return heading(/^(\s*)\/\/(={1,3})(?!=)(\s+)/, true) || (isCommentText(t) ? null : to(nodes.paragraph, null, 0));
+  if (block.type.name === 'vnsCommand' && !isCommandText(t)) return to(nodes.paragraph, null, 0);
+  return null;
+}
 
 function commandDecorations(doc: import('@tiptap/pm/model').Node) {
   const decos: Decoration[] = [];
@@ -225,6 +242,8 @@ export const vnsExtensions = [
   VnsDiagnostics,
   VnsCompletion,
 ];
+// 內建的 Markdown 輸入規則（「# 」變標題等）會跟 .vns 的 # 指令衝突，只留標音的
+export const vnsInputRules = ['ruby'];
 
 // 貼上的文字一行一個區塊（{本文|讀音} 也會變成標音）；第一行、最後一行接進游標所在的那一行
 const parseSlice = (editor: Editor, text: string) => {
@@ -261,6 +280,7 @@ export default function VnsEditor(props: {
   };
   const editor = useEditor({
     extensions: [...vnsExtensions, VnsChangeMarks.configure({ fileId: props.fileId })],
+    enableInputRules: vnsInputRules,
     content: vnsToDoc(props.text),
     onCreate: ({ editor }) => collect(editor),
     onUpdate: ({ editor }) => {

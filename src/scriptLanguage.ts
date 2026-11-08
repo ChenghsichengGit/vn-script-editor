@@ -9,14 +9,14 @@ export const LANGUAGE_ID = 'vns';
 type ParamType = 'int' | 'float' | 'text';
 
 type Param =
-  | { kind: 'ref'; name: string; type?: ParamType; optional: boolean; def?: string } // [名字]、[time:int=0]
+  | { kind: 'ref'; name: string; type?: ParamType; optional: boolean; def?: string; desc?: string } // [名字]、[time:int=0]、[time:int?：說明]
   | { kind: 'choice'; options: string[] } // in|out
-  | { kind: 'literal'; text: string }; // 固定字
+  | { kind: 'literal'; text: string; desc?: string }; // 固定字（in：淡入）
 type Choice = { label: string; detail: string };
 
 interface Usage {
   params: Param[];
-  format: string; // 原本寫的格式，顯示在補齊清單旁邊
+  format: string; // 去掉說明的格式，顯示在補齊清單旁邊
   description: string;
   ownOptions: Map<string, Choice[]>; // 指令卡上和參數同名的欄位列出的選項（參數名稱 → 選項）
 }
@@ -31,29 +31,73 @@ let paramSources = new Map<string, string[]>(); // 參數名稱 → 在欄位設
 const fieldOf = (card: Card, key: string) => card.fields.find((f) => f.key === key)?.value.trim() ?? '';
 const linesOf = (text: string) => text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
+// [名字]、[time:int?：說明]：全形：一定是說明；半形:後面不是類型寫法才是說明
+function parseBracket(inner: string): Param | null {
+  let head = inner;
+  let desc = '';
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch !== '：' && ch !== ':') continue;
+    const after = inner.slice(i + 1);
+    if (ch === ':' && /^(int|float|text)\??(=[^：:]*)?(?=[：:]|$)/.test(after)) continue;
+    head = inner.slice(0, i);
+    desc = after.trim();
+    break;
+  }
+  const ref = /^([^:?=]+)(?::(int|float|text))?(\?)?(?:=(.*))?$/.exec(head.trim());
+  if (!ref) return null;
+  return { kind: 'ref', name: ref[1].trim(), type: ref[2] as ParamType | undefined, optional: !!ref[3] || ref[4] !== undefined, def: ref[4], desc };
+}
+
 function parseParam(token: string): Param {
-  const ref = /^\[([^\]:?=]+)(?::(int|float|text))?(\?)?(?:=([^\]]*))?\]$/.exec(token);
-  if (ref) return { kind: 'ref', name: ref[1], type: ref[2] as ParamType | undefined, optional: !!ref[3] || ref[4] !== undefined, def: ref[4] };
-  if (/[|/]/.test(token)) return { kind: 'choice', options: token.split(/[|/]/).filter(Boolean) };
-  return { kind: 'literal', text: token };
+  if (token.startsWith('[') && token.endsWith(']')) {
+    const p = parseBracket(token.slice(1, -1));
+    if (p) return p;
+  }
+  const m = /^([^：:]+)[：:](\S+)$/.exec(token);
+  const word = m ? m[1] : token;
+  if (/[|/]/.test(word)) return { kind: 'choice', options: word.split(/[|/]/).filter(Boolean) };
+  return { kind: 'literal', text: word, desc: m?.[2] };
 }
 
 function paramLabel(p: Param) {
   if (p.kind === 'choice') return p.options.join('/');
   if (p.kind === 'literal') return p.text;
-  const core = p.type ? `(${p.type})${p.name}` : p.name;
+  const core = [p.type, p.desc || p.name].filter(Boolean).join(' ');
   return p.optional ? `[${core}]` : core;
 }
 
-function splitDescription(line: string): [string, string] {
+const cleanToken = (p: Param) => (p.kind === 'ref' ? `[${p.name}${p.type ? ':' + p.type : ''}${p.optional && p.def === undefined ? '?' : ''}${p.def !== undefined ? '=' + p.def : ''}]` : p.kind === 'choice' ? p.options.join('|') : p.text);
+
+// 一行用法拆成：沒有說明的格式、整行說明、參數。整行說明的冒號前面要有空白（或接在 ] 後面）
+function parseUsage(line: string): { format: string; desc: string; name: string; params: Param[] } {
   let depth = 0;
-  for (let i = 0; i < line.length; i++) {
+  let split = -1;
+  let seenSpace = false;
+  for (let i = 0; i < line.length && split < 0; i++) {
     const ch = line[i];
     if (ch === '[') depth++;
     else if (ch === ']') depth--;
-    else if (depth === 0 && (ch === '：' || ch === ':')) return [line.slice(0, i).trim(), line.slice(i + 1).trim()];
+    else if (depth === 0 && /\s/.test(ch)) seenSpace = true;
+    else if (depth === 0 && (ch === '：' || ch === ':') && (!seenSpace || i === 0 || /[\s\]]/.test(line[i - 1]))) split = i;
   }
-  return [line.trim(), ''];
+  const head = (split < 0 ? line : line.slice(0, split)).trim();
+  const desc = split < 0 ? '' : line.slice(split + 1).trim();
+  const tokens: string[] = [];
+  let cur = '';
+  depth = 0;
+  for (const ch of head) {
+    if (ch === '[') depth++;
+    else if (ch === ']') depth--;
+    if (depth <= 0 && /\s/.test(ch)) {
+      if (cur) tokens.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  if (cur) tokens.push(cur);
+  const [name = '', ...rest] = tokens;
+  const params = rest.map(parseParam);
+  return { format: [name, ...params.map(cleanToken)].join(' '), desc, name, params };
 }
 
 function parseOptions(text: string): Choice[] {
@@ -71,10 +115,8 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
     if (lines.length === 0 || /\s/.test(title)) lines.unshift(title);
     const description = fieldOf(card, '說明');
     for (const line of lines) {
-      const [format, desc] = splitDescription(line);
-      const [name, ...rest] = format.split(/\s+/);
-      if (!name?.startsWith('#') || name.length < 2) continue;
-      const params = rest.map(parseParam);
+      const { format, desc, name, params } = parseUsage(line);
+      if (!name.startsWith('#') || name.length < 2) continue;
       const ownOptions = new Map<string, Choice[]>();
       for (const p of params) {
         const field = p.kind === 'ref' && card.fields.find((f) => f.key === p.name && f.value.trim());
@@ -144,7 +186,7 @@ const matchUsages = (cmd: Command, words: string[]) =>
   cmd.usages.filter((u) => words.every((w, i) => u.params[i] && accepts(u, u.params[i], w)));
 function paramChoices(u: Usage, p: Param): Choice[] {
   if (p.kind === 'choice') return p.options.map((o) => ({ label: o, detail: '' }));
-  if (p.kind === 'literal') return [{ label: p.text, detail: u.description || u.format }];
+  if (p.kind === 'literal') return [{ label: p.text, detail: p.desc || u.description || u.format }];
   const values = u.ownOptions.get(p.name) ?? (paramValues.get(p.name) ?? []).map((v) => ({ label: v.value, detail: v.source }));
   return values.length > 0 || p.def === undefined ? values : [{ label: p.def, detail: '預設值' }];
 }
@@ -237,6 +279,11 @@ export function setHeadingLevel(line: string, level: number): string {
 
 // 補齊：before = 這一行游標前面的文字；from = 要被取代的那一段從第幾個字開始（0 起算）
 // 行首打指令名稱時列出指令；指令後面列出這個位置的參數可以選什麼（retrigger = 選完還有下一個參數，要接著再開清單）
+const usageNote = (u: Usage) => {
+  const note = u.description || u.params.flatMap((p) => (p.kind === 'literal' && p.desc ? [`${p.text} ${p.desc}`] : [])).join('、');
+  return note ? `${u.format}：${note}` : u.format;
+};
+
 export type ScriptCompletion = { kind: 'command' | 'value'; label: string; detail: string; documentation?: string; insertText: string; retrigger: boolean };
 export function completionsAt(before: string): { from: number; items: ScriptCompletion[] } {
   const none = { from: before.length, items: [] };
@@ -250,7 +297,7 @@ export function completionsAt(before: string): { from: number; items: ScriptComp
         kind: 'command',
         label: c.name,
         detail: c.usages.length > 1 ? `${c.usages[0].format}（共 ${c.usages.length} 種寫法）` : c.usages[0].format,
-        documentation: [c.description, ...c.usages.map((u) => (u.description ? `${u.format}：${u.description}` : u.format))].filter(Boolean).join('\n'),
+        documentation: [c.description, ...c.usages.map(usageNote)].filter(Boolean).join('\n'),
         insertText: hasParams ? `${c.name} ` : c.name,
         retrigger: hasParams,
       };
@@ -387,7 +434,7 @@ export function registerScriptLanguage() {
 }
 
 export const FIXED_COMMAND_FIELDS: { name: string; description: string }[] = [
-  { name: '用法', description: '這個指令的各種寫法：一行寫一種，冒號後面是說明，例如\n#fade in [time:int=0]：淡入' },
+  { name: '用法', description: '這個指令的各種寫法：一行寫一種；字後面緊接冒號是那個字的說明，[ ] 裡冒號後面是參數說明，空白加冒號是整行說明，例如\n#fade in：淡入 [time:int?：漸變時間]' },
   { name: '說明', description: '這個指令是做什麼的：會顯示在劇本的補齊清單裡' },
 ];
 
@@ -396,8 +443,7 @@ export function commandSpecialFields(card: Card): Map<string, string> {
   for (const f of FIXED_COMMAND_FIELDS) out.set(f.name, f.description);
   const lines = [card.name, ...linesOf(fieldOf(card, '用法'))];
   for (const line of lines) {
-    for (const token of splitDescription(line)[0].split(/\s+/).slice(1)) {
-      const p = parseParam(token);
+    for (const p of parseUsage(line).params) {
       if (p.kind === 'ref' && !out.has(p.name)) out.set(p.name, `參數 [${p.name}] 可以選的值：一行一個，冒號後面是說明，例如\nblack：黑色`);
     }
   }
@@ -433,7 +479,7 @@ export function migrateFormatField(card: Card): Card | null {
   const format = card.fields.find((f) => f.key === '格式');
   if (!format) return null;
   const usage = linesOf(fieldOf(card, '用法'));
-  const moved = linesOf(format.value).filter((l) => usage.length === 0 || /\s/.test(splitDescription(l)[0]));
+  const moved = linesOf(format.value).filter((l) => usage.length === 0 || /\s/.test(parseUsage(l).format));
   const merged = [...moved, ...usage.filter((l) => !moved.includes(l))].join('\n');
   const rest = card.fields.filter((f) => f.key !== '格式');
   const fields = rest.some((f) => f.key === '用法')
