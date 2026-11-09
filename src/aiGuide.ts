@@ -98,7 +98,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
     const items = [
       ...(schema.nameParam ? [`名稱（指令參數 \`[${schema.nameParam}]\`）`] : []),
       ...schema.fields.map((f) => {
-        const notes = [f.type === 'image' ? '圖片' : '', f.param ? `指令參數 \`[${f.param}]\`` : ''].filter(Boolean);
+        const notes = [f.type === 'image' ? '圖片' : '', f.collapsed ? '新卡片預設摺疊' : '', f.param ? `指令參數 \`[${f.param}]\`` : ''].filter(Boolean);
         return notes.length > 0 ? `${f.key}（${notes.join('，')}）` : f.key;
       }),
     ];

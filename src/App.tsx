@@ -123,6 +123,15 @@ export default function App() {
   const [sectionsDialog, setSectionsDialog] = useState(false);
   const [order, setOrder] = useState<ItemOrder>({});
   useEffect(() => setScriptData(cards, schemas), [cards, schemas]);
+  // 不顯示瀏覽器內建的右鍵選單（上一頁、重新整理、檢查…）；文字輸入框保留（剪下、複製、貼上）
+  useEffect(() => {
+    const block = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el?.closest?.('input, textarea, [contenteditable="true"]')) e.preventDefault();
+    };
+    window.addEventListener('contextmenu', block);
+    return () => window.removeEventListener('contextmenu', block);
+  }, []);
   const [problems, setProblems] = useState<ProblemGroup[]>([]);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -804,8 +813,9 @@ export default function App() {
     return takenNames(section, folder, { id }).has((sanitizeName(name) + '.md').toLowerCase()) ? '已經有同名的項目' : null;
   };
   const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[], removals: FieldRemoval[] = []) => {
-    const schema = edits.map(({ key, param, icon, color, type }) => ({
+    const schema = edits.map(({ key, param, icon, color, type, collapsed }) => ({
       key,
+      ...(collapsed && { collapsed: true }),
       ...(param && { param }),
       ...(icon && { icon }),
       ...(icon && color && { color }),
@@ -813,12 +823,22 @@ export default function App() {
     }));
     const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
     const removeMode = new Map(removals.map((r) => [r.key, r.mode]));
+    // 「預設摺疊」有切換的欄位：所有卡片的這個欄位跟著摺起來／展開
+    const wasFolded = new Set(schemas[section].fields.filter((f) => f.collapsed).map((f) => f.key));
+    const flips = new Map(edits.filter((e) => !!e.collapsed !== wasFolded.has(e.from ?? e.key)).map((e) => [e.key, !!e.collapsed]));
+    const fix = (f: Card['fields'][number]) => {
+      const key = renames.get(f.key) ?? f.key;
+      const fold = flips.get(key);
+      if (fold === undefined) return key === f.key ? f : { ...f, key };
+      const { collapsed: _old, ...rest } = f;
+      return { ...rest, key, ...(fold && { collapsed: true }) };
+    };
     const adjust = (fields: Card['fields']) => {
       const kept = fields.filter((f) => {
         const mode = removeMode.get(f.key);
         return !(mode === 'all' || (mode === 'empty' && f.value.trim() === ''));
       });
-      return applySchema(kept.map((f) => (renames.has(f.key) ? { ...f, key: renames.get(f.key)! } : f)), schema);
+      return applySchema(kept.map(fix), schema);
     };
     const store = project?.store;
     const updated = new Map<string, Card>();
@@ -894,6 +914,7 @@ export default function App() {
       if (err) return err;
       const card: Card = { id: Date.now().toString(36), name, fields: applySchema([], schemas[section].fields), detail: '', folder };
       setCards((all) => ({ ...all, [section]: [...all[section], card] }));
+      putFirst(section, folder, name);
       markDirty(cardTabId(section, card.id));
       openTab(cardTabId(section, card.id));
       return null;
@@ -930,6 +951,13 @@ export default function App() {
   const reorder = (section: SectionId, folder: string, names: string[]) => {
     const cur = orderRef.current;
     commitOrder({ ...cur, [section]: { ...cur[section], [folder]: names } });
+  };
+  // 新增的項目排在資料夾下面、所有項目的最上面
+  const putFirst = (section: SectionId, folder: string, name: string) => {
+    const list = (orderRef.current[section]?.[folder] ?? []).filter((n) => n !== name);
+    const at = list.findIndex((n) => !n.endsWith('/'));
+    list.splice(at < 0 ? list.length : at, 0, name);
+    reorder(section, folder, list);
   };
   const renameInOrder = (section: SectionId, folder: string, from: string, to: string) => {
     const list = orderRef.current[section]?.[folder];
@@ -968,6 +996,7 @@ export default function App() {
       const id = Date.now().toString(36);
       setFiles((all) => ({ ...all, [id]: { name, folder } }));
       setContents((c) => ({ ...c, [id]: '' }));
+      putFirst('files', folder, name);
       markDirty(fileKey(id));
       openTab(id);
       return null;
@@ -1219,7 +1248,6 @@ export default function App() {
     onReorder: reorder,
     onHeaderDrag: startPanelDrag,
     onEditSchema: setSchemaDialog,
-    onEditSections: () => setSectionsDialog(true),
     schemas,
   };
   const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
@@ -1227,7 +1255,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="main" ref={mainRef}>
-        <ActivityBar active={activeSections} onToggle={toggleSection} leftOpen={leftVisible} onToggleLeft={() => setLeftVisible((v) => !v)} />
+        <ActivityBar active={activeSections} onToggle={toggleSection} leftOpen={leftVisible} onToggleLeft={() => setLeftVisible((v) => !v)} onEditSections={() => setSectionsDialog(true)} />
         {showLeft && (
           <>
             <Sidebar {...treeProps} side="left" sections={leftSections} layout={layout} onLayoutChange={onLayoutChange} />

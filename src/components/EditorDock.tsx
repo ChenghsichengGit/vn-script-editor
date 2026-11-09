@@ -188,7 +188,6 @@ function GroupActions({ containerApi, activePanel }: IDockviewHeaderActionsProps
 
 function tabMenu({ panel, group, api }: GetTabContextMenuItemsParams): (BuiltInContextMenuItem | ReactContextMenuItemConfig)[] {
   const tabId = tabIdOf(panel);
-  const split = (direction: 'right' | 'below') => () => splitPanel(api, panel, direction);
   const closeAll = (keep?: string) => async () => {
     for (const p of group.panels.filter((x) => x.id !== keep)) {
       if (!(await requestClose(tabIdOf(p), () => p.api.close()))) return;
@@ -196,11 +195,7 @@ function tabMenu({ panel, group, api }: GetTabContextMenuItemsParams): (BuiltInC
   };
   return [
     { label: '關閉', action: () => void requestClose(tabId, () => panel.api.close()) },
-    { label: '關閉其他', action: closeAll(panel.id), disabled: group.panels.length < 2 },
     { label: '關閉群組內全部', action: closeAll() },
-    'separator',
-    { label: '向右分割', action: split('right') },
-    { label: '向下分割', action: split('below') },
     'separator',
     { label: '變成浮動視窗', action: () => api.addFloatingGroup(panel), disabled: group.api.location.type === 'floating' },
   ];

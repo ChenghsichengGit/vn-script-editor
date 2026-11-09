@@ -203,5 +203,18 @@ button.schema-del:hover { background: var(--error-bg); color: var(--error); }
 }
 .schema-type-btn:hover { background: var(--bg-selected); color: var(--text); }
 .schema-type-btn.image { border-color: var(--accent); color: var(--accent); }
+.schema-fold { flex: none; width: 44px; text-align: center; }
+.schema-fold-btn {
+  padding: 2px 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.schema-fold-btn:hover { background: var(--bg-selected); color: var(--text); }
+.schema-fold-btn.on { border-color: var(--accent); color: var(--accent); }
 .schema-memory { flex: none; width: 36px; text-align: center; }
 .schema-memory input { margin: 0; cursor: pointer; }

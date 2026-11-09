@@ -35,6 +35,7 @@ export interface SchemaField {
   icon?: string; // 欄位名稱前面的圖示（codicon 名稱，可選的列在 fieldIcons.ts）；沒有 = 不畫
   color?: string; // 圖示顏色的名稱（red、blue…）；沒有 = 跟文字同色
   type?: 'image'; // 欄位類型：沒有 = 文字；image = 圖片（內容存圖片的相對路徑，例如 圖片/立繪.png）
+  collapsed?: boolean; // 新卡片（或新補上的欄位）預設摺疊；不影響已有的欄位
 }
 export interface SectionSchema {
   nameParam?: string;
@@ -53,7 +54,7 @@ export const defaultSchemas = (ids: CardSectionId[]): Schemas => Object.fromEntr
 export const perSection = <T>(ids: string[], make: () => T): Record<string, T> => Object.fromEntries(ids.map((id) => [id, make()]));
 
 export function applySchema(fields: Field[], schema: SchemaField[]): Field[] {
-  const head = schema.map((s) => fields.find((f) => f.key === s.key) ?? { key: s.key, value: '' });
+  const head = schema.map((s) => fields.find((f) => f.key === s.key) ?? { key: s.key, value: '', ...(s.collapsed && { collapsed: true }) });
   const rest = fields.filter((f) => !schema.some((s) => s.key === f.key));
   return [...head, ...rest];
 }

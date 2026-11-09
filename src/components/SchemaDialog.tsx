@@ -16,6 +16,7 @@ interface Row {
   icon?: string;
   color?: string;
   type?: 'image'; // 沒有 = 文字
+  collapsed?: boolean;
   from?: string;
 }
 
@@ -37,7 +38,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
 }) {
   const [nameParam, setNameParam] = useState(schema.nameParam ?? '');
   const [rows, setRows] = useState<Row[]>(() =>
-    schema.fields.map((f, i) => ({ id: i, name: f.key, param: f.param ?? '', icon: f.icon, color: f.color, type: f.type, from: f.key })),
+    schema.fields.map((f, i) => ({ id: i, name: f.key, param: f.param ?? '', icon: f.icon, color: f.color, type: f.type, collapsed: f.collapsed, from: f.key })),
   );
   const [nextId, setNextId] = useState(schema.fields.length);
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -142,6 +143,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
       if (r.icon) edit.icon = r.icon;
       if (r.icon && r.color) edit.color = r.color;
       if (r.type) edit.type = r.type;
+      if (r.collapsed) edit.collapsed = true;
       if (r.from !== undefined) edit.from = r.from;
       return edit;
     });
@@ -171,6 +173,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
               <span className="schema-icon" />
               <span className="schema-col">欄位名稱</span>
               <span className="schema-type">類型</span>
+              <span className="schema-fold">預設</span>
               <span className="schema-col">指令參數</span>
               <span className="schema-del" />
             </div>
@@ -179,6 +182,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
               <span className="schema-icon" title="名稱這一列不能移動或刪除"><Icon icon={icon} /></span>
               <span className="schema-col"><span className="schema-fixed">名稱</span></span>
               <span className="schema-type" />
+              <span className="schema-fold" />
               <span className="schema-col schema-name-cell">
                 <SuggestInput
                   type="text"
@@ -230,6 +234,14 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
                     onClick={() => patch(r.id, { type: r.type === 'image' ? undefined : 'image' })}
                   >
                     {r.type === 'image' ? '圖片' : '文字'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`schema-fold schema-fold-btn${r.collapsed ? ' on' : ''}`}
+                    title="新卡片這個欄位預設摺起來（已有的卡片不受影響）"
+                    onClick={() => patch(r.id, { collapsed: !r.collapsed })}
+                  >
+                    {r.collapsed ? '摺疊' : '展開'}
                   </button>
                   <span className="schema-col schema-name-cell">
                     <SuggestInput
