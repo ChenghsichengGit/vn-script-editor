@@ -1346,7 +1346,7 @@ export default function App() {
         right={status.right ? `${status.right}　｜　${saveLabel}` : saveLabel}
       />
       {common}
-      <MemoryViewerHost cards={cards} files={files} openTab={openTab} />
+      <MemoryViewerHost cards={cards} files={files} schemaFields={(s) => schemas[s]?.fields ?? []} openTab={openTab} />
       <RubyPromptHost />
       {tabCloseDialog()}
       {conflictDialog}

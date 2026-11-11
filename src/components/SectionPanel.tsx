@@ -9,6 +9,7 @@ import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import NameInput from './NameInput';
 import Icon, { fileIcon } from './Icon';
 import { hasMarks, useChangeMarks } from '../changeMarks';
+import { openCardViewer } from './MemoryViewer';
 
 const INDENT = 14; // 每深一層資料夾縮排多少像素
 const EXPAND_DELAY = 600; // 拖著東西停在摺起來的資料夾上多久（毫秒）就自動展開
@@ -268,6 +269,7 @@ export default function SectionPanel(props: Props) {
       const card = cards.find((c) => c.id === t.id);
       return [
         { label: '編輯', onClick: () => props.cardOps.open(t.section, t.id) },
+        { label: '放大檢視', onClick: () => openCardViewer(t.section, t.id) },
         { label: '重新命名', onClick: () => setEditing({ mode: 'rename', kind: 'card', section: t.section, id: t.id }) },
         sortItem(card?.folder ?? ''),
         del(`「${card?.name}」`, () => props.cardOps.remove(t.section, t.id)),

@@ -3,7 +3,7 @@ import { Card, CardOps, CardSectionId, Field, SchemaField, cardTabId } from '../
 import { fieldIconDef } from '../fieldIcons';
 import { sectionDef, sectionMeta } from '../sections';
 import { relationSummary, relations } from '../memories';
-import { openMemoryViewer } from './MemoryViewer';
+import { openCardViewer, openMemoryViewer } from './MemoryViewer';
 import type { IconDef } from './Icon';
 import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
@@ -13,7 +13,7 @@ import { imageSrc } from '../images';
 import { openImageViewer } from './ImageViewer';
 import { hasMarks, useChangeMarks } from '../changeMarks';
 
-function CardImage({ path, className }: { path: string; className?: string }) {
+export function CardImage({ path, className }: { path: string; className?: string }) {
   const [broken, setBroken] = useState(false);
   useEffect(() => setBroken(false), [path]);
   const cls = className ? ` ${className}` : '';
@@ -175,6 +175,18 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           <CardName section={section} name={card.name} />
         )}
         {hasMarks(cardTabId(section, card.id)) && <span className="ext-dot" title="有其他人的修改" />}
+        {!renaming && !hasMemory && (
+          <button
+            className="icon-btn card-edit"
+            title="放大看這張卡"
+            onClick={(e) => {
+              e.stopPropagation();
+              openCardViewer(section, card.id);
+            }}
+          >
+            <Icon icon="screen-full" />
+          </button>
+        )}
         {!renaming && (
           <button
             className="icon-btn card-edit"
@@ -192,8 +204,14 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         <div className="card-body" ref={bodyRef} style={{ paddingLeft: 30 + depth * 14 }}>
           {hasMemory && (
             <div className="card-tabs">
-              <button type="button" className={showMem ? '' : 'on'} onClick={() => setSideTab('data')}>資料</button>
-              <button type="button" className={showMem ? 'on' : ''} onClick={() => setSideTab('memory')}>記憶 {memories.length}</button>
+              <span className="card-tab">
+                <button type="button" className={showMem ? '' : 'on'} onClick={() => setSideTab('data')}>資料</button>
+                <button type="button" className="card-tab-zoom" title="放大看資料" onClick={() => openCardViewer(section, card.id)}><Icon icon="screen-full" /></button>
+              </span>
+              <span className="card-tab">
+                <button type="button" className={showMem ? 'on' : ''} onClick={() => setSideTab('memory')}>記憶 {memories.length}</button>
+                <button type="button" className="card-tab-zoom" title="放大看時間線和關係" onClick={() => openMemoryViewer(section, card.id)}><Icon icon="screen-full" /></button>
+              </span>
             </div>
           )}
           {showMem ? (
@@ -212,9 +230,6 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
                       </div>
                     );
                   })}
-                  <span className="card-mem-more">
-                    放大 <Icon icon="screen-full" />
-                  </span>
                 </>
               )}
             </div>

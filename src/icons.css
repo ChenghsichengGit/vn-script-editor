@@ -79,3 +79,5 @@
 .codicon-beaker::before { content: "\ea79"; }
 .codicon-law::before { content: "\eb12"; }
 .codicon-account::before { content: "\eb99"; }
+.codicon-screen-full::before { content: "\eb4c"; }
+.codicon-link-external::before { content: "\eb14"; }

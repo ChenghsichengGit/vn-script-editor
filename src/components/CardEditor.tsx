@@ -13,6 +13,7 @@ import FieldValueInput from './FieldValueInput';
 import ImageFieldInput from './ImageFieldInput';
 import MemoryPanel, { MemoryLinks } from './MemoryPanel';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
+import { dragWith, reorderAt } from '../hooks';
 
 const lastPane = new Map<string, 'detail' | 'memory'>();
 const PANE_EVENT = 'vn-card-pane';
@@ -92,6 +93,30 @@ export default function CardEditor({ card, isCommand, schemaFields, flashKeys, m
     onChange({ fields: card.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
   };
   const addField = (key: string) => onChange({ fields: [...card.fields, { key, value: '' }] });
+  // 拖曳排序：拖的時候只換畫面上的順序，放開才存
+  const rowEls = useRef<(HTMLDivElement | null)[]>([]);
+  const [order, setOrder] = useState<Field[] | null>(null);
+  const [dragged, setDragged] = useState<Field | null>(null);
+  const fields = order ?? card.fields;
+  const startDrag = (f: Field, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const base = card.fields;
+    let list = base;
+    setDragged(f);
+    setOrder(base);
+    dragWith(
+      (ev) => {
+        const next = reorderAt(list, f, ev.clientY, (t) => rowEls.current[list.indexOf(t)]?.getBoundingClientRect());
+        if (next !== list) setOrder((list = next));
+      },
+      () => {
+        setDragged(null);
+        setOrder(null);
+        if (list !== base) onChange({ fields: list });
+      },
+    );
+  };
   const special = isCommand ? commandSpecialFields(card) : new Map<string, string>();
   const [addMenu, setAddMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const openAddMenu = (e: React.MouseEvent) => {
@@ -222,14 +247,20 @@ export default function CardEditor({ card, isCommand, schemaFields, flashKeys, m
             />
           )}
           <div className="card-editor-fields">
-            {card.fields.map((f, i) => {
+            {fields.map((f, i) => {
               const schemaField = schemaFields.find((s) => s.key === f.key);
               const locked = !!schemaField;
               const iconDef = fieldIconDef(schemaField);
               const use = special.get(f.key.trim());
               const tip = [use, locked ? '（範本欄位：名稱要到區塊的「欄位設定」裡改）' : ''].filter(Boolean).join('\n\n');
               return (
-              <div className={`card-editor-row${flashKeys?.includes(f.key) ? ' ai-flash' : ''}${changedFields.includes(f.key) ? ' ext-changed' : ''}`} key={i} title={tip || undefined}>
+              <div
+                className={`card-editor-row${flashKeys?.includes(f.key) ? ' ai-flash' : ''}${changedFields.includes(f.key) ? ' ext-changed' : ''}${dragged === f ? ' dragging' : ''}`}
+                key={i}
+                ref={(el) => void (rowEls.current[i] = el)}
+                title={tip || undefined}
+              >
+                <span className="field-grip" title="按住上下拖曳排序" onMouseDown={(e) => startDrag(f, e)}><Icon icon="gripper" /></span>
                 {locked ? (
                   <div className="field-key-locked">
                     {iconDef ? <Icon icon={iconDef} className="field-icon" /> : <Icon icon="lock" className="field-lock" />} {f.key}

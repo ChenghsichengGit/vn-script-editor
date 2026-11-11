@@ -2,6 +2,7 @@ import { useLatest } from '../hooks';
 import { useEffect, useState } from 'react';
 import { BubbleMenu, Editor, EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { TextSelection } from '@tiptap/pm/state';
 import { Markdown } from 'tiptap-markdown';
 import { ImageBlock, insertImageFiles } from './ImageNode';
 import { ChangeHighlight } from './ChangeHighlight';
@@ -13,6 +14,22 @@ export const richExtensions = [StarterKit.configure({ heading: { levels: [1, 2, 
 const extensions = richExtensions;
 
 export const toMarkdown = (editor: Editor): string => editor.storage.markdown.getMarkdown();
+
+// 條列／編號：先把選到段落裡的斷行（Shift+Enter）拆成各自一段，每行才會變成一項
+const toggleList = (editor: Editor, kind: 'bulletList' | 'orderedList') => {
+  const chain = editor.chain().focus().command(({ tr }) => {
+    if (editor.isActive(kind)) return true;
+    const { $from, $to } = tr.selection;
+    const start = $from.start(), end = $to.end();
+    const breaks: number[] = [];
+    tr.doc.nodesBetween(start, end, (n, pos) => void (n.type.name === 'hardBreak' && breaks.push(pos)));
+    if (breaks.length === 0) return true;
+    for (const pos of breaks.reverse()) tr.delete(pos, pos + 1).split(pos);
+    tr.setSelection(TextSelection.create(tr.doc, start, tr.mapping.map(end)));
+    return true;
+  });
+  (kind === 'bulletList' ? chain.toggleBulletList() : chain.toggleOrderedList()).run();
+};
 
 export function useRichEditor(markdown: string, onChange: (markdown: string) => void, onBlocks?: (blocks: number[]) => void) {
   const onBlocksRef = useLatest(onBlocks);
@@ -53,8 +70,8 @@ export default function RichTextEditor({ editor }: { editor: Editor | null }) {
       active: editor.isActive('heading', { level }),
       run: () => editor.chain().focus().toggleHeading({ level }).run(),
     })),
-    { label: '• 條列', active: editor.isActive('bulletList'), run: () => editor.chain().focus().toggleBulletList().run() },
-    { label: '1. 編號', active: editor.isActive('orderedList'), run: () => editor.chain().focus().toggleOrderedList().run() },
+    { label: '• 條列', active: editor.isActive('bulletList'), run: () => toggleList(editor, 'bulletList') },
+    { label: '1. 編號', active: editor.isActive('orderedList'), run: () => toggleList(editor, 'orderedList') },
     { label: 'B', active: editor.isActive('bold'), run: () => editor.chain().focus().toggleBold().run() },
     { label: '標音', active: editor.isActive('ruby'), run: () => promptRuby(editor) },
     { label: '圖片', active: false, run: insertImage },
