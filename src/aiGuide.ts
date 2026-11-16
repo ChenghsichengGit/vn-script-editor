@@ -11,8 +11,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   const line = (s = '') => out.push(s);
   line(`# ${projectName}：給 AI 的說明`);
   line();
-  line('> 這個檔案由 VN Script Editor 自動產生，每次指令或欄位設定有變就會重寫，請不要手動修改。');
-  line('> 修改這個專案前請先讀完這份說明。編輯器開著時，你在外面改的檔案會即時顯示在編輯器裡。');
+  line('> 由 VN Script Editor 自動產生（指令或欄位設定有變就會重寫），請不要手動修改。修改這個專案前請先讀完；編輯器開著時，外面改的檔案會即時顯示在編輯器裡。');
   line();
   line('## 資料夾結構');
   line();
@@ -21,11 +20,9 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('| `劇本/**/*.vns` | 劇本（純文字），子資料夾可以自由建立 |');
   for (const s of getCardSections()) line(`| \`${s.dir}/**/*.md\` | ${s.title}的設定卡，一張卡一個檔案 |`);
   line('| `圖片/` | 卡片的圖片欄位和詳細內容裡用到的圖（編輯器貼上或選圖時自動放進來） |');
-  line('| `project.json` | 專案設定（欄位設定 `schemas`、左側清單順序 `order`），一般不需要改 |');
-  line(`| \`${AI_GUIDE_NAME}\` | 這份說明（自動產生） |`);
+  line('| `project.json` | 專案設定（欄位設定 `schemas`、自訂區塊 `sections`、左側清單順序 `order`），一般不需要改 |');
   line();
-  line('- 所有檔案都是 UTF-8。');
-  line('- 以 `.` 開頭的資料夾（例如 `.git`）會被忽略。');
+  line('- 所有檔案都是 UTF-8；以 `.` 開頭的資料夾（例如 `.git`）會被忽略。');
   line();
   line('## 劇本語法（.vns）');
   line();
@@ -58,7 +55,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('```');
   line();
   line('- `name`：卡片名稱。**檔名要等於名稱**（`\\ / : * ? " < > |` 換成 `_`），例如名稱 `#fade` 的檔名是 `#fade.md`。');
-  line('- `fields`：條列欄位，照順序排；`value` 多行時用 `|-`。`collapsed: true` = 側邊欄只顯示欄位名稱（可省略）。');
+  line('- `fields`：條列欄位，照順序排；`value` 多行時用 `|-`，一開頭就換行的值在側邊欄會整段顯示在欄位名稱下面。`collapsed: true` = 側邊欄只顯示欄位名稱（可省略）。');
   line('- 同一個資料夾裡的卡片名稱不能重複。');
   line();
   const memorySections = getCardSections().filter((d) => d.memory);
@@ -89,9 +86,8 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   }
   line('## 各區塊的固定欄位');
   line();
-  line('每張卡都一定要有這些欄位（順序照這裡）。標了「指令參數」的，它的內容（或卡片名稱）可以填進指令的 `[參數]`。');
-  line('標了「圖片」的欄位，`value` 是圖檔相對於專案資料夾的路徑（例如 `圖片/立繪.png`），沒有圖就留空。不在下面清單裡的欄位，如果有 `type: image`，也是圖片欄位。');
-  line('詳細內容裡的圖片寫成 `![](圖片/x.png)`，調過寬度的寫成 `<img src="圖片/x.png" width="400">`。');
+  line('每張卡都一定要有這些欄位（新卡片照這個順序，之後每張卡可以自己排）。標「指令參數」的，內容（或卡片名稱）可以填進指令的 `[參數]`。');
+  line('標「圖片」或有 `type: image` 的欄位，`value` 是圖檔相對於專案資料夾的路徑（例如 `圖片/立繪.png`），沒有圖就留空；詳細內容裡的圖片寫成 `![](圖片/x.png)`，調過寬度的寫成 `<img src="圖片/x.png" width="400">`。');
   line();
   for (const s of getCardSections().map((d) => d.id)) {
     const schema = schemas[s] ?? { fields: [] };
@@ -107,7 +103,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line();
   line('## 指令卡的寫法');
   line();
-  line('- 卡片名稱就是指令格式，例如 `#name [名字]`；同一個指令有好幾種寫法時，名稱寫 `#fade`，在「用法」欄位一行寫一種：');
+  line('- 卡片名稱就是指令格式，例如 `#name [名字]`，「說明」欄位寫這個指令做什麼；同一個指令有好幾種寫法時，名稱寫 `#fade`，在「用法」欄位一行寫一種：');
   line('  ```');
   line('  #fade in：淡入 [time:int?：漸變時間]');
   line('  #fade out：淡出 [time:int?：漸變時間]');
@@ -115,9 +111,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('  ```');
   line('- 說明的寫法：字後面緊接冒號（`in：淡入`）是那個字的說明；`[ ]` 裡冒號後面（`[time:int?：漸變時間]`）是參數說明；冒號前面有空格（` ：淡到指定顏色`）是整行用法的說明。補齊清單和行尾提示會顯示這些說明。');
   line('- 參數寫法：`[名字]` 從清單選；`[time:int]` 整數、`[x:float]` 小數、`[t:text]` 文字；`[time:int=0]`、`[note?]` 可以不填；`in/out` 或 `in|out` 只能選其中一個；其他字照抄。');
-  line('- `[參數]` 可以選的值：指令卡上同名的欄位（一行一個選項，`in：淡入` 冒號後面是說明），沒有的話用上面「固定欄位」裡設成那個指令參數的內容。');
-  line('- 「說明」欄位：這個指令是做什麼的。');
-  line();
+  line('- `[參數]` 可以選的值：指令卡上同名的欄位（一行一個選項，`in：淡入` 冒號後面是說明），沒有的話用上面「固定欄位」裡設成那個指令參數的內容。');  line();
   line('## 目前的指令');
   line();
   if (cards.commands.length === 0) {
@@ -144,7 +138,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('## 修改時要注意');
   line();
   line('- 只改需要改的地方，不要重新排版整個檔案。');
-  line('- 新增設定卡時，放在對應區塊的資料夾，並照上面的 YAML 格式寫；檔名要等於卡片名稱。');
+  line('- 新增設定卡時，放在對應區塊的資料夾，照上面的格式寫。');
   line('- 劇本裡用的指令要符合「目前的指令」的寫法；需要新的指令時，先在 `指令/` 新增一張指令卡。');
   line(`- 不要修改 \`${AI_GUIDE_NAME}\`（會被自動蓋掉）。`);
   line();

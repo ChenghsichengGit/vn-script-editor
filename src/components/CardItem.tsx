@@ -53,6 +53,7 @@ interface Props {
 
 const lastSideTab = new Map<string, 'data' | 'memory'>();
 const openDetails = new Set<string>();
+const LEADING_BREAK = /^\r?\n/; // 值一開頭就換行
 
 function CardName({ section, name }: { section: CardSectionId; name: string }) {
   if (!name) return <span className="tree-label">（未命名）</span>;
@@ -123,32 +124,8 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
       <FieldText className={className} text={value} />
     );
   };
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [stacked, setStacked] = useState<Set<number>>(new Set());
-  useLayoutEffect(() => {
-    const body = bodyRef.current;
-    if (!open || showMem || !body) return;
-    const ctx = document.createElement('canvas').getContext('2d');
-    const check = () => {
-      const key = body.querySelector<HTMLElement>(':scope > .card-row > .card-key');
-      const value = body.querySelector<HTMLElement>(':scope > .card-row > .card-value');
-      if (!ctx || !key || !value) return;
-      const style = getComputedStyle(body);
-      const inner = body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      const room = inner - key.getBoundingClientRect().width - (parseFloat(style.columnGap) || 0);
-      ctx.font = getComputedStyle(value).font;
-      const next = new Set<number>();
-      card.fields.forEach((f, i) => {
-        if (f.collapsed) return;
-        if (isImage(f) ?f.value.trim() : f.value.includes('\n') || ctx.measureText(f.value).width > room) next.add(i);
-      });
-      setStacked((prev) => (prev.size === next.size && [...next].every((i) => prev.has(i)) ? prev : next));
-    };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(body);
-    return () => ro.disconnect();
-  }, [open, showMem, card.fields, schemaFields]);
+  // 值一開頭就換行（刻意空一行）或是圖片 → 放到欄位名稱下面；其他都接在名稱右邊，太長在右邊那欄換行
+  const isStacked = (f: Field) => (isImage(f) ? !!f.value.trim() : LEADING_BREAK.test(f.value));
   const toggleField = (i: number) => {
     const next = new Set(openFields);
     if (next.has(i)) next.delete(i);
@@ -201,7 +178,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         )}
       </div>
       {open && (
-        <div className="card-body" ref={bodyRef} style={{ paddingLeft: 30 + depth * 14 }}>
+        <div className="card-body" style={{ paddingLeft: 30 + depth * 14 }}>
           {hasMemory && (
             <div className="card-tabs">
               <span className="card-tab">
@@ -249,12 +226,12 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
                 )}
               </div>
             ) : (
-              <div key={i} className={`card-row${stacked.has(i) ? ' stacked' : ''}`}>
+              <div key={i} className={`card-row${isStacked(f) ? ' stacked' : ''}`}>
                 <FieldKey name={f.key}>
                   {fieldIcon(f.key)}
                   {f.key}
                 </FieldKey>
-                {fieldValue(f, 'card-value')}
+                {fieldValue(isStacked(f) && !isImage(f) ? { ...f, value: f.value.replace(LEADING_BREAK, '') } : f, 'card-value')}
               </div>
             ),
           )}
