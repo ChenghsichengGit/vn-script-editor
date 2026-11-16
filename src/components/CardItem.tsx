@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardOps, CardSectionId, Field, SchemaField, cardTabId } from '../model';
 import { fieldIconDef } from '../fieldIcons';
 import { sectionDef, sectionMeta } from '../sections';
-import { relationSummary, relations } from '../memories';
+import { AUTO_CUT, memoriesAt, relationSummary, relations, sourceLabel } from '../memories';
+import { useProgress } from '../progress';
 import { openCardViewer, openMemoryViewer } from './MemoryViewer';
 import type { IconDef } from './Icon';
 import { RichTextView } from './RichTextEditor';
@@ -49,6 +50,7 @@ interface Props {
   rowClass?: string; // 標題列額外的 class：拖曳排序時畫上／下方的藍線
   schemaFields: SchemaField[]; // 這個區塊的欄位範本：欄位名稱前面畫它設定的圖示
   targetIcon: (name: string) => IconDef | undefined; // 記憶的對象那張卡所在區塊的圖示
+  badge?: React.ReactNode; // 名稱後面的小標記（「本場」區塊裡固定的卡畫圖釘）
 }
 
 const lastSideTab = new Map<string, 'data' | 'memory'>();
@@ -84,7 +86,7 @@ function FieldKey({ name, children }: { name: string; children: React.ReactNode 
   );
 }
 
-export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '', schemaFields, targetIcon }: Props) {
+export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '', schemaFields, targetIcon, badge }: Props) {
   useChangeMarks(); // 「外部修改」的黃點一變就重畫
   const [open, setOpen] = useState(false);
   const hasMemory = !!sectionDef(section)?.memory;
@@ -102,6 +104,8 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     setDetailOpenState(v);
   };
   const memories = card.memories ?? [];
+  const progress = useProgress();
+  const memShown = memoriesAt(memories, AUTO_CUT, progress); // 側邊欄的記憶跟著目前進度
   const [openFields, setOpenFields] = useState<Set<number>>(new Set()); // 被點開的「收合欄位」
   useEffect(() => {
     if (bulk.tick > 0) setOpen(bulk.show);
@@ -151,6 +155,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         ) : (
           <CardName section={section} name={card.name} />
         )}
+        {badge}
         {hasMarks(cardTabId(section, card.id)) && <span className="ext-dot" title="有其他人的修改" />}
         {!renaming && !hasMemory && (
           <button
@@ -193,11 +198,16 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           )}
           {showMem ? (
             <div className="card-mem" title="點一下放大看時間線和關係" onClick={() => openMemoryViewer(section, card.id)}>
+              {memories.length > 0 && progress.path && (
+                <div className="card-mem-cut">到「{sourceLabel(progress.path)}」為止{memShown.length < memories.length && `（${memShown.length}／${memories.length} 筆）`}</div>
+              )}
               {memories.length === 0 ? (
                 <span className="memory-note">還沒有記憶</span>
+              ) : memShown.length === 0 ? (
+                <span className="memory-note">到這裡為止還沒有記憶</span>
               ) : (
                 <>
-                  {relations(memories).map((r) => {
+                  {relations(memShown).map((r) => {
                     const icon = targetIcon(r.target);
                     return (
                       <div key={r.target} className="card-mem-row">

@@ -20,7 +20,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('| `劇本/**/*.vns` | 劇本（純文字），子資料夾可以自由建立 |');
   for (const s of getCardSections()) line(`| \`${s.dir}/**/*.md\` | ${s.title}的設定卡，一張卡一個檔案 |`);
   line('| `圖片/` | 卡片的圖片欄位和詳細內容裡用到的圖（編輯器貼上或選圖時自動放進來） |');
-  line('| `project.json` | 專案設定（欄位設定 `schemas`、自訂區塊 `sections`、左側清單順序 `order`），一般不需要改 |');
+  line('| `project.json` | 專案設定（欄位設定 `schemas`、自訂區塊 `sections`、左側清單順序 `order`、「本場」固定的卡 `scenes`），一般不需要改 |');
   line();
   line('- 所有檔案都是 UTF-8；以 `.` 開頭的資料夾（例如 `.git`）會被忽略。');
   line();

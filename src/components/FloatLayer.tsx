@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { dragWith } from '../hooks';
 import { FLOAT_MIN_H, FLOAT_MIN_W, FloatPanel } from '../layout';
 import SectionPanel, { TreeProps } from './SectionPanel';
+import ScenePanel from './ScenePanel';
+import { SCENE_ID } from '../sections';
 
 interface Props extends TreeProps {
   panels: FloatPanel[]; // 要顯示的浮動面板（已經排除被隱藏的）
@@ -64,7 +66,7 @@ export default function FloatLayer({ panels, onChange, onFront, ...tree }: Props
             style={{ left: r.x, top: r.y, width: r.w, height: r.h, zIndex: p.z }}
             onMouseDownCapture={() => p.z !== top && onFront(p.id)}
           >
-            <SectionPanel {...tree} id={p.id} fill floating />
+            {p.id === SCENE_ID ? <ScenePanel {...tree} id={p.id} fill floating /> : <SectionPanel {...tree} id={p.id} fill floating />}
             {HANDLES.map((d) => (
               <div key={d} className={`float-handle ${d}`} onMouseDown={(e) => startResize(p, d, e)} />
             ))}

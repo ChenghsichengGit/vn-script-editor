@@ -5,6 +5,6 @@ import monacoZhTw from './monacoZhTw';
 export default defineConfig({
   plugins: [react(), monacoZhTw()], // monacoZhTw：劇本編輯器內建的文字換成繁體中文
   base: './',
-  server: { port: 5173, strictPort: true },
+  server: { port: 1420, strictPort: true },
   clearScreen: false,
 });

@@ -21,6 +21,22 @@ export function memoriesUntil(list: Memory[], cut: string): Memory[] {
   return last < 0 ? list : list.slice(0, last + 1);
 }
 
+// 「看到」選單的值：AUTO_CUT = 跟著目前進度、'' = 全部、其他 = 到這個劇本為止
+export const AUTO_CUT = '\u0000auto';
+
+// 照目前的「看到」選擇過濾記憶；跟著目前進度時，出處在目前劇本或排在它前面的劇本，才算已經發生
+export function memoriesAt(list: Memory[], cut: string, progress: { path: string; order: string[] }): Memory[] {
+  if (cut !== AUTO_CUT) return memoriesUntil(list, cut);
+  const at = progress.order.indexOf(progress.path);
+  if (!progress.path || at < 0) return list;
+  let last = -1;
+  list.forEach((m, i) => {
+    const k = m.source ? progress.order.indexOf(m.source) : -1;
+    if (k >= 0 && k <= at) last = i;
+  });
+  return list.slice(0, last + 1);
+}
+
 export interface Relation {
   target: string;
   name?: Memory;

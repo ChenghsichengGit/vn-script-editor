@@ -13,6 +13,7 @@ import {
   CardOps,
   CardSectionId,
   ItemOrder,
+  Scenes,
   SchemaEdit,
   FieldRemoval,
   Schemas,
@@ -46,12 +47,14 @@ import monaco from './monaco';
 import type { DiskChanges } from './projectFiles';
 import { dragWith, errorText, useKeys, useLatest, writeJSON } from './hooks';
 import { AI_GUIDE_NAME, buildAiGuide } from './aiGuide';
-import { buildProjectExport, exportFileName } from './exportProject';
+import { buildProjectExport, exportFileName, scriptOrder } from './exportProject';
 import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, setScriptData } from './scriptLanguage';
 import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
 import SectionsDialog from './components/SectionsDialog';
 import { removeUnusedImages, setImageRoot } from './images';
 import { remapMemories, scriptPath } from './memories';
+import { setProgress } from './progress';
+import { SceneInfo, remapScenePaths, renameInScenes, sceneItems } from './scene';
 import { applyTextMinimal, clearAllMarks, markCardChange, markFileChange, suspendMarks } from './changeMarks';
 import {
   FLOAT_DEFAULT_H,
@@ -122,6 +125,17 @@ export default function App() {
   const [schemaDialog, setSchemaDialog] = useState<CardSectionId | null>(null);
   const [sectionsDialog, setSectionsDialog] = useState(false);
   const [order, setOrder] = useState<ItemOrder>({});
+  const [scenes, setScenes] = useState<Scenes>({}); // 「本場」手動固定的卡：劇本路徑 → 卡片名稱
+  const [sceneFile, setSceneFile] = useState(''); // 目前進度：最後看的劇本（切到卡片分頁時不變）
+  useEffect(() => {
+    if (activeTab && files[activeTab]) setSceneFile(activeTab);
+  }, [activeTab, files]);
+  const scriptList = useMemo(() => scriptOrder(files, folders, order), [files, folders, order]);
+  const sceneScript = files[sceneFile];
+  const scenePath = sceneScript ? scriptPath(sceneScript) : '';
+  useEffect(() => setProgress({ fileId: sceneScript ? sceneFile : '', path: scenePath, order: scriptList }), [sceneFile, sceneScript, scenePath, scriptList]);
+  const sceneText = sceneScript ? (contents[sceneFile] ?? '') : '';
+  const sceneList = useMemo(() => sceneItems(sceneText, scenePath, cards, scenes), [sceneText, scenePath, cards, scenes]);
   useEffect(() => setScriptData(cards, schemas), [cards, schemas]);
   // 不顯示瀏覽器內建的右鍵選單（上一頁、重新整理、檢查…）；文字輸入框保留（剪下、複製、貼上）
   useEffect(() => {
@@ -329,6 +343,7 @@ export default function App() {
     if (ch.meta) {
       setSchemas(ch.meta.schemas);
       setOrder(ch.meta.order);
+      setScenes(ch.meta.scenes);
     }
     const gone = [...ch.files.removed, ...(Object.keys(ch.cards) as CardSectionId[]).flatMap((s) => ch.cards[s].removed.map((id) => cardTabId(s, id)))];
     if (gone.length > 0) {
@@ -585,7 +600,9 @@ export default function App() {
     }
     setSchemas(nextSchemas);
     setOrder(data.order);
+    setScenes(data.scenes);
     setActiveTab(null);
+    setSceneFile('');
     setDirty(new Set(migrated));
     setSaveState('saved');
     setProject({ store, name: data.name });
@@ -612,6 +629,8 @@ export default function App() {
     setContents({});
     setCards(emptyCards);
     setActiveTab(null);
+    setSceneFile('');
+    setScenes({});
     setDirty(new Set());
     void window.api.releaseProject(); // 別的視窗就可以開這個專案了
     return true;
@@ -900,7 +919,18 @@ export default function App() {
       for (const c of r.changed) markDirty(cardTabId(c.section, c.id));
       return r.changed.length ? r.cards : all;
     });
-  const remapSources = (from: string, to: string, isFolder: boolean) =>
+  const scenesRef = useLatest(scenes);
+  const commitScenes = (next: Scenes) => {
+    if (next === scenesRef.current) return;
+    scenesRef.current = next;
+    setScenes(next);
+    latest.current.project?.store.saveScenes(next).catch(reportError);
+  };
+  const remapSources = (from: string, to: string, isFolder: boolean) => {
+    commitScenes(remapScenePaths(scenesRef.current, from, to, isFolder));
+    remapSourcesInMemories(from, to, isFolder);
+  };
+  const remapSourcesInMemories = (from: string, to: string, isFolder: boolean) =>
     remapAllMemories((m) => {
       if (m.source === from && !isFolder) return { ...m, source: to };
       if (isFolder && isInFolder(m.source, from)) return { ...m, source: to + m.source.slice(from.length) };
@@ -928,7 +958,10 @@ export default function App() {
       cardOps.update(section, id, { name });
       renameInOrder(section, card.folder ?? '', card.name, name);
       const stillUsed = Object.values(cards).some((list) => list.some((c) => c.id !== id && c.name === card.name));
-      if (!stillUsed) remapAllMemories((m) => (m.target === card.name ? { ...m, target: name } : m));
+      if (!stillUsed) {
+        remapAllMemories((m) => (m.target === card.name ? { ...m, target: name } : m));
+        commitScenes(renameInScenes(scenesRef.current, card.name, name));
+      }
       return null;
     },
     update: (section, id, patch) => {
@@ -1232,6 +1265,21 @@ export default function App() {
   }
   const saveLabel = statusNote ??
     (saveState === 'error' ? `⚠ 存檔失敗：${saveError}` : saveState === 'saving' ? '儲存中…' : dirty.size > 0 ? '尚未儲存' : '已儲存');
+  const sceneInfo: SceneInfo = {
+    path: scenePath,
+    items: sceneList,
+    isPinned: (name) => (scenes[scenePath] ?? []).includes(name),
+    togglePin: (name) => {
+      if (!scenePath) return;
+      const cur = scenesRef.current;
+      const list = cur[scenePath] ?? [];
+      const nextList = list.includes(name) ? list.filter((n) => n !== name) : [...list, name];
+      const next = { ...cur };
+      if (nextList.length > 0) next[scenePath] = nextList;
+      else delete next[scenePath];
+      commitScenes(next);
+    },
+  };
   const treeProps = {
     files,
     fileOps,
@@ -1249,6 +1297,9 @@ export default function App() {
     onHeaderDrag: startPanelDrag,
     onEditSchema: setSchemaDialog,
     schemas,
+    folded: layout.folded,
+    onFold: (id: SectionId, fold: boolean) => setLayout((l) => ({ ...l, folded: fold ? [...new Set([...l.folded, id])] : l.folded.filter((s) => s !== id) })),
+    scene: sceneInfo,
   };
   const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
   const dockZones: Side[] = panelDrag ? (['left', 'right'] as Side[]).filter((s) => !(s === 'left' ? showLeft : showRight)) : [];

@@ -36,6 +36,20 @@ function walk<T>(
   }
 }
 
+// 所有劇本照側邊欄排列的順序（相對於「劇本/」的路徑）：判斷劇情進度的先後
+export function scriptOrder(files: ExportInput['files'], folders: ExportInput['folders'], order: ItemOrder): string[] {
+  const out: string[] = [];
+  const input = { files, folders, order } as ExportInput;
+  walk(
+    'files',
+    input,
+    (folder) => Object.values(files).filter((f) => f.folder === folder),
+    (f) => f.name,
+    (f, folder) => out.push(folder ? `${folder}/${f.name}` : f.name),
+  );
+  return out;
+}
+
 export function buildProjectExport(input: ExportInput): string {
   const out: string[] = [];
   const push = (...lines: string[]) => out.push(...lines);

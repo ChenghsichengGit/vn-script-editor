@@ -1,7 +1,8 @@
 import { useId, useRef, useState } from 'react';
 import { MEMORY_KINDS, Memory, MemoryKind } from '../model';
 import { clearFieldMark } from '../changeMarks';
-import { cutOptions, memoriesUntil, memoryMarkKey, relations, sourceLabel } from '../memories';
+import { AUTO_CUT, cutOptions, memoriesAt, memoryMarkKey, relations, sourceLabel } from '../memories';
+import { getProgress, useProgress } from '../progress';
 import { dragWith, reorderAt } from '../hooks';
 import Icon, { IconDef } from './Icon';
 
@@ -12,6 +13,31 @@ export interface MemoryLinks {
   targetIcon: (name: string) => IconDef | undefined; // 對象那張卡所在區塊的圖示
   onOpenTarget: (name: string) => void;
   onOpenSource: (path: string) => void;
+}
+
+// 「看到」：預設跟著目前進度（最後看的劇本），也可以選全部或某個劇本為止
+export function useCut(memories: Memory[]) {
+  const [cut, setCut] = useState(AUTO_CUT);
+  const progress = useProgress();
+  const valid = cut === AUTO_CUT || cut === '' || cutOptions(memories).includes(cut);
+  const active = valid ? cut : AUTO_CUT;
+  return { cut: active, setCut, shown: memoriesAt(memories, active, progress) };
+}
+
+export function CutSelect({ memories, cut, onChange }: { memories: Memory[]; cut: string; onChange: (cut: string) => void }) {
+  const progress = useProgress();
+  return (
+    <label className="memory-cut" title="只看到這個劇本為止的記憶。「目前進度」是最後看的劇本，照側邊欄的劇本順序算">
+      看到
+      <select value={cut} onChange={(e) => onChange(e.target.value)}>
+        <option value={AUTO_CUT}>目前進度（{progress.path ? sourceLabel(progress.path) : '還沒打開劇本'}）</option>
+        <option value="">全部</option>
+        {cutOptions(memories).map((s) => (
+          <option key={s} value={s}>{sourceLabel(s)}</option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 export function MemoryRelations({ list, targetIcon, onOpenTarget, onOpenSource }: {
@@ -84,13 +110,10 @@ export default function MemoryPanel({
   onChange: (next: Memory[]) => void;
 }) {
   const [view, setView] = useState<'timeline' | 'relations'>('timeline');
-  const [cut, setCut] = useState('');
+  const { cut, setCut, shown } = useCut(memories);
   const [dragging, setDragging] = useState<number | null>(null);
   const rowEls = useRef(new Map<number, HTMLDivElement>());
   const listId = useId();
-  const cuts = cutOptions(memories);
-  const activeCut = cuts.includes(cut) ? cut : '';
-  const shown = memoriesUntil(memories, activeCut);
   const hidden = memories.length - shown.length;
   const setRow = (i: number, patch: Partial<Memory>) => {
     clearFieldMark(markKey, memoryMarkKey(memories[i])); // 自己改了這一筆：「外部修改」的標記拿掉
@@ -98,7 +121,9 @@ export default function MemoryPanel({
   };
   const add = () => {
     const last = memories[memories.length - 1];
-    onChange([...memories, { time: last?.time ?? '', target: '', kind: '事件', text: '', source: last?.source ?? '' }]);
+    const next = [...memories, { time: last?.time ?? '', target: '', kind: '事件' as const, text: '', source: last?.source ?? '' }];
+    if (memoriesAt(next, cut, getProgress()).length < next.length) setCut(''); // 新的這筆會被「看到」藏起來：改成看全部
+    onChange(next);
   };
   const startDrag = (from: number, e: React.MouseEvent) => {
     e.preventDefault();
@@ -123,15 +148,7 @@ export default function MemoryPanel({
           <button type="button" className={view === 'timeline' ? 'on' : ''} onClick={() => setView('timeline')}>時間線</button>
           <button type="button" className={view === 'relations' ? 'on' : ''} onClick={() => setView('relations')}>關係表</button>
         </span>
-        <label className="memory-cut" title="只看到這個劇本為止的記憶（清單由上往下算）">
-          看到
-          <select value={activeCut} onChange={(e) => setCut(e.target.value)}>
-            <option value="">全部</option>
-            {cuts.map((s) => (
-              <option key={s} value={s}>{sourceLabel(s)}</option>
-            ))}
-          </select>
-        </label>
+        <CutSelect memories={memories} cut={cut} onChange={setCut} />
       </div>
       {view === 'timeline' ? (
         <div className="memory-list">

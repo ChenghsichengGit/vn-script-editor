@@ -4,7 +4,7 @@
   "version": "0.8.1",
   "identifier": "com.vnscripteditor.app",
   "build": {
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:1420",
     "frontendDist": "../dist",
     "beforeDevCommand": "npm run vite",
     "beforeBuildCommand": "npm run build"

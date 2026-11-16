@@ -1,10 +1,10 @@
 // 卡片放大視窗：不用開分頁就能看資料（欄位、圖片、詳細內容），有記憶的區塊還能切到時間線、關係
 import { useState } from 'react';
 import { Card, CardSectionId, Field, MEMORY_KINDS, Memory, SchemaField, cardTabId } from '../model';
-import { cutOptions, findTargetCard, memoriesUntil, relationSummary, relations, scriptPath, sourceLabel, targetIcon } from '../memories';
+import { findTargetCard, relationSummary, relations, scriptPath, targetIcon } from '../memories';
 import { sectionDef, sectionMeta } from '../sections';
 import { fieldIconDef } from '../fieldIcons';
-import { MemoryRelations } from './MemoryPanel';
+import { CutSelect, MemoryRelations, useCut } from './MemoryPanel';
 import { showCardMemory } from './CardEditor';
 import { CardImage } from './CardItem';
 import { RichTextView } from './RichTextEditor';
@@ -67,13 +67,10 @@ function MemoryViewer({ section, card, initialView, cards, files, schemaFields, 
     if (v !== 'data') lastMemView = v;
     setViewState(v);
   };
-  const [cut, setCut] = useState('');
   // Esc：上面還開著看圖視窗時先讓它關
   useKeys((e) => e.key === 'Escape' && !document.querySelector('.image-viewer') && (onClose(), true), [onClose]);
   const memories = card.memories ?? [];
-  const cuts = cutOptions(memories);
-  const activeCut = cuts.includes(cut) ? cut : '';
-  const shown = memoriesUntil(memories, activeCut);
+  const { cut, setCut, shown } = useCut(memories);
   const hidden = memories.length - shown.length;
   const iconOf = (name: string) => targetIcon(cards, name, section);
   const openTarget = (name: string) => {
@@ -115,21 +112,13 @@ function MemoryViewer({ section, card, initialView, cards, files, schemaFields, 
             </span>
           )}
           <span className="memory-viewer-spacer" />
-          {view !== 'data' && <label className="memory-cut" title="只看到這個劇本為止的記憶">
-            看到
-            <select value={activeCut} onChange={(e) => setCut(e.target.value)}>
-              <option value="">全部</option>
-              {cuts.map((s) => (
-                <option key={s} value={s}>{sourceLabel(s)}</option>
-              ))}
-            </select>
-          </label>}
+          {hasMemory && <CutSelect memories={memories} cut={cut} onChange={setCut} />}
           <button type="button" className="icon-btn" title={view === 'data' ? '在分頁中編輯' : '在分頁中編輯記憶'} onClick={edit}><Icon icon="edit" /></button>
           <button type="button" className="icon-btn" title="關閉（Esc）" onClick={onClose}><Icon icon="close" /></button>
         </div>
         <div className="memory-viewer-body">
           {view === 'data' ? (
-            <CardData card={card} schemaFields={schemaFields} memories={hasMemory ? memories : null} targetIcon={iconOf} onRelations={() => setView('relations')} />
+            <CardData card={card} schemaFields={schemaFields} memories={hasMemory ? shown : null} total={memories.length} targetIcon={iconOf} onRelations={() => setView('relations')} />
           ) : memories.length === 0 ? (
             <div className="memory-note">還沒有記憶，按右上角的鉛筆到卡片分頁新增。</div>
           ) : view === 'timeline' ? (
@@ -183,7 +172,7 @@ function MemoryViewer({ section, card, initialView, cards, files, schemaFields, 
           ) : (
             <MemoryRelations list={shown} targetIcon={iconOf} onOpenTarget={openTarget} onOpenSource={openSource} />
           )}
-          {view !== 'data' && hidden > 0 && <div className="memory-note">（之後還有 {hidden} 筆，「看到」選「全部」才會顯示）</div>}
+          {hidden > 0 && <div className="memory-note">（之後還有 {hidden} 筆，「看到」選「全部」才會顯示）</div>}
         </div>
       </div>
     </div>
@@ -191,10 +180,11 @@ function MemoryViewer({ section, card, initialView, cards, files, schemaFields, 
 }
 
 // 資料頁：左邊圖片欄位放大，右邊所有欄位（收合的也展開），下面詳細內容；有記憶的區塊附關係摘要
-function CardData({ card, schemaFields, memories, targetIcon, onRelations }: {
+function CardData({ card, schemaFields, memories, total, targetIcon, onRelations }: {
   card: Card;
   schemaFields: SchemaField[];
-  memories: Memory[] | null;
+  memories: Memory[] | null; // 照「看到」過濾過的記憶（沒有記憶的區塊 = null）
+  total: number;
   targetIcon: (name: string) => IconDef | undefined;
   onRelations: () => void;
 }) {
@@ -243,9 +233,9 @@ function CardData({ card, schemaFields, memories, targetIcon, onRelations }: {
       )}
       {memories && (
         <section className="card-view-section">
-          <div className="card-view-label">關係（記憶 {memories.length}）</div>
+          <div className="card-view-label">關係（記憶 {memories.length === total ? total : `${memories.length}／${total}`}）</div>
           {rels.length === 0 ? (
-            <span className="memory-note">還沒有記憶</span>
+            <span className="memory-note">{total === 0 ? '還沒有記憶' : '到這裡為止還沒有關係'}</span>
           ) : (
             <div className="card-mem" title="點一下看關係" onClick={onRelations}>
               {rels.map((r) => {

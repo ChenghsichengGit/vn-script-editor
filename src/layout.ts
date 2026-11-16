@@ -25,6 +25,7 @@ export interface Layout {
   floating: FloatPanel[];
   hidden: SectionId[]; // 被活動列關掉的區塊（不管它在左、右還是浮動）
   sizes: Partial<Record<SectionId, number>>; // 固定高度的區塊拖出來的高度
+  folded: SectionId[]; // 摺疊成只剩標題列的區塊（在側邊欄裡）
   leftCollapsed: boolean; // 左側欄整排收起來（裡面的區塊、高度都照樣保留，打開時一模一樣）
   problemsOpen: boolean; // 編輯區下方的面板（問題 Ctrl+Shift+M／搜尋 Ctrl+Shift+F）開著沒（名稱沿用舊的，才讀得到舊設定）
   problemsHeight: number;
@@ -45,6 +46,7 @@ const defaultLayout = (): Layout => ({
   floating: [],
   hidden: [],
   sizes: {},
+  folded: [],
   leftCollapsed: false,
   problemsOpen: false,
   problemsHeight: 180,
@@ -101,6 +103,7 @@ function normalizeLayout(raw: unknown): Layout {
     floating,
     hidden: [...new Set(Array.isArray(r.hidden) ? r.hidden.filter(isSection) : [])] as SectionId[],
     sizes,
+    folded: [...new Set(Array.isArray(r.folded) ? r.folded.filter(isSection) : [])] as SectionId[],
     leftCollapsed: r.leftCollapsed === true,
     problemsOpen: r.problemsOpen === true,
     problemsHeight: Math.min(600, Math.max(80, num(r.problemsHeight, 180))),

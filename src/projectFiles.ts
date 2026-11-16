@@ -1,7 +1,7 @@
 // 專案資料夾的讀寫：透過 window.api（src/platform.ts → Tauri 主程式）存取使用者硬碟上的資料夾
 
 import { dump, load } from 'js-yaml';
-import { Card, CardSectionId, Field, ItemOrder, MEMORY_KINDS, Memory, SchemaField, Schemas, SectionId, defaultSchemas } from './model';
+import { Card, CardSectionId, Field, ItemOrder, MEMORY_KINDS, Memory, SchemaField, Scenes, Schemas, SectionId, defaultSchemas } from './model';
 import { cleanFieldColor, cleanFieldIcon } from './fieldIcons';
 import { FILES_SECTION, SectionDef, SectionRemoval, normalizeSections } from './sections';
 
@@ -19,6 +19,19 @@ export interface ProjectData {
   sections: SectionDef[]; // 設定卡區塊的清單（角色、世界觀、指令、自己加的…），取自 project.json
   schemas: Schemas; // 每個設定卡區塊的欄位範本，取自 project.json
   order: ItemOrder; // 左側清單的自訂順序，取自 project.json
+  scenes: Scenes; // 「本場」手動固定的卡，取自 project.json
+}
+
+// 劇本路徑 → 固定的卡片名稱
+function normalizeScenes(raw: unknown): Scenes {
+  const out: Scenes = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [path, names] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(names)) continue;
+    const clean = [...new Set(names.filter((n): n is string => typeof n === 'string' && n.trim() !== ''))];
+    if (clean.length > 0) out[path] = clean;
+  }
+  return out;
 }
 
 function normalizeOrder(raw: unknown): ItemOrder {
@@ -211,7 +224,7 @@ export interface DiskChanges {
   files: { changed: (ScriptFile & { id: string })[]; added: (ScriptFile & { id: string })[]; removed: string[] };
   cards: Record<CardSectionId, { changed: Card[]; added: Card[]; removed: string[] }>;
   folders: ProjectData['folders'];
-  meta: { schemas: Schemas; order: ItemOrder; sections: SectionDef[] } | null; // project.json 有變才有
+  meta: { schemas: Schemas; order: ItemOrder; scenes: Scenes; sections: SectionDef[] } | null; // project.json 有變才有
 }
 
 // project.json 的內容：不是物件就當作沒有
@@ -272,7 +285,7 @@ export class ProjectStore {
     }
     const cards: ProjectData['cards'] = {};
     for (const section of ids) ({ cards: cards[section], folders: folders[section] } = await store.loadCards(section, joinPath(root, store.dirOf(section))));
-    const data = { name, files, cards, folders, sections: store.sections, schemas: normalizeSchemas(store.meta.schemas, ids), order: normalizeOrder(store.meta.order) };
+    const data = { name, files, cards, folders, sections: store.sections, schemas: normalizeSchemas(store.meta.schemas, ids), order: normalizeOrder(store.meta.order), scenes: normalizeScenes(store.meta.scenes) };
     return { store, data };
   }
   static async create(root: string, name: string): Promise<{ store: ProjectStore; data: ProjectData }> {
@@ -290,6 +303,7 @@ export class ProjectStore {
   }
   saveSchemas = (schemas: Schemas) => this.enqueue(() => this.saveMeta({ schemas }));
   saveOrder = (order: ItemOrder) => this.enqueue(() => this.saveMeta({ order }));
+  saveScenes = (scenes: Scenes) => this.enqueue(() => this.saveMeta({ scenes }));
   // 區塊設定：改名的區塊把資料夾改名、刪掉的（勾了刪資料夾才）刪資料夾、新的讀進來
   updateSections(next: SectionDef[], removals: SectionRemoval[]): Promise<{ id: string; cards: Card[]; folders: string[] }[]> {
     return this.enqueue(async () => {
@@ -361,7 +375,7 @@ export class ProjectStore {
       this.knownMeta = text;
       if (meta) {
         this.meta = meta;
-        changes.meta = { schemas: normalizeSchemas(meta.schemas, ids), order: normalizeOrder(meta.order), sections: this.sections };
+        changes.meta = { schemas: normalizeSchemas(meta.schemas, ids), order: normalizeOrder(meta.order), scenes: normalizeScenes(meta.scenes), sections: this.sections };
       }
       return changes;
     });

@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { FileOps, FolderOps } from '../App';
 import { Card, CardOps, CardSectionId, ItemOrder, Schemas, SectionId, cardTabId, folderOrderKey, orderEntries } from '../model';
-import { sectionMeta } from '../sections';
+import { COMMANDS_ID, sectionMeta } from '../sections';
+import type { SceneInfo } from '../scene';
 import { targetIcon } from '../memories';
 import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
@@ -10,6 +11,13 @@ import NameInput from './NameInput';
 import Icon, { fileIcon } from './Icon';
 import { hasMarks, useChangeMarks } from '../changeMarks';
 import { openCardViewer } from './MemoryViewer';
+
+// 卡片右鍵：固定到本場／從本場移除（有打開劇本、不是指令卡才有）
+export function pinItem(scene: SceneInfo, section: CardSectionId, name: string): ContextMenuItem[] {
+  if (!scene.path || section === COMMANDS_ID || !name.trim()) return [];
+  const pinned = scene.isPinned(name);
+  return [{ label: pinned ? '從本場移除' : '固定到本場', onClick: () => scene.togglePin(name) }];
+}
 
 const INDENT = 14; // 每深一層資料夾縮排多少像素
 const EXPAND_DELAY = 600; // 拖著東西停在摺起來的資料夾上多久（毫秒）就自動展開
@@ -56,6 +64,9 @@ export interface TreeProps {
   onHeaderDrag: (id: SectionId, e: React.MouseEvent) => void; // 按住標題列開始搬動整個區塊
   onEditSchema: (section: CardSectionId) => void; // 打開某個設定卡區塊的「欄位設定」
   schemas: Schemas; // 欄位範本：設定卡展開時，欄位名稱前面畫範本設定的圖示
+  folded: SectionId[]; // 摺疊成只剩標題列的區塊
+  onFold: (id: SectionId, fold: boolean) => void;
+  scene: SceneInfo; // 「本場」：目前劇本、列出的卡、手動固定
 }
 
 interface Props extends TreeProps {
@@ -63,6 +74,17 @@ interface Props extends TreeProps {
   fill?: boolean; // 填滿剩下的空間（側邊欄最下面那塊、浮動視窗）
   height?: number; // 固定高度（fill 時不用）
   floating?: boolean; // 在浮動視窗裡：標題列就是視窗的標題列
+  short?: boolean; // 摺疊或沒有內容：只剩標題列
+}
+
+// 標題列最前面的摺疊鈕（浮動視窗裡沒有；沒有內容又沒摺疊時只留空位）
+export function FoldButton({ id, folded, empty, onFold }: { id: SectionId; folded: boolean; empty: boolean; onFold: (id: SectionId, fold: boolean) => void }) {
+  if (empty && !folded) return <span className="section-fold" />;
+  return (
+    <button className="icon-btn section-fold" data-tip={folded ? '展開這個區塊' : '摺疊成只剩標題列'} onClick={() => onFold(id, !folded)}>
+      <Icon icon={folded ? 'chevron-right' : 'chevron-down'} />
+    </button>
+  );
 }
 
 export default function SectionPanel(props: Props) {
@@ -88,6 +110,7 @@ export default function SectionPanel(props: Props) {
     });
   const expandFolder = (folder: string) => setFolderOpen(folder, true);
   const startCreate = (parent: string, what: 'item' | 'folder') => {
+    if (props.folded.includes(id)) props.onFold(id, false);
     expandFolder(parent);
     setEditing({ mode: 'create', section: id, parent, what });
   };
@@ -270,6 +293,7 @@ export default function SectionPanel(props: Props) {
       return [
         { label: '編輯', onClick: () => props.cardOps.open(t.section, t.id) },
         { label: '放大檢視', onClick: () => openCardViewer(t.section, t.id) },
+        ...(card ? pinItem(props.scene, t.section, card.name) : []),
         { label: '重新命名', onClick: () => setEditing({ mode: 'rename', kind: 'card', section: t.section, id: t.id }) },
         sortItem(card?.folder ?? ''),
         del(`「${card?.name}」`, () => props.cardOps.remove(t.section, t.id)),
@@ -401,11 +425,13 @@ export default function SectionPanel(props: Props) {
       </>
     );
   };
+  const short = !!props.short && !props.floating && editing === null;
+  const empty = isFiles ? Object.keys(props.files).length === 0 && !props.folders[id]?.length : cards.length === 0 && !props.folders[id]?.length;
   return (
     <div
-      className={`section${props.fill ? ' filler' : ''}${props.floating ? ' floating' : ''}`}
+      className={`section${props.fill ? ' filler' : ''}${props.floating ? ' floating' : ''}${short ? ' short' : ''}`}
       data-section={id}
-      style={!props.fill ? { height: props.height } : undefined}
+      style={!props.fill && !short ? { height: props.height } : undefined}
     >
       <div
         className="section-header"
@@ -414,6 +440,7 @@ export default function SectionPanel(props: Props) {
         }}
         onContextMenu={(e) => openMenu(e, { kind: 'root' })}
       >
+        {!props.floating && <FoldButton id={id} folded={props.folded.includes(id)} empty={empty} onFold={props.onFold} />}
         <span className="section-title">{meta.title}</span>
         <span className="section-actions">
           {!isFiles && (

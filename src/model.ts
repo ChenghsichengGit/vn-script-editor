@@ -61,6 +61,9 @@ export function applySchema(fields: Field[], schema: SchemaField[]): Field[] {
 
 export type ItemOrder = Partial<Record<SectionId, Record<string, string[]>>>;
 
+// 「本場」手動固定的卡：劇本路徑（相對於「劇本/」）→ 卡片名稱
+export type Scenes = Record<string, string[]>;
+
 export const folderOrderKey = (folderPath: string) => folderPath.slice(folderPath.lastIndexOf('/') + 1) + '/';
 
 export type TreeEntry<T> = { kind: 'folder'; folder: string } | { kind: 'item'; item: T };
