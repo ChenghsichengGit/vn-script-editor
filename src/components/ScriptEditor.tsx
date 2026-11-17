@@ -127,6 +127,7 @@ export default function ScriptEditor(props: Props) {
             wordBasedSuggestions: 'off', // 不要把文章裡出現過的詞也塞進補齊清單，只留指令和參數
             quickSuggestions: true, // 打字時就跳清單（打到指令名稱或參數的第幾個字都可以）；一般對白那幾行補齊沒有東西，所以不會跳
             automaticLayout: true, // 容器大小改變時跟著重新排版（不然縮放後會變很窄、小地圖消失）
+            scrollBeyondLastLine: false, // 捲到最後一行貼齊底部就停，不要多捲一整個畫面
           }}
         />
         {bubble && editorRef.current && (

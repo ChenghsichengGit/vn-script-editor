@@ -6,7 +6,6 @@ import { AUTO_CUT, memoriesAt, relationSummary, relations, sourceLabel } from '.
 import { useProgress } from '../progress';
 import { openCardViewer, openMemoryViewer } from './MemoryViewer';
 import type { IconDef } from './Icon';
-import { RichTextView } from './RichTextEditor';
 import NameInput from './NameInput';
 import Icon from './Icon';
 import FieldText from './FieldText';
@@ -54,7 +53,6 @@ interface Props {
 }
 
 const lastSideTab = new Map<string, 'data' | 'memory'>();
-const openDetails = new Set<string>();
 const LEADING_BREAK = /^\r?\n/; // 值一開頭就換行
 
 function CardName({ section, name }: { section: CardSectionId; name: string }) {
@@ -97,12 +95,6 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     setSideTabState(t);
   };
   const showMem = hasMemory && sideTab === 'memory';
-  const [detailOpen, setDetailOpenState] = useState(() => openDetails.has(tabId));
-  const setDetailOpen = (v: boolean) => {
-    if (v) openDetails.add(tabId);
-    else openDetails.delete(tabId);
-    setDetailOpenState(v);
-  };
   const memories = card.memories ?? [];
   const progress = useProgress();
   const memShown = memoriesAt(memories, AUTO_CUT, progress); // 側邊欄的記憶跟著目前進度
@@ -247,14 +239,11 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           )}
           {card.detail.trim() && (
             <div className="card-fold card-detail-fold">
-              <div className="card-row clickable" onClick={() => setDetailOpen(!detailOpen)}>
+              <div className="card-row clickable card-detail-open" title="放大看詳細內容" onClick={() => openCardViewer(section, card.id, 'detail')}>
                 <span className="card-key">
-                  <Icon icon={detailOpen ? 'chevron-down' : 'chevron-right'} className="fold-chevron" /> 詳細內容
+                  <Icon icon="screen-full" className="fold-chevron" /> 詳細內容
                 </span>
               </div>
-              {detailOpen && (
-                <div className="card-detail"><RichTextView markdown={card.detail} /></div>
-              )}
             </div>
           )}
             </>

@@ -1,5 +1,5 @@
 // 卡片放大視窗：不用開分頁就能看資料（欄位、圖片、詳細內容），有記憶的區塊還能切到時間線、關係
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardSectionId, Field, MEMORY_KINDS, Memory, SchemaField, cardTabId } from '../model';
 import { findTargetCard, relationSummary, relations, scriptPath, targetIcon } from '../memories';
 import { sectionDef, sectionMeta } from '../sections';
@@ -18,12 +18,13 @@ interface At {
   section: CardSectionId;
   id: string;
   view?: View;
+  focus?: 'detail'; // 打開時捲到詳細內容
 }
 
 const channel = eventChannel<At>('vn-open-memory');
 let lastMemView: 'timeline' | 'relations' = 'timeline'; // 上次看的是時間線還是關係（下次打開記憶沿用）
 export const openMemoryViewer = (section: CardSectionId, id: string) => channel.open({ section, id, view: lastMemView });
-export const openCardViewer = (section: CardSectionId, id: string) => channel.open({ section, id, view: 'data' });
+export const openCardViewer = (section: CardSectionId, id: string, focus?: 'detail') => channel.open({ section, id, view: 'data', focus });
 
 export default function MemoryViewerHost({ cards, files, schemaFields, openTab }: {
   cards: Record<CardSectionId, Card[]>;
@@ -36,7 +37,8 @@ export default function MemoryViewerHost({ cards, files, schemaFields, openTab }
   if (!at || !card) return null;
   return (
     <MemoryViewer
-      key={`${at.section}:${at.id}`}
+      key={`${at.section}:${at.id}:${at.focus ?? ''}`}
+      focus={at.focus}
       section={at.section}
       card={card}
       initialView={at.view ?? 'data'}
@@ -50,8 +52,9 @@ export default function MemoryViewerHost({ cards, files, schemaFields, openTab }
   );
 }
 
-function MemoryViewer({ section, card, initialView, cards, files, schemaFields, openTab, onGo, onClose }: {
+function MemoryViewer({ section, card, focus, initialView, cards, files, schemaFields, openTab, onGo, onClose }: {
   section: CardSectionId;
+  focus?: 'detail';
   card: Card;
   initialView: View;
   cards: Record<CardSectionId, Card[]>;
@@ -99,7 +102,7 @@ function MemoryViewer({ section, card, initialView, cards, files, schemaFields, 
   });
   return (
     <div className="memory-viewer" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`memory-viewer-box${view === 'data' ? ' wide' : ''}`}>
+      <div className="memory-viewer-box">
         <div className="memory-viewer-head">
           <span className="memory-viewer-title">
             <Icon icon={sectionMeta(section).icon} /> {card.name || '（未命名）'}
@@ -118,7 +121,7 @@ function MemoryViewer({ section, card, initialView, cards, files, schemaFields, 
         </div>
         <div className="memory-viewer-body">
           {view === 'data' ? (
-            <CardData card={card} schemaFields={schemaFields} memories={hasMemory ? shown : null} total={memories.length} targetIcon={iconOf} onRelations={() => setView('relations')} />
+            <CardData focus={focus} card={card}schemaFields={schemaFields} memories={hasMemory ? shown : null} total={memories.length} targetIcon={iconOf} onRelations={() => setView('relations')} />
           ) : memories.length === 0 ? (
             <div className="memory-note">還沒有記憶，按右上角的鉛筆到卡片分頁新增。</div>
           ) : view === 'timeline' ? (
@@ -180,7 +183,8 @@ function MemoryViewer({ section, card, initialView, cards, files, schemaFields, 
 }
 
 // 資料頁：左邊圖片欄位放大，右邊所有欄位（收合的也展開），下面詳細內容；有記憶的區塊附關係摘要
-function CardData({ card, schemaFields, memories, total, targetIcon, onRelations }: {
+function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRelations }: {
+  focus?: 'detail';
   card: Card;
   schemaFields: SchemaField[];
   memories: Memory[] | null; // 照「看到」過濾過的記憶（沒有記憶的區塊 = null）
@@ -196,6 +200,10 @@ function CardData({ card, schemaFields, memories, total, targetIcon, onRelations
   const images = card.fields.filter((f) => isImage(f) && f.value.trim());
   const texts = card.fields.filter((f) => !isImage(f));
   const rels = memories ? relations(memories) : [];
+  const detailRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focus === 'detail') detailRef.current?.scrollIntoView({ block: 'start' });
+  }, []);
   return (
     <div className="card-view">
       <div className="card-view-top">
@@ -226,7 +234,7 @@ function CardData({ card, schemaFields, memories, total, targetIcon, onRelations
         </div>
       </div>
       {card.detail.trim() && (
-        <section className="card-view-section">
+        <section className="card-view-section" ref={detailRef}>
           <div className="card-view-label">詳細內容</div>
           <RichTextView markdown={card.detail} />
         </section>
