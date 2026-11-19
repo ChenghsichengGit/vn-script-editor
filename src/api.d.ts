@@ -54,6 +54,7 @@ interface AppApi {
   onAppClosing(cb: () => void): () => void;
   readyToClose(): void;
   setZoom(factor: number): void; // 整個畫面的縮放，1 = 100%
+  openUrl(url: string): Promise<void>; // 用系統預設瀏覽器打開（只接受 http/https）
 }
 
 interface Window {

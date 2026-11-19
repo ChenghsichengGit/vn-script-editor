@@ -33,7 +33,8 @@ import UpdateDialog from './components/UpdateDialog';
 import HelpDialog, { HelpTopic } from './components/HelpDialog';
 import Tooltip from './components/Tooltip';
 import ImageViewerHost from './components/ImageViewer';
-import MemoryViewerHost from './components/MemoryViewer';
+import MemoryViewerHost, { openCardViewer } from './components/MemoryViewer';
+import { renameCardLinks, setLinkCards, setLinkOpener } from './cardLinks';
 import RubyPromptHost from './components/RubyPrompt';
 import Icon, { fileIcon } from './components/Icon';
 import QuickPick, { QuickPickItem } from './components/QuickPick';
@@ -76,7 +77,9 @@ import {
   ProjectStore,
   assertProject,
   folderBase,
+  findChildFolder,
   isInFolder,
+  joinFolder,
   openRecent,
   parentFolder,
   pickFolder,
@@ -137,6 +140,8 @@ export default function App() {
   const sceneText = sceneScript ? (contents[sceneFile] ?? '') : '';
   const sceneList = useMemo(() => sceneItems(sceneText, scenePath, cards, scenes), [sceneText, scenePath, cards, scenes]);
   useEffect(() => setScriptData(cards, schemas), [cards, schemas]);
+  useEffect(() => setLinkCards(cards), [cards]);
+  useEffect(() => setLinkOpener((section, id) => openCardViewer(section, id)), []);
   // 不顯示瀏覽器內建的右鍵選單（上一頁、重新整理、檢查…）；文字輸入框保留（剪下、複製、貼上）
   useEffect(() => {
     const block = (e: MouseEvent) => {
@@ -195,7 +200,8 @@ export default function App() {
         const card = parseCardTab(key);
         if (card) {
           const c = cards[card.section].find((x) => x.id === card.id);
-          if (c) await project.store.saveCard(card.section, c);
+          const moved = c && (await project.store.saveCard(card.section, c));
+          if (moved) followKidsFolder(card.section, moved.from, moved.to);
         } else {
           const id = key.slice('file:'.length);
           if (files[id]) await project.store.saveFile(id, {
@@ -919,6 +925,22 @@ export default function App() {
       for (const c of r.changed) markDirty(cardTabId(c.section, c.id));
       return r.changed.length ? r.cards : all;
     });
+  // 卡片改名：所有卡片詳細內容裡的 [[舊名]] 跟著改
+  const renameLinksInDetails = (from: string, to: string) =>
+    setCards((all) => {
+      let changed = false;
+      const next = { ...all };
+      for (const section of Object.keys(all) as CardSectionId[]) {
+        next[section] = all[section].map((c) => {
+          const detail = renameCardLinks(c.detail, from, to);
+          if (detail === c.detail) return c;
+          changed = true;
+          markDirty(cardTabId(section, c.id));
+          return { ...c, detail };
+        });
+      }
+      return changed ? next : all;
+    });
   const scenesRef = useLatest(scenes);
   const commitScenes = (next: Scenes) => {
     if (next === scenesRef.current) return;
@@ -955,12 +977,25 @@ export default function App() {
       if (!card || name === card.name) return null;
       const err = cardNameError(section, card.folder ?? '', name, id);
       if (err) return err;
+      const kids = findChildFolder(folders[section], card);
+      const kidsTo = joinFolder(card.folder ?? '', sanitizeName(name));
+      if (kids && kidsTo.toLowerCase() !== kids.toLowerCase() && folders[section].some((f) => f.toLowerCase() === kidsTo.toLowerCase())) {
+        return '已經有同名的資料夾，子卡片放不過去';
+      }
       cardOps.update(section, id, { name });
+      // 子卡片資料夾馬上跟著改名（排在之後的存檔前面，存檔時就不會再改一次）
+      if (kids && kidsTo !== kids) {
+        project?.store
+          .renameFolder(section, kids, folderBase(kidsTo))
+          .then((rel) => followKidsFolder(section, kids, rel))
+          .catch((e) => showFolderError('子卡片資料夾改名', e));
+      }
       renameInOrder(section, card.folder ?? '', card.name, name);
       const stillUsed = Object.values(cards).some((list) => list.some((c) => c.id !== id && c.name === card.name));
       if (!stillUsed) {
         remapAllMemories((m) => (m.target === card.name ? { ...m, target: name } : m));
         commitScenes(renameInScenes(scenesRef.current, card.name, name));
+        renameLinksInDetails(card.name, name);
       }
       return null;
     },
@@ -969,10 +1004,17 @@ export default function App() {
       markDirty(cardTabId(section, id));
     },
     remove: (section, id) => {
+      const card = findCard(section, id);
+      const kids = card && findChildFolder(folders[section], card);
+      const hasKids = !!kids && (cards[section].some((c) => c.id !== id && isInFolder(c.folder ?? '', kids)) || folders[section].some((f) => f !== kids && isInFolder(f, kids)));
+      const withKids = hasKids && window.confirm(`「${card!.name}」底下還有子卡片。\n\n按「確定」：子卡片一起刪除\n按「取消」：子卡片移到上一層，保留下來`);
       setCards((all) => ({ ...all, [section]: all[section].filter((c) => c.id !== id) }));
       unmarkDirty(cardTabId(section, id));
       project?.store.deleteCard(section, id).catch(reportError);
       closeTabs([cardTabId(section, id)]);
+      if (!kids) return;
+      if (withKids || !hasKids) void folderOps.remove(section, kids); // 空的子卡片資料夾也一起清掉
+      else void liftKids(section, kids);
     },
   };
   const orderRef = useLatest(order);
@@ -1011,6 +1053,11 @@ export default function App() {
           : moved[parent].filter((n) => n !== oldKey);
     }
     commitOrder({ ...orderRef.current, [section]: moved });
+  };
+  // 子卡片資料夾在硬碟上改了路徑：畫面上的資料夾、卡片位置、摺疊狀態跟著換
+  const followKidsFolder = (section: SectionId, oldPath: string, newPath: string) => {
+    remapFolder(section, oldPath, newPath);
+    setCollapsed((c) => remapFolderKeys(c, section, oldPath, newPath));
   };
   const remapFolder = (section: SectionId, oldPath: string, newPath: string) => {
     const remap = (p: string) => (isInFolder(p, oldPath) ? newPath + p.slice(oldPath.length) : p);
@@ -1111,6 +1158,37 @@ export default function App() {
       closeTabs(tabIds);
     },
   };
+  // 刪掉父卡片但保留子卡片：裡面的卡和資料夾搬到上一層，全部搬完才刪掉空資料夾
+  const liftKids = async (section: CardSectionId, kids: string) => {
+    const store = latest.current.project?.store;
+    if (!store) return;
+    const to = parentFolder(kids);
+    const failed: string[] = [];
+    const moved = new Set<string>();
+    for (const c of cards[section].filter((c) => (c.folder ?? '') === kids)) {
+      try {
+        await store.moveCard(section, c.id, to);
+        moved.add(c.id);
+      } catch {
+        failed.push(c.name);
+      }
+    }
+    setCards((all) => ({ ...all, [section]: all[section].map((c) => (moved.has(c.id) ? { ...c, folder: to } : c)) }));
+    for (const sub of folders[section].filter((f) => parentFolder(f) === kids)) {
+      try {
+        followKidsFolder(section, sub, await store.moveFolder(section, sub, to));
+      } catch {
+        failed.push(folderBase(sub));
+      }
+    }
+    if (failed.length) return window.alert(`上一層已經有同名的項目，這些留在資料夾「${folderBase(kids)}」裡：${failed.join('、')}`);
+    try {
+      await store.removeEmptyFolder(section, kids);
+      setFolders((f) => ({ ...f, [section]: f[section].filter((p) => p !== kids) }));
+    } catch {
+      // 資料夾裡還有不是卡片的檔案：留著
+    }
+  };
   const moveItem = async (section: SectionId, item: MoveItem, toFolder: string) => {
     const store = latest.current.project?.store;
     if (!store) return;
@@ -1133,8 +1211,17 @@ export default function App() {
     }
     if (from === toFolder) return; // 已經在那裡
     if (takenNames(section, toFolder).has(name.toLowerCase())) return window.alert('目標資料夾裡已經有同名的項目');
+    const movingCard = item.kind === 'card' ? findCard(section as CardSectionId, item.id) : undefined;
+    const kids = movingCard ? findChildFolder(folders[section], movingCard) : null; // 卡片有子卡片：資料夾一起搬
+    if (kids && isInFolder(toFolder.toLowerCase(), kids.toLowerCase())) return window.alert('不能把卡片放進它自己的子卡片裡');
+    if (kids && takenNames(section, toFolder).has(folderBase(kids).toLowerCase())) return window.alert('目標資料夾裡已經有同名的資料夾，子卡片放不過去');
     await flushRef.current();
     try {
+      // 拖到一張還沒有子卡片的卡上：先建出它的子卡片資料夾
+      if (toFolder && !folders[section].includes(toFolder)) {
+        const rel = await store.createFolder(section, parentFolder(toFolder), folderBase(toFolder));
+        setFolders((f) => ({ ...f, [section]: [...f[section], rel] }));
+      }
       if (item.kind === 'file') {
         await store.moveFile(item.id, toFolder);
         setFiles((all) => ({ ...all, [item.id]: { ...all[item.id], folder: toFolder } }));
@@ -1142,6 +1229,7 @@ export default function App() {
       } else if (item.kind === 'card') {
         await store.moveCard(section as CardSectionId, item.id, toFolder);
         setCards((all) => ({ ...all, [section]: all[section as CardSectionId].map((c) => (c.id === item.id ? { ...c, folder: toFolder } : c)) }));
+        if (kids) followKidsFolder(section, kids, await store.moveFolder(section, kids, toFolder));
       } else {
         const newRel = await store.moveFolder(section, item.folder, toFolder);
         remapFolder(section, item.folder, newRel);

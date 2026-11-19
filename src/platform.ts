@@ -47,4 +47,5 @@ window.api = {
   onAppClosing: (cb) => subscribe<null>('app-closing', () => cb()),
   readyToClose: () => void invoke('app_ready_to_close'),
   setZoom: (factor) => void invoke('set_zoom', { factor }),
+  openUrl: (url) => invoke('open_url', { url }),
 };

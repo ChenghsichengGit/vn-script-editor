@@ -9,6 +9,8 @@ export interface RubyRequest {
   rt: string; // 原本的讀音（新標的是空的）
   onSubmit: (rt: string) => void; // 空字串 = 拿掉
   onClose?: () => void; // 不管套用或取消，關掉後呼叫（例如把焦點還給編輯器）
+  placeholder?: string; // 其他用途（連結網址、卡片連結）沿用這個小框時換掉文字
+  submitLabel?: string;
 }
 
 const channel = eventChannel<RubyRequest>('vn-ruby-prompt');
@@ -46,7 +48,7 @@ function RubyPrompt({ req, onClose }: { req: RubyRequest; onClose: () => void })
       <input
         ref={inputRef}
         value={rt}
-        placeholder="讀音"
+        placeholder={req.placeholder ?? '讀音'}
         spellCheck={false}
         onChange={(e) => setRt(e.target.value)}
         onKeyDown={(e) => {
@@ -60,7 +62,7 @@ function RubyPrompt({ req, onClose }: { req: RubyRequest; onClose: () => void })
           }
         }}
       />
-      <button type="button" className="ruby-prompt-btn" onClick={() => submit(rt)}>標音</button>
+      <button type="button" className="ruby-prompt-btn" onClick={() => submit(rt)}>{req.submitLabel ?? '標音'}</button>
       {req.rt && (
         <button type="button" className="ruby-prompt-btn" onClick={() => submit('')}>拿掉</button>
       )}

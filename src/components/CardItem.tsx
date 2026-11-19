@@ -50,6 +50,8 @@ interface Props {
   schemaFields: SchemaField[]; // 這個區塊的欄位範本：欄位名稱前面畫它設定的圖示
   targetIcon: (name: string) => IconDef | undefined; // 記憶的對象那張卡所在區塊的圖示
   badge?: React.ReactNode; // 名稱後面的小標記（「本場」區塊裡固定的卡畫圖釘）
+  kids?: { open: boolean; onToggle: () => void }; // 有子卡片：前面的箭頭改成展開／收起子卡片（點名稱還是展開欄位）
+  children?: React.ReactNode; // 子卡片的列，畫在這張卡下面
 }
 
 const lastSideTab = new Map<string, 'data' | 'memory'>();
@@ -84,7 +86,7 @@ function FieldKey({ name, children }: { name: string; children: React.ReactNode 
   );
 }
 
-export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '', schemaFields, targetIcon, badge }: Props) {
+export default function CardItem({ section, card, ops, bulk, selected, depth, onMenu, renaming, onRename, onRenameClose, rowProps, rowClass = '', schemaFields, targetIcon, badge, kids, children }: Props) {
   useChangeMarks(); // 「外部修改」的黃點一變就重畫
   const [open, setOpen] = useState(false);
   const hasMemory = !!sectionDef(section)?.memory;
@@ -140,7 +142,20 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           onMenu(e);
         }}
       >
-        <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
+        {kids ? (
+          <span
+            className="card-kids-toggle"
+            title={kids.open ? '收起子卡片' : '展開子卡片'}
+            onClick={(e) => {
+              e.stopPropagation();
+              kids.onToggle();
+            }}
+          >
+            <Icon icon={kids.open ? 'chevron-down' : 'chevron-right'} className="chevron" />
+          </span>
+        ) : (
+          <Icon icon={open ? 'chevron-down' : 'chevron-right'} className="chevron" />
+        )}
         <Icon icon={sectionMeta(section).icon} className="tree-icon" />
         {renaming ? (
           <NameInput initial={card.name} onSubmit={onRename} onClose={onRenameClose} />
@@ -250,6 +265,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           )}
         </div>
       )}
+      {children}
     </div>
   );
 }

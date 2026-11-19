@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Card, CardSectionId, Field, MEMORY_KINDS, Memory, SchemaField, cardTabId } from '../model';
 import { findTargetCard, relationSummary, relations, scriptPath, targetIcon } from '../memories';
 import { sectionDef, sectionMeta } from '../sections';
+import { childFolderOf } from '../projectFiles';
 import { fieldIconDef } from '../fieldIcons';
 import { CutSelect, MemoryRelations, useCut } from './MemoryPanel';
 import { showCardMemory } from './CardEditor';
@@ -94,6 +95,14 @@ function MemoryViewer({ section, card, focus, initialView, cards, files, schemaF
     openTab(tabId);
     onClose();
   };
+  // 上層卡片（這張卡所在的資料夾是哪張卡的子卡片資料夾）和子卡片
+  const siblings = cards[section] ?? [];
+  const here = (card.folder ?? '').toLowerCase();
+  const own = childFolderOf(card).toLowerCase();
+  const family = {
+    parent: here ? siblings.find((c) => childFolderOf(c).toLowerCase() === here) : undefined,
+    kids: siblings.filter((c) => (c.folder ?? '').toLowerCase() === own),
+  };
   type Item = { kind: 'source'; source: string } | { kind: 'memory'; m: Memory };
   const items: Item[] = [];
   shown.forEach((m, i) => {
@@ -121,7 +130,18 @@ function MemoryViewer({ section, card, focus, initialView, cards, files, schemaF
         </div>
         <div className="memory-viewer-body">
           {view === 'data' ? (
-            <CardData focus={focus} card={card}schemaFields={schemaFields} memories={hasMemory ? shown : null} total={memories.length} targetIcon={iconOf} onRelations={() => setView('relations')} />
+            <CardData
+              focus={focus}
+              card={card}
+              schemaFields={schemaFields}
+              memories={hasMemory ? shown : null}
+              total={memories.length}
+              targetIcon={iconOf}
+              onRelations={() => setView('relations')}
+              family={family}
+              icon={sectionMeta(section).icon}
+              onOpenCard={(c) => onGo({ section, id: c.id, view: 'data' })}
+            />
           ) : memories.length === 0 ? (
             <div className="memory-note">還沒有記憶，按右上角的鉛筆到卡片分頁新增。</div>
           ) : view === 'timeline' ? (
@@ -183,7 +203,10 @@ function MemoryViewer({ section, card, focus, initialView, cards, files, schemaF
 }
 
 // 資料頁：左邊圖片欄位放大，右邊所有欄位（收合的也展開），下面詳細內容；有記憶的區塊附關係摘要
-function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRelations }: {
+function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRelations, family, icon, onOpenCard }: {
+  family: { parent?: Card; kids: Card[] };
+  icon: IconDef;
+  onOpenCard: (card: Card) => void;
   focus?: 'detail';
   card: Card;
   schemaFields: SchemaField[];
@@ -204,8 +227,14 @@ function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRe
   useEffect(() => {
     if (focus === 'detail') detailRef.current?.scrollIntoView({ block: 'start' });
   }, []);
+  const cardLink = (c: Card) => (
+    <button key={c.id} type="button" className="memory-link" title={`看「${c.name}」`} onClick={() => onOpenCard(c)}>
+      <Icon icon={icon} /> {c.name || '（未命名）'}
+    </button>
+  );
   return (
     <div className="card-view">
+      {family.parent && <div className="card-view-parent">上層：{cardLink(family.parent)}</div>}
       <div className="card-view-top">
         {images.length > 0 && (
           <div className="card-view-images">
@@ -233,6 +262,12 @@ function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRe
           })}
         </div>
       </div>
+      {family.kids.length > 0 && (
+        <section className="card-view-section">
+          <div className="card-view-label">子卡片 {family.kids.length}</div>
+          <div className="card-view-kids">{family.kids.map(cardLink)}</div>
+        </section>
+      )}
       {card.detail.trim() && (
         <section className="card-view-section" ref={detailRef}>
           <div className="card-view-label">詳細內容</div>

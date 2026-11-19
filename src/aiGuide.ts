@@ -54,9 +54,11 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('這裡是詳細內容（Markdown：# ## ### 標題、條列、編號、粗體）。');
   line('```');
   line();
+  line('- 詳細內容還能用：`[[卡片名稱]]` 連到另一張卡（名稱要和卡片完全相同）、`==螢光==`、`[文字](https://…)` 網址、`| 欄 | 欄 |` 表格（第一列是標題列，格子裡只寫單行文字）。');
   line('- `name`：卡片名稱。**檔名要等於名稱**（`\\ / : * ? " < > |` 換成 `_`），例如名稱 `#fade` 的檔名是 `#fade.md`。');
   line('- `fields`：條列欄位，照順序排；`value` 多行時用 `|-`，一開頭就換行的值在側邊欄會整段顯示在欄位名稱下面。`collapsed: true` = 側邊欄只顯示欄位名稱（可省略）。');
   line('- 同一個資料夾裡的卡片名稱不能重複。');
+  line('- 子卡片：和卡片同一層、名稱跟卡片檔名一樣的資料夾，裡面的卡就是那張卡的子卡片（例如 `桃花家.md` 和 `桃花家/桃花房間.md`）。卡片改名時，這個資料夾也要一起改名。');
   line();
   const memorySections = getCardSections().filter((d) => d.memory);
   if (memorySections.length > 0) {

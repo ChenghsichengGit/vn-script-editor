@@ -19,6 +19,7 @@
   --border: #3c3c3c;
   --activity-icon: #ffffff; /* 最左邊那排圖示 */
   --link: #4fa3ff;
+  --mark-bg: rgba(220, 180, 40, 0.38); /* 詳細內容的 ==螢光== */
   --list-active: #04395e; /* 補齊清單、快速選單選中的那一項 */
   --error: #f48771;
   --error-bg: #5a1d1d;
@@ -72,6 +73,7 @@
   --border: #d4d4d4;
   --activity-icon: #424242;
   --link: #006ab1;
+  --mark-bg: #fff1a8;
   --list-active: #cce4f7;
   --error: #c72e0f;
   --error-bg: #f9e0dc;
@@ -123,6 +125,7 @@
   --border: #6fc3df;
   --activity-icon: #ffffff;
   --link: #3794ff;
+  --mark-bg: rgba(255, 215, 0, 0.45);
   --list-active: #0f4a85;
   --error: #ff8c8c;
   --error-bg: #3d0000;
@@ -296,6 +299,19 @@ body.dragging, body.dragging * { user-select: none; }
 .tiptap h1, .tiptap h2, .tiptap h3 { font-weight: 600; line-height: 1.35; }
 .tiptap p { margin: 0.4em 0; }
 .tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0.4em 0; }
+.tiptap table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0.6em 0; }
+.tiptap th, .tiptap td { border: 1px solid var(--border); padding: 4px 8px; vertical-align: top; text-align: left; min-width: 3em; }
+.tiptap th { background: var(--bg-hover); font-weight: 600; white-space: nowrap; }
+.tiptap th p, .tiptap td p { margin: 0; }
+.tiptap .selectedCell { background: var(--bg-selected); }
+.tiptap mark { background: var(--mark-bg); color: inherit; border-radius: 2px; padding: 0 1px; }
+.tiptap a.rich-link { color: var(--link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.rich-content .tiptap a.rich-link { cursor: text; }
+.card-link { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; margin: 0 1px; border-radius: 3px; color: var(--link); background: var(--bg-hover); cursor: pointer; white-space: nowrap; vertical-align: baseline; }
+.card-link .codicon { font-size: 0.9em; }
+.card-link.missing { color: var(--error); background: none; border: 1px dashed var(--error); cursor: help; }
+.rich-content .card-link { cursor: default; }
+.card-link.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .rich-view .tiptap h1 { font-size: 15px; margin: 0.8em 0 0.2em; }
 .rich-view .tiptap h2 { font-size: 13.5px; margin: 0.7em 0 0.2em; }
 .rich-view .tiptap h3 { font-size: 13px; margin: 0.6em 0 0.2em; color: var(--text-dim); }
@@ -304,6 +320,8 @@ body.dragging, body.dragging * { user-select: none; }
 .tree-row:hover { background: var(--bg-hover); }
 .tree-row.selected { background: var(--bg-selected); }
 .chevron { width: 18px; flex-shrink: 0; text-align: center; color: var(--text-dim); font-size: 18px; line-height: 1; }
+.card-kids-toggle { display: flex; flex-shrink: 0; border-radius: 3px; }
+.card-kids-toggle:hover { background: var(--bg-selected); }
 .tree-label { flex-shrink: 0; }
 .tree-icon { width: 18px; flex-shrink: 0; margin-right: 4px; text-align: center; font-size: 12px; }
 .name-input-wrap { position: relative; flex: 1; min-width: 0; display: block; }
@@ -1014,6 +1032,8 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .card-view-value { min-width: 0; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .card-view-section { border-top: 1px solid var(--border); padding-top: 10px; }
 .card-view-label { margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
+.card-view-parent { margin-bottom: 10px; font-size: 12px; color: var(--text-dim); }
+.card-view-kids { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .card-view .card-mem-row { white-space: normal; }
 
 /* 側欄區塊摺疊：摺疊或沒有內容的區塊只剩標題列 */

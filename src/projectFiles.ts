@@ -121,6 +121,12 @@ export const parentFolder = (folder: string) => folder.slice(0, Math.max(0, fold
 export const folderBase = (folder: string) => folder.slice(folder.lastIndexOf('/') + 1);
 export const joinFolder = (parent: string, name: string) => (parent ? `${parent}/${name}` : name);
 export const isInFolder = (folder: string, ancestor: string) => folder === ancestor || folder.startsWith(ancestor + '/');
+// 子卡片：和卡片同一層、名稱跟卡片檔名一樣的資料夾，裡面的卡就是這張卡的子卡片
+export const childFolderOf = (card: { name: string; folder?: string }) => joinFolder(card.folder ?? '', sanitizeName(card.name));
+export const findChildFolder = (folders: string[], card: { name: string; folder?: string }) => {
+  const want = childFolderOf(card).toLowerCase();
+  return folders.find((f) => f.toLowerCase() === want) ?? null;
+};
 
 export const withScriptExt = (name: string) => (/\.[^./\\]+$/.test(name) ? name : name + '.vns');
 
@@ -267,6 +273,24 @@ export class ProjectStore {
     });
     return { cards, folders: tree.folders };
   }
+  // 子卡片都刪光後留下的空資料夾（和卡片同名的）：打開專案時清掉，從最深的一層開始；一般的空資料夾不動
+  private async pruneEmptyKids(section: SectionId, cards: Card[], folders: string[]): Promise<string[]> {
+    const owned = new Set(cards.map((c) => childFolderOf(c).toLowerCase()));
+    const depth = (f: string) => f.split('/').length;
+    const removed = new Set<string>();
+    for (const f of [...folders].sort((a, b) => depth(b) - depth(a))) {
+      if (!owned.has(f.toLowerCase())) continue;
+      const abs = this.dirPath(section, f);
+      try {
+        if ((await window.api.listDir(abs)).length > 0) continue;
+        await window.api.remove(abs); // 不加 recursive：裡面有東西就會失敗，不會誤刪
+        removed.add(f);
+      } catch {
+        // 刪不掉就留著
+      }
+    }
+    return folders.filter((f) => !removed.has(f));
+  }
   static async open(root: string): Promise<{ store: ProjectStore; data: ProjectData }> {
     await assertProject(root);
     const store = new ProjectStore(root);
@@ -284,7 +308,10 @@ export class ProjectStore {
       store.track('files', id, f.folder, f.name, f.text);
     }
     const cards: ProjectData['cards'] = {};
-    for (const section of ids) ({ cards: cards[section], folders: folders[section] } = await store.loadCards(section, joinPath(root, store.dirOf(section))));
+    for (const section of ids) {
+      ({ cards: cards[section], folders: folders[section] } = await store.loadCards(section, joinPath(root, store.dirOf(section))));
+      folders[section] = await store.pruneEmptyKids(section, cards[section], folders[section]);
+    }
     const data = { name, files, cards, folders, sections: store.sections, schemas: normalizeSchemas(store.meta.schemas, ids), order: normalizeOrder(store.meta.order), scenes: normalizeScenes(store.meta.scenes) };
     return { store, data };
   }
@@ -417,11 +444,24 @@ export class ProjectStore {
       await this.writeAndRename('files', id, file.folder, name, file.content);
     });
   }
-  saveCard(section: CardSectionId, card: Card): Promise<void> {
+  // 卡片改名存檔時，同名的子卡片資料夾跟著改名；有改就回傳新舊路徑
+  saveCard(section: CardSectionId, card: Card): Promise<{ from: string; to: string } | null> {
     return this.enqueue(async () => {
       const folder = card.folder ?? '';
       const name = this.uniqueName(section, card.id, folder, sanitizeName(card.name) + '.md', '.md');
+      const old = this.locs(section).get(card.id);
       await this.writeAndRename(section, card.id, folder, name, serializeCard(card));
+      if (!old || old.folder !== folder) return null;
+      const stem = (n: string) => n.replace(/\.md$/i, '');
+      const [from, to] = [joinFolder(folder, stem(old.name)), joinFolder(folder, stem(name))];
+      if (from.toLowerCase() === to.toLowerCase()) return null;
+      if (!(await window.api.exists(this.dirPath(section, from))) || (await window.api.exists(this.dirPath(section, to)))) return null;
+      try {
+        await this.relocate(section, from, to, '已經有同名的項目');
+      } catch {
+        return null; // 卡片本身已經存好；資料夾改不了名就留在原處（變成一般資料夾）
+      }
+      return { from, to };
     });
   }
   // 硬碟上存的版本（「不儲存」時還原用）
@@ -480,6 +520,8 @@ export class ProjectStore {
       return rel;
     });
   }
+  // 只刪空資料夾（裡面還有東西就失敗，不會連帶刪掉別的檔案）
+  removeEmptyFolder = (section: SectionId, folder: string) => this.enqueue(() => window.api.remove(this.dirPath(section, folder)));
   deleteFolder(section: SectionId, folder: string): Promise<void> {
     return this.enqueue(async () => {
       if (folder === '') throw new Error('不能刪除區塊的根目錄');

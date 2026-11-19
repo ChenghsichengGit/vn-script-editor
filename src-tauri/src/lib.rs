@@ -597,6 +597,34 @@ fn set_zoom(window: WebviewWindow, factor: f64) -> Result<(), String> {
     window.set_zoom(factor).map_err(|e| e.to_string())
 }
 
+// 詳細內容裡的網址：用系統預設瀏覽器打開；只接受 http/https，避免被拿來開本機檔案或執行程式
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    let lower = url.to_ascii_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://")) || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("只能打開 http:// 或 https:// 開頭的網址".into());
+    }
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("rundll32.exe");
+        c.args(["url.dll,FileProtocolHandler", &url]);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        c.arg(&url);
+        c
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(&url);
+        c
+    };
+    cmd.spawn().map(|_| ()).map_err(err)
+}
+
 fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<Wry>> {
     let mut recent_menu = SubmenuBuilder::new(app, "最近的專案");
     if recent.is_empty() {
@@ -710,6 +738,7 @@ pub fn run() {
             window_new,
             app_ready_to_close,
             set_zoom,
+            open_url,
         ])
         .setup(|app| {
             let handle = app.handle();

@@ -4,7 +4,7 @@ import { Card, CardOps, CardSectionId, ItemOrder, Schemas, SectionId, cardTabId,
 import { COMMANDS_ID, sectionMeta } from '../sections';
 import type { SceneInfo } from '../scene';
 import { targetIcon } from '../memories';
-import { folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
+import { childFolderOf, findChildFolder, folderBase, isInFolder, joinFolder, parentFolder } from '../projectFiles';
 import CardItem from './CardItem';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import NameInput from './NameInput';
@@ -58,7 +58,7 @@ export interface TreeProps {
   onOpenFile: (id: string) => void;
   collapsed: Set<string>; // 摺疊狀態放在 App：區塊搬到別處（畫面重建）時不會忘記
   setCollapsed: React.Dispatch<React.SetStateAction<Set<string>>>;
-  onMove: (section: SectionId, item: MoveItem, toFolder: string) => Promise<void>; // 拖曳放開時呼叫
+  onMove: (section: SectionId, item: MoveItem, toFolder: string) => Promise<unknown>; // 拖曳放開時呼叫
   order: ItemOrder; // 自訂順序
   onReorder: (section: SectionId, folder: string, names: string[]) => void; // 某個資料夾裡的項目改成這個順序
   onHeaderDrag: (id: SectionId, e: React.MouseEvent) => void; // 按住標題列開始搬動整個區塊
@@ -131,7 +131,12 @@ export default function SectionPanel(props: Props) {
     const it = item.kind === 'file' ? props.files[item.id] : cards.find((c) => c.id === item.id);
     return { folder: it?.folder ?? '', name: it?.name ?? '' };
   };
-  const canPlaceIn = (item: MoveItem, folder: string) => !(item.kind === 'folder' && isInFolder(folder, item.folder));
+  // 資料夾不能放進自己底下；卡片不能放進自己的子卡片裡
+  const canPlaceIn = (item: MoveItem, folder: string) => {
+    if (item.kind === 'folder') return !isInFolder(folder, item.folder);
+    const card = item.kind === 'card' ? cards.find((c) => c.id === item.id) : undefined;
+    return !card || !isInFolder(folder.toLowerCase(), childFolderOf(card).toLowerCase());
+  };
   const canDropOn = (item: MoveItem, target: string) => canPlaceIn(item, target) && infoOf(item).folder !== target;
   const scheduleExpand = (folder: string | null) => {
     if (hover.current?.folder === folder) return;
@@ -173,8 +178,9 @@ export default function SectionPanel(props: Props) {
   });
   const rowKeyOf = (item: MoveItem) => (item.kind === 'folder' ? `folder:${item.folder}` : item.id);
   type Item = [string, { name: string; folder: string }] | Card;
+  const owned = new Set(cards.map((c) => childFolderOf(c).toLowerCase())); // 卡片的子卡片資料夾：畫在卡片底下，不當成資料夾列出
   const entriesIn = (folder: string) => {
-    const subs = props.folders[id].filter((f) => parentFolder(f) === folder);
+    const subs = props.folders[id].filter((f) => parentFolder(f) === folder && !owned.has(f.toLowerCase()));
     const items: Item[] = isFiles ? Object.entries(props.files).filter(([, f]) => f.folder === folder) : cards.filter((c) => (c.folder ?? '') === folder);
     const nameOf = (it: Item) => (Array.isArray(it) ? it[1].name : it.name);
     return orderEntries(subs, items, nameOf, props.order[id]?.[folder]).map((e) =>
@@ -293,6 +299,7 @@ export default function SectionPanel(props: Props) {
       return [
         { label: '編輯', onClick: () => props.cardOps.open(t.section, t.id) },
         { label: '放大檢視', onClick: () => openCardViewer(t.section, t.id) },
+        ...(card ? [{ label: '新增子卡片', onClick: () => startCreate(findChildFolder(props.folders[id], card) ?? childFolderOf(card), 'item') }] : []),
         ...(card ? pinItem(props.scene, t.section, card.name) : []),
         { label: '重新命名', onClick: () => setEditing({ mode: 'rename', kind: 'card', section: t.section, id: t.id }) },
         sortItem(card?.folder ?? ''),
@@ -324,9 +331,16 @@ export default function SectionPanel(props: Props) {
           {chevron && <Icon icon="chevron-right" className="chevron" />}
           <Icon icon={what === 'folder' ? 'folder' : isFiles ? fileIcon('.vns') : meta.icon} className="tree-icon" />
           <NameInput
-            onSubmit={(name) =>
-              what === 'folder' ? props.folderOps.create(section, folder, name) : isFiles ? props.fileOps.add(folder, name) : props.cardOps.add(cardSection, folder, name)
-            }
+            onSubmit={async (name) => {
+              if (what === 'folder') return props.folderOps.create(section, folder, name);
+              if (isFiles) return props.fileOps.add(folder, name);
+              // 第一張子卡片：先建出和卡片同名的資料夾
+              if (folder && !props.folders[section].includes(folder)) {
+                const err = await props.folderOps.create(section, parentFolder(folder), folderBase(folder));
+                if (err) return err;
+              }
+              return props.cardOps.add(cardSection, folder, name);
+            }}
             onClose={() => setEditing(null)}
           />
         </div>
@@ -360,25 +374,33 @@ export default function SectionPanel(props: Props) {
         </div>
       );
     };
-    const cardRow = (card: Card) => (
-      <CardItem
-        key={card.id}
-        section={cardSection}
-        card={card}
-        ops={props.cardOps}
-        bulk={bulk}
-        selected={props.activeTab === cardTabId(cardSection, card.id)}
-        depth={depth}
-        onMenu={(e) => openMenu(e, { kind: 'card', section: cardSection, id: card.id })}
-        renaming={editing?.mode === 'rename' && editing.kind === 'card' && editing.id === card.id}
-        onRename={(name) => props.cardOps.rename(cardSection, card.id, name)}
-        onRenameClose={() => setEditing(null)}
-        rowProps={{ ...dragSource({ kind: 'card', id: card.id }, card.name), ...rowDropTarget(folder, card.id, card.name) }}
-        rowClass={lineClass(card.id)}
-        schemaFields={props.schemas[cardSection].fields}
-        targetIcon={(name) => targetIcon(props.cards, name, cardSection)}
-      />
-    );
+    const cardRow = (card: Card) => {
+      const kidsFolder = findChildFolder(props.folders[section], card) ?? childFolderOf(card); // 還沒有子卡片時是「將來會建的」資料夾
+      const hasKids = hasChildren(kidsFolder);
+      const kidsOpen = !collapsed.has(folderKey(section, kidsFolder));
+      return (
+        <CardItem
+          key={card.id}
+          section={cardSection}
+          card={card}
+          ops={props.cardOps}
+          bulk={bulk}
+          selected={props.activeTab === cardTabId(cardSection, card.id)}
+          depth={depth}
+          onMenu={(e) => openMenu(e, { kind: 'card', section: cardSection, id: card.id })}
+          renaming={editing?.mode === 'rename' && editing.kind === 'card' && editing.id === card.id}
+          onRename={(name) => props.cardOps.rename(cardSection, card.id, name)}
+          onRenameClose={() => setEditing(null)}
+          rowProps={{ ...dragSource({ kind: 'card', id: card.id }, card.name), ...rowDropTarget(folder, card.id, card.name, kidsFolder) }}
+          rowClass={`${lineClass(card.id)}${dropFolder === kidsFolder ? ' drop-target' : ''}`}
+          schemaFields={props.schemas[cardSection].fields}
+          targetIcon={(name) => targetIcon(props.cards, name, cardSection)}
+          kids={hasKids ? { open: kidsOpen, onToggle: () => setFolderOpen(kidsFolder) } : undefined}
+        >
+          {hasKids && kidsOpen && renderLevel(kidsFolder, depth + 1)}
+        </CardItem>
+      );
+    };
     const folderRow = (sub: string) => {
       const open = !collapsed.has(folderKey(section, sub));
       const renaming = editing?.mode === 'rename' && editing.kind === 'folder' && editing.section === section && editing.folder === sub;
