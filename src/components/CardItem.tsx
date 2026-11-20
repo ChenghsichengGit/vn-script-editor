@@ -164,7 +164,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
         )}
         {badge}
         {hasMarks(cardTabId(section, card.id)) && <span className="ext-dot" title="有其他人的修改" />}
-        {!renaming && !hasMemory && (
+        {!renaming && (
           <button
             className="icon-btn card-edit"
             title="放大看這張卡"
