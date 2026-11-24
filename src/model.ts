@@ -36,6 +36,7 @@ export interface SchemaField {
   color?: string; // 圖示顏色的名稱（red、blue…）；沒有 = 跟文字同色
   type?: 'image'; // 欄位類型：沒有 = 文字；image = 圖片（內容存圖片的相對路徑，例如 圖片/立繪.png）
   collapsed?: boolean; // 新卡片（或新補上的欄位）預設摺疊；不影響已有的欄位
+  group?: string; // 分類：同分類的欄位放在同一個分頁，沒有 = 固定顯示在分頁上面
 }
 export interface SectionSchema {
   nameParam?: string;

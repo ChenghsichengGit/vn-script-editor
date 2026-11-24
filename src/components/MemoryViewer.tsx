@@ -4,6 +4,7 @@ import { Card, CardSectionId, Field, MEMORY_KINDS, Memory, SchemaField, cardTabI
 import { findTargetCard, relationSummary, relations, scriptPath, targetIcon } from '../memories';
 import { sectionDef, sectionMeta } from '../sections';
 import { childFolderOf } from '../projectFiles';
+import FieldGroupTabs, { fieldShown, groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
 import { fieldIconDef } from '../fieldIcons';
 import { CutSelect, MemoryRelations, useCut } from './MemoryPanel';
 import { showCardMemory } from './CardEditor';
@@ -139,6 +140,7 @@ function MemoryViewer({ section, card, focus, initialView, cards, files, schemaF
               targetIcon={iconOf}
               onRelations={() => setView('relations')}
               family={family}
+              section={section}
               icon={sectionMeta(section).icon}
               onOpenCard={(c) => onGo({ section, id: c.id, view: 'data' })}
             />
@@ -203,8 +205,9 @@ function MemoryViewer({ section, card, focus, initialView, cards, files, schemaF
 }
 
 // 資料頁：左邊圖片欄位放大，右邊所有欄位（收合的也展開），下面詳細內容；有記憶的區塊附關係摘要
-function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRelations, family, icon, onOpenCard }: {
+function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRelations, family, section, icon, onOpenCard }: {
   family: { parent?: Card; kids: Card[] };
+  section: CardSectionId;
   icon: IconDef;
   onOpenCard: (card: Card) => void;
   focus?: 'detail';
@@ -220,8 +223,24 @@ function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRe
     const s = schemaOf(f);
     return (s ? s.type : f.type) === 'image';
   };
-  const images = card.fields.filter((f) => isImage(f) && f.value.trim());
-  const texts = card.fields.filter((f) => !isImage(f));
+  const groups = groupsIn(card.fields, schemaFields);
+  const [group, setGroup] = useFieldGroup(section, groups);
+  const shownNow = card.fields.filter((f) => fieldShown(schemaFields, f.key, group));
+  const images = shownNow.filter((f) => isImage(f) && f.value.trim());
+  const textsOf = (grouped: boolean) => shownNow.filter((f) => !isImage(f) && !!groupOf(schemaFields, f.key) === grouped);
+  const texts = [...textsOf(false), ...textsOf(true)];
+  const textRow = (f: Field) => {
+    const icon = fieldIconDef(schemaOf(f));
+    return (
+      <div key={f.key} className="card-view-row">
+        <span className="card-view-key">
+          {icon && <Icon icon={icon} className="field-icon" />}
+          {f.key || '（未命名）'}
+        </span>
+        {f.value.trim() ? <FieldText className="card-view-value" text={f.value} /> : <span className="card-view-value memory-dim">—</span>}
+      </div>
+    );
+  };
   const rels = memories ? relations(memories) : [];
   const detailRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -247,19 +266,10 @@ function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRe
           </div>
         )}
         <div className="card-view-fields">
-          {texts.length === 0 && <span className="memory-note">沒有欄位</span>}
-          {texts.map((f, i) => {
-            const icon = fieldIconDef(schemaOf(f));
-            return (
-              <div key={i} className="card-view-row">
-                <span className="card-view-key">
-                  {icon && <Icon icon={icon} className="field-icon" />}
-                  {f.key || '（未命名）'}
-                </span>
-                {f.value.trim() ? <FieldText className="card-view-value" text={f.value} /> : <span className="card-view-value memory-dim">—</span>}
-              </div>
-            );
-          })}
+          {texts.length === 0 && groups.length === 0 && <span className="memory-note">沒有欄位</span>}
+          {textsOf(false).map(textRow)}
+          <FieldGroupTabs groups={groups} current={group} onPick={setGroup} className="card-view-groups" />
+          {textsOf(true).map(textRow)}
         </div>
       </div>
       {family.kids.length > 0 && (

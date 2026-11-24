@@ -926,6 +926,28 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .card-tabs .card-tab-zoom:hover { opacity: 1; }
 .card-tab-zoom .codicon { font-size: 11px; }
 .card-mem { display: flex; flex-direction: column; gap: 1px; padding: 2px 4px; border-radius: 3px; cursor: zoom-in; }
+/* 欄位分類分頁：一排小膠囊（和上面「資料／記憶」的底線分頁區分開） */
+.field-group-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.field-group-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.field-group-tabs button:hover { color: var(--text); background: var(--bg-hover); }
+.field-group-tabs button.on { color: var(--accent); border-color: var(--accent); }
+.field-group-tabs .ext-dot { margin: 0; }
+.card-body > .card-groups, .card-view-fields > .card-view-groups { grid-column: 1 / -1; }
+.card-body > .card-groups { margin: 3px 0 1px; }
+.card-body > .card-groups button { font-size: 11px; padding: 0 8px; }
+.card-editor-groups { margin: 10px 0 6px; }
 .card-mem:hover { background: var(--bg-hover); }
 .card-mem-row { display: flex; gap: 6px; min-width: 0; white-space: nowrap; }
 .card-mem-icon { flex: none; width: 14px; display: inline-flex; align-items: center; }

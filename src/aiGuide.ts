@@ -89,6 +89,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
   line('## 各區塊的固定欄位');
   line();
   line('每張卡都一定要有這些欄位（新卡片照這個順序，之後每張卡可以自己排）。標「指令參數」的，內容（或卡片名稱）可以填進指令的 `[參數]`。');
+  line('標「分類」的欄位在編輯器裡分頁顯示，只是看的方式，卡片檔案裡照樣寫在 `fields` 清單裡，不用另外標分類。');
   line('標「圖片」或有 `type: image` 的欄位，`value` 是圖檔相對於專案資料夾的路徑（例如 `圖片/立繪.png`），沒有圖就留空；詳細內容裡的圖片寫成 `![](圖片/x.png)`，調過寬度的寫成 `<img src="圖片/x.png" width="400">`。');
   line();
   for (const s of getCardSections().map((d) => d.id)) {
@@ -96,7 +97,7 @@ export function buildAiGuide(projectName: string, cards: Record<CardSectionId, C
     const items = [
       ...(schema.nameParam ? [`名稱（指令參數 \`[${schema.nameParam}]\`）`] : []),
       ...schema.fields.map((f) => {
-        const notes = [f.type === 'image' ? '圖片' : '', f.collapsed ? '新卡片預設摺疊' : '', f.param ? `指令參數 \`[${f.param}]\`` : ''].filter(Boolean);
+        const notes = [f.group ? `分類「${f.group}」` : '', f.type === 'image' ? '圖片' : '', f.collapsed ? '新卡片預設摺疊' : '', f.param ? `指令參數 \`[${f.param}]\`` : ''].filter(Boolean);
         return notes.length > 0 ? `${f.key}（${notes.join('，')}）` : f.key;
       }),
     ];

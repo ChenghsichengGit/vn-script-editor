@@ -17,6 +17,7 @@ interface Row {
   color?: string;
   type?: 'image'; // 沒有 = 文字
   collapsed?: boolean;
+  group: string; // 分類（空白 = 沒有分類，固定顯示在分頁上面）
   from?: string;
 }
 
@@ -26,6 +27,7 @@ const HELP =
   '這個區塊的每張卡都一定會有這些欄位：新增的卡會自動帶上，按「儲存」時已有的卡缺的欄位也會補上空白欄位。\n' +
   '「類型」：文字或圖片。圖片欄位放一張圖（選擇、貼上或拖進來），圖檔存在專案的「圖片」資料夾。\n' +
   '「指令參數」：例如填「名字」，指令格式 #name [名字] 就能從所有卡的這個欄位（或名稱）裡選。\n' +
+  '「分類」：同分類的欄位放在同一個分頁，卡片上用切換的看；沒填分類的欄位固定顯示在分頁上面。分頁順序照欄位順序。\n' +
   '從範本刪掉的欄位不會從已有的卡上移除，只是不再強制。';
 export default function SchemaDialog({ title, icon, schema, specialFields, cards, onSave, onClose }: {
   title: string;
@@ -38,7 +40,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
 }) {
   const [nameParam, setNameParam] = useState(schema.nameParam ?? '');
   const [rows, setRows] = useState<Row[]>(() =>
-    schema.fields.map((f, i) => ({ id: i, name: f.key, param: f.param ?? '', icon: f.icon, color: f.color, type: f.type, collapsed: f.collapsed, from: f.key })),
+    schema.fields.map((f, i) => ({ id: i, name: f.key, param: f.param ?? '', icon: f.icon, color: f.color, type: f.type, collapsed: f.collapsed, group: f.group ?? '', from: f.key })),
   );
   const [nextId, setNextId] = useState(schema.fields.length);
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -73,7 +75,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
     setConfirmDel({ row, filled, empty: having.length - filled });
   };
   const add = (name: string) => {
-    setRows((rs) => [...rs, { id: nextId, name, param: '' }]);
+    setRows((rs) => [...rs, { id: nextId, name, param: '', group: rs[rs.length - 1]?.group ?? '' }]); // 新欄位沿用最後一個欄位的分類
     setNextId(nextId + 1);
   };
   const startDrag = (id: number, e: React.MouseEvent) => {
@@ -92,6 +94,12 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
       .filter(([name]) => name.includes(typing) && name !== typing)
       .map(([name, cmds]) => ({ label: name, detail: (defined.has(name) || here.has(name) ? '已設定・' : '') + `用在 ${cmds.join('、')}`, insert: name }));
     return { items, from: 0, to: value.length };
+  };
+  const groupSuggest = (value: string) => {
+    const typing = value.trim();
+    const names = [...new Set(rows.map((r) => r.group.trim()).filter(Boolean))];
+    const exact = names.includes(typing); // 已經是某個分類：列出其他所有分類方便換
+    return { items: names.filter((n) => n !== typing && (exact || n.includes(typing))).map((n) => ({ label: n, insert: n })), from: 0, to: value.length };
   };
   const specialOf = (name: string) => specialFields.find((f) => f.name === name.trim())?.description;
   const openAddMenu = (e: React.MouseEvent) => {
@@ -144,6 +152,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
       if (r.icon && r.color) edit.color = r.color;
       if (r.type) edit.type = r.type;
       if (r.collapsed) edit.collapsed = true;
+      if (r.group.trim()) edit.group = r.group.trim();
       if (r.from !== undefined) edit.from = r.from;
       return edit;
     });
@@ -174,6 +183,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
               <span className="schema-col">欄位名稱</span>
               <span className="schema-type">類型</span>
               <span className="schema-fold">預設</span>
+              <span className="schema-group">分類</span>
               <span className="schema-col">指令參數</span>
               <span className="schema-del" />
             </div>
@@ -183,6 +193,7 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
               <span className="schema-col"><span className="schema-fixed">名稱</span></span>
               <span className="schema-type" />
               <span className="schema-fold" />
+              <span className="schema-group" />
               <span className="schema-col schema-name-cell">
                 <SuggestInput
                   type="text"
@@ -243,6 +254,18 @@ export default function SchemaDialog({ title, icon, schema, specialFields, cards
                   >
                     {r.collapsed ? '摺疊' : '展開'}
                   </button>
+                  <span className="schema-group schema-name-cell">
+                    <SuggestInput
+                      type="text"
+                      className="schema-input"
+                      value={r.group}
+                      placeholder="（不分類）"
+                      title="同分類的欄位放在同一個分頁；不填 = 固定顯示在分頁上面"
+                      openOnFocus
+                      suggest={groupSuggest}
+                      onChange={(group) => patch(r.id, { group })}
+                    />
+                  </span>
                   <span className="schema-col schema-name-cell">
                     <SuggestInput
                       type="text"

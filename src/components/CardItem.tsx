@@ -11,7 +11,8 @@ import Icon from './Icon';
 import FieldText from './FieldText';
 import { imageSrc } from '../images';
 import { openImageViewer } from './ImageViewer';
-import { hasMarks, useChangeMarks } from '../changeMarks';
+import { fieldMarks, hasMarks, useChangeMarks } from '../changeMarks';
+import FieldGroupTabs, { groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
 
 export function CardImage({ path, className }: { path: string; className?: string }) {
   const [broken, setBroken] = useState(false);
@@ -130,6 +131,28 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     else next.add(i);
     setOpenFields(next);
   };
+  const groups = groupsIn(card.fields, schemaFields);
+  const [group, setGroup] = useFieldGroup(section, groups);
+  const fieldItem = (f: Field, i: number) =>
+    f.collapsed ? (
+      <div key={i} className="card-fold">
+        <div className="card-row clickable" onClick={() => toggleField(i)}>
+          <FieldKey name={f.key}>
+            <Icon icon={openFields.has(i) ? 'chevron-down' : 'chevron-right'} className="fold-chevron" /> {fieldIcon(f.key)}
+            {f.key}
+          </FieldKey>
+        </div>
+        {openFields.has(i) && <div className="card-fold-value">{fieldValue(f)}</div>}
+      </div>
+    ) : (
+      <div key={i} className={`card-row${isStacked(f) ? ' stacked' : ''}`}>
+        <FieldKey name={f.key}>
+          {fieldIcon(f.key)}
+          {f.key}
+        </FieldKey>
+        {fieldValue(isStacked(f) && !isImage(f) ? { ...f, value: f.value.replace(LEADING_BREAK, '') } : f, 'card-value')}
+      </div>
+    );
   return (
     <div className="card">
       <div
@@ -230,28 +253,21 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           ) : (
             <>
           {card.fields.map((f, i) =>
-            f.collapsed ? (
-              <div key={i} className="card-fold">
-                <div className="card-row clickable" onClick={() => toggleField(i)}>
-                  <FieldKey name={f.key}>
-                    <Icon icon={openFields.has(i) ? 'chevron-down' : 'chevron-right'} className="fold-chevron" /> {fieldIcon(f.key)}
-                    {f.key}
-                  </FieldKey>
-                </div>
-                {openFields.has(i) && (
-                  <div className="card-fold-value">{fieldValue(f)}</div>
-                )}
-              </div>
-            ) : (
-              <div key={i} className={`card-row${isStacked(f) ? ' stacked' : ''}`}>
-                <FieldKey name={f.key}>
-                  {fieldIcon(f.key)}
-                  {f.key}
-                </FieldKey>
-                {fieldValue(isStacked(f) && !isImage(f) ? { ...f, value: f.value.replace(LEADING_BREAK, '') } : f, 'card-value')}
-              </div>
-            ),
+            groupOf(schemaFields, f.key) ? null : fieldItem(f, i),
           )}
+          {groups.length > 0 && (
+            <FieldGroupTabs
+              groups={groups}
+              current={group}
+              onPick={setGroup}
+              className="card-groups"
+              marked={(g) => fieldMarks(tabId).some((k) => groupOf(schemaFields, k) === g)}
+            />
+          )}
+          {card.fields.map((f, i) => {
+            const g = groupOf(schemaFields, f.key);
+            return g && g === group ? fieldItem(f, i) : null;
+          })}
           {card.detail.trim() && (
             <div className="card-fold card-detail-fold">
               <div className="card-row clickable card-detail-open" title="放大看詳細內容" onClick={() => openCardViewer(section, card.id, 'detail')}>

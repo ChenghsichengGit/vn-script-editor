@@ -67,7 +67,10 @@ function normalizeSchemas(raw: unknown, ids: CardSectionId[]): Schemas {
       const icon = cleanFieldIcon(f.icon);
       const color = icon ? cleanFieldColor(f.color) : undefined;
       const type = f.type === 'image' ? ('image' as const) : undefined;
-      return [{ key, ...(param && { param }), ...(icon && { icon }), ...(color && { color }), ...(type && { type }), ...(f.collapsed === true && { collapsed: true }) }];
+      const group = typeof f.group === 'string' && f.group.trim() ? f.group.trim() : undefined;
+      return [
+        { key, ...(param && { param }), ...(icon && { icon }), ...(color && { color }), ...(type && { type }), ...(f.collapsed === true && { collapsed: true }), ...(group && { group }) },
+      ];
     });
   }
   return out;

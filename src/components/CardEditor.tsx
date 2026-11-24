@@ -14,6 +14,7 @@ import ImageFieldInput from './ImageFieldInput';
 import MemoryPanel, { MemoryLinks } from './MemoryPanel';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
 import { dragWith, reorderAt } from '../hooks';
+import FieldGroupTabs, { groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
 
 const lastPane = new Map<string, 'detail' | 'memory'>();
 const PANE_EVENT = 'vn-card-pane';
@@ -23,8 +24,9 @@ export function showCardMemory(tabId: string) {
   window.dispatchEvent(new CustomEvent<string>(PANE_EVENT, { detail: tabId }));
 }
 
-export default function CardEditor({ card, isCommand, schemaFields, flashKeys, markKey, memory, onChange }: {
+export default function CardEditor({ card, section, isCommand, schemaFields, flashKeys, markKey, memory, onChange }: {
   card: Card;
+  section: string; // 區塊 id：記住上次看的欄位分類
   markKey: string; // 這張卡的分頁 id：「外部修改」標記記在這個名字底下
   isCommand: boolean;
   schemaFields: SchemaField[];
@@ -117,6 +119,14 @@ export default function CardEditor({ card, isCommand, schemaFields, flashKeys, m
       },
     );
   };
+  const groups = groupsIn(card.fields, schemaFields);
+  const [group, setGroup] = useFieldGroup(section, groups);
+  // AI 剛改了某個分類裡的欄位：切過去讓它看得到閃一下
+  useEffect(() => {
+    const hit = flashKeys?.map((k) => groupOf(schemaFields, k)).find((g) => g && g !== group);
+    if (hit) setGroup(hit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flashKeys]);
   const special = isCommand ? commandSpecialFields(card) : new Map<string, string>();
   const [addMenu, setAddMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const openAddMenu = (e: React.MouseEvent) => {
@@ -219,41 +229,13 @@ export default function CardEditor({ card, isCommand, schemaFields, flashKeys, m
     setTimeout(done, 1000); // 保險：已經在目標位置（不會捲動）或瀏覽器不支援 scrollend 時
     box.scrollTo({ top: headingTop(headings[i]) - 12, behavior: 'smooth' });
   };
-  return (
-    <div className={`card-editor${flashKeys?.includes('__name') ? ' ai-flash-name' : ''}${flashKeys?.includes('__detail') ? ' ai-flash-detail' : ''}`} spellCheck={false}>
-      <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
-        <ChangeBar markKey={markKey} />
-        <div className="card-editor-inner">
-          {isCommand ? (
-            <SuggestInput
-              className={`card-editor-name cmd-format cmd-name${changedFields.includes('__name') ? ' ext-changed' : ''}`}
-              value={card.name}
-              placeholder="#指令 [參數]"
-              suggest={bracketSuggest}
-              onChange={(name) => {
-                clearFieldMark(markKey, '__name');
-                onChange({ name });
-              }}
-            />
-          ) : (
-            <input
-              className={`card-editor-name${changedFields.includes('__name') ? ' ext-changed' : ''}`}
-              value={card.name}
-              placeholder="名稱"
-              onChange={(e) => {
-                clearFieldMark(markKey, '__name');
-                onChange({ name: e.target.value });
-              }}
-            />
-          )}
-          <div className="card-editor-fields">
-            {fields.map((f, i) => {
-              const schemaField = schemaFields.find((s) => s.key === f.key);
-              const locked = !!schemaField;
-              const iconDef = fieldIconDef(schemaField);
-              const use = special.get(f.key.trim());
-              const tip = [use, locked ? '（範本欄位：名稱要到區塊的「欄位設定」裡改）' : ''].filter(Boolean).join('\n\n');
-              return (
+  const fieldRow = (f: Field, i: number) => {
+    const schemaField = schemaFields.find((s) => s.key === f.key);
+    const locked = !!schemaField;
+    const iconDef = fieldIconDef(schemaField);
+    const use = special.get(f.key.trim());
+    const tip = [use, locked ? '（範本欄位：名稱要到區塊的「欄位設定」裡改）' : ''].filter(Boolean).join('\n\n');
+    return (
               <div
                 className={`card-editor-row${flashKeys?.includes(f.key) ? ' ai-flash' : ''}${changedFields.includes(f.key) ? ' ext-changed' : ''}${dragged === f ? ' dragging' : ''}`}
                 key={i}
@@ -305,7 +287,50 @@ export default function CardEditor({ card, isCommand, schemaFields, flashKeys, m
                   ×
                 </button>
               </div>
-              );
+    );
+  };
+  return (
+    <div className={`card-editor${flashKeys?.includes('__name') ? ' ai-flash-name' : ''}${flashKeys?.includes('__detail') ? ' ai-flash-detail' : ''}`} spellCheck={false}>
+      <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
+        <ChangeBar markKey={markKey} />
+        <div className="card-editor-inner">
+          {isCommand ? (
+            <SuggestInput
+              className={`card-editor-name cmd-format cmd-name${changedFields.includes('__name') ? ' ext-changed' : ''}`}
+              value={card.name}
+              placeholder="#指令 [參數]"
+              suggest={bracketSuggest}
+              onChange={(name) => {
+                clearFieldMark(markKey, '__name');
+                onChange({ name });
+              }}
+            />
+          ) : (
+            <input
+              className={`card-editor-name${changedFields.includes('__name') ? ' ext-changed' : ''}`}
+              value={card.name}
+              placeholder="名稱"
+              onChange={(e) => {
+                clearFieldMark(markKey, '__name');
+                onChange({ name: e.target.value });
+              }}
+            />
+          )}
+          <div className="card-editor-fields">
+            {fields.map((f, i) => {
+              if (groupOf(schemaFields, f.key)) return null; // 有分類的放到下面的分頁裡
+              return fieldRow(f, i);
+            })}
+            <FieldGroupTabs
+              groups={groups}
+              current={group}
+              onPick={setGroup}
+              className="card-editor-groups"
+              marked={(g) => changedFields.some((k) => groupOf(schemaFields, k) === g)}
+            />
+            {fields.map((f, i) => {
+              const g = groupOf(schemaFields, f.key);
+              return g && g === group ? fieldRow(f, i) : null;
             })}
             <button className="text-btn" onClick={openAddMenu}>＋ 新增欄位</button>
           </div>

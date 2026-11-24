@@ -53,6 +53,7 @@ import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, 
 import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
 import SectionsDialog from './components/SectionsDialog';
 import { removeUnusedImages, setImageRoot } from './images';
+import { groupOf, showFieldGroup } from './components/FieldGroupTabs';
 import { remapMemories, scriptPath } from './memories';
 import { setProgress } from './progress';
 import { SceneInfo, remapScenePaths, renameInScenes, sceneItems } from './scene';
@@ -546,7 +547,12 @@ export default function App() {
     if (t.kind === 'file') {
       openTab(t.fileId);
       revealInEditor(t.fileId, m.line, m.start + 1, m.end + 1);
-    } else cardOps.open(t.section, t.cardId);
+    } else {
+      // 找到的欄位在別的分類：切到那個分類
+      const key = typeof t.part === 'object' ? findCard(t.section, t.cardId)?.fields[t.part.field]?.key : undefined;
+      if (key) showFieldGroup(t.section, groupOf(schemas[t.section].fields, key));
+      cardOps.open(t.section, t.cardId);
+    }
   };
   const searchData = useMemo(() => ({ files, contents, cards }), [files, contents, cards]);
   const chord = useRef(0); // 按了 Ctrl+K 的時間：之後 1.5 秒內按 S = 全部存檔、按 Ctrl+\ = 向下分割
@@ -838,13 +844,14 @@ export default function App() {
     return takenNames(section, folder, { id }).has((sanitizeName(name) + '.md').toLowerCase()) ? '已經有同名的項目' : null;
   };
   const saveSchema = (section: CardSectionId, nameParam: string, edits: SchemaEdit[], removals: FieldRemoval[] = []) => {
-    const schema = edits.map(({ key, param, icon, color, type, collapsed }) => ({
+    const schema = edits.map(({ key, param, icon, color, type, collapsed, group }) => ({
       key,
       ...(collapsed && { collapsed: true }),
       ...(param && { param }),
       ...(icon && { icon }),
       ...(icon && color && { color }),
       ...(type && { type }),
+      ...(group && { group }),
     }));
     const renames = new Map(edits.filter((e) => e.from && e.from !== e.key).map((e) => [e.from!, e.key]));
     const removeMode = new Map(removals.map((r) => [r.key, r.mode]));
