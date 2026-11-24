@@ -9,6 +9,7 @@ import Outline, { Heading } from './Outline';
 import { SAVE_ALL_EVENT } from '../model';
 import { attachModel } from '../changeMarks';
 import ChangeBar from './ChangeBar';
+import { ensureScriptFont } from '../fonts';
 
 interface Props {
   fileId: string;
@@ -57,6 +58,10 @@ export default function ScriptEditor(props: Props) {
   useEffect(() => {
     if (props.active) report();
   }, [props.active]);
+  // 網路字型載完後，Monaco 要重新量字寬，游標才不會跑位
+  useEffect(() => {
+    void ensureScriptFont(settings.scriptFontFamily).then(() => monacoRef.current?.editor.remeasureFonts());
+  }, [settings.scriptFontFamily]);
   useEffect(
     () => () => {
       const model = modelRef.current;

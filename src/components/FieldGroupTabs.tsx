@@ -15,29 +15,32 @@ export function groupsIn(fields: Field[], schemaFields: SchemaField[]): string[]
   return out;
 }
 
-const lastGroup = new Map<string, string>(); // 區塊 → 上次看的分類（卡片編輯頁、放大檢視、側邊欄共用）
+// 每個地方的每張卡各自記住上次看的分類，互不連動
+// key 例如 'editor:<卡片分頁 id>'、'side:<卡片分頁 id>'、'viewer:<卡片分頁 id>'
+const lastGroup = new Map<string, string>();
 const GROUP_EVENT = 'vn-field-group';
+export const groupKey = (place: 'editor' | 'side' | 'viewer', cardTab: string) => `${place}:${cardTab}`;
 
 // 目前看的分類；記住的那個這張卡沒有時，看第一個
-export function useFieldGroup(section: string, groups: string[]): [string, (g: string) => void] {
-  const [picked, setPicked] = useState(() => lastGroup.get(section) ?? '');
-  useEffect(() => setPicked(lastGroup.get(section) ?? ''), [section]);
+export function useFieldGroup(key: string, groups: string[]): [string, (g: string) => void] {
+  const [picked, setPicked] = useState(() => lastGroup.get(key) ?? '');
+  useEffect(() => setPicked(lastGroup.get(key) ?? ''), [key]);
   useEffect(() => {
     const on = (e: Event) => {
-      const d = (e as CustomEvent<{ section: string; group: string }>).detail;
-      if (d.section === section) setPicked(d.group);
+      const d = (e as CustomEvent<{ key: string; group: string }>).detail;
+      if (d.key === key) setPicked(d.group);
     };
     window.addEventListener(GROUP_EVENT, on);
     return () => window.removeEventListener(GROUP_EVENT, on);
-  }, [section]);
-  return [groups.includes(picked) ? picked : (groups[0] ?? ''), (g) => showFieldGroup(section, g)]; // 同一個區塊開著的卡一起切換
+  }, [key]);
+  return [groups.includes(picked) ? picked : (groups[0] ?? ''), (g) => showFieldGroup(key, g)];
 }
 
-// 從外面切換分類（搜尋跳到某個欄位、AI 改了某個欄位時）
-export function showFieldGroup(section: string, group: string) {
+// 從外面切換某個地方的分類（搜尋跳到某個欄位時切卡片編輯頁）
+export function showFieldGroup(key: string, group: string) {
   if (!group) return;
-  lastGroup.set(section, group);
-  window.dispatchEvent(new CustomEvent(GROUP_EVENT, { detail: { section, group } }));
+  lastGroup.set(key, group);
+  window.dispatchEvent(new CustomEvent(GROUP_EVENT, { detail: { key, group } }));
 }
 
 // 這個欄位現在看不看得到：沒有分類的一律看得到

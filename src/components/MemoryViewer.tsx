@@ -4,7 +4,7 @@ import { Card, CardSectionId, Field, MEMORY_KINDS, Memory, SchemaField, cardTabI
 import { findTargetCard, relationSummary, relations, scriptPath, targetIcon } from '../memories';
 import { sectionDef, sectionMeta } from '../sections';
 import { childFolderOf } from '../projectFiles';
-import FieldGroupTabs, { fieldShown, groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
+import FieldGroupTabs, { fieldShown, groupKey, groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
 import { fieldIconDef } from '../fieldIcons';
 import { CutSelect, MemoryRelations, useCut } from './MemoryPanel';
 import { showCardMemory } from './CardEditor';
@@ -227,7 +227,7 @@ function CardData({ focus, card, schemaFields, memories, total, targetIcon, onRe
     return (s ? s.type : f.type) === 'image';
   };
   const groups = groupsIn(card.fields, schemaFields);
-  const [group, setGroup] = useFieldGroup(section, groups);
+  const [group, setGroup] = useFieldGroup(groupKey('viewer', cardTabId(section, card.id)), groups);
   const shownNow = card.fields.filter((f) => fieldShown(schemaFields, f.key, group));
   const images = shownNow.filter((f) => isImage(f) && f.value.trim());
   const textsOf = (grouped: boolean) => shownNow.filter((f) => !isImage(f) && !!groupOf(schemaFields, f.key) === grouped);

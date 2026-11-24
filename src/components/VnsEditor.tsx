@@ -14,6 +14,7 @@ import { RubyNode, promptRuby } from './RubyMark';
 import { blockOf, docToVns, isCommandText, isCommentText, lineOf, vnsToDoc } from '../vnsDoc';
 import { registerScriptView } from '../scriptLanguage';
 import { DEFAULT_FONT_FAMILY, getSettings, textPx, updateSettings, useSettings } from '../settings';
+import { ensureScriptFont } from '../fonts';
 import { useLatest } from '../hooks';
 import Outline, { Heading } from './Outline';
 import ChangeBar from './ChangeBar';
@@ -360,6 +361,7 @@ export default function VnsEditor(props: {
     setActiveHeading(current);
   };
   const jump = (i: number) => scrollRef.current?.scrollTo({ top: headingTop(headings[i]) - 12, behavior: 'smooth' });
+  useEffect(() => void ensureScriptFont(settings.scriptFontFamily), [settings.scriptFontFamily]); // 網路字型：加上樣式表，畫面上的字才會下載
   if (!editor) return null;
   const setLevel = (level: number) => (uncommentBlocks(editor), level ? editor.chain().focus().setNode('heading', { level }).run() : editor.chain().focus().setNode('paragraph').run());
   const isHeading = (level: number) => editor.isActive('heading', { level });

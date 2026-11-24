@@ -59,6 +59,48 @@
 .settings-note { margin: 6px 0; padding: 6px 10px; font-size: 12px; line-height: 1.6; color: var(--text-dim); background: var(--bg-tab); border-radius: 4px; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 0; }
 .settings-row + .settings-row { border-top: 1px solid var(--border); }
+/* 劇本字型：設定頁一列，按了開字型卡視窗 */
+.font-current { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.font-dialog { position: fixed; inset: 0; z-index: 1001; display: flex; align-items: center; justify-content: center; background: var(--overlay); }
+.font-dialog-box {
+  width: min(900px, calc(100% - 64px));
+  height: min(640px, calc(100% - 64px));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px var(--shadow);
+}
+.font-dialog-box .settings-header { gap: 16px; }
+.font-dialog-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+.font-picker-sample { flex: 1; max-width: 420px; }
+.font-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.font-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-tab);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.font-card:hover { border-color: var(--text-dim); }
+.font-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.font-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.font-card-name { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.font-card-badge { flex: none; padding: 0 6px; font-size: 10px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; }
+.font-card-badge.web { color: var(--accent); border-color: var(--accent); }
+.font-card-style { font-size: 11px; color: var(--text-dim); }
+.font-card-sample { margin-top: 2px; font-size: 17px; line-height: 1.6; word-break: break-all; }
+.font-custom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; color: var(--text-dim); }
+.font-custom.on .settings-text { border-color: var(--accent); }
+.font-custom-preview { flex-basis: 100%; font-size: 17px; color: var(--text); }
 .settings-label { min-width: 0; }
 .settings-hint { margin-top: 2px; font-size: 11px; color: var(--text-dim); }
 .settings-control { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_FONT_FAMILY, FontSizeKey, LIMITS, Settings, resetSettings, updateSettings, useSettings } from '../settings';
+import { FontSizeKey, LIMITS, Settings, resetSettings, updateSettings, useSettings } from '../settings';
+import FontPicker from './FontPicker';
 import './SettingsDialog.css';
-import { useEscape } from '../hooks';
+import { useKeys } from '../hooks';
 import Icon from './Icon';
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -103,7 +104,7 @@ const WHEEL_HINT = '在這個區域按住 Ctrl 滾滑鼠滾輪也可以調整';
 
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const s = useSettings();
-  useEscape(onClose);
+  useKeys((e) => e.key === 'Escape' && !document.querySelector('.font-dialog') && (onClose(), true), [onClose]); // 字型視窗開著時 Esc 只關它
   const [cat, setCatState] = useState<Category>(lastCategory);
   const setCat = (c: Category) => {
     lastCategory = c;
@@ -172,16 +173,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           )}
           {cat === 'script' && (
             <>
-          <Row label="字型" hint="輸入字型名稱，例如 微軟正黑體；空白 = 預設">
-            <input
-              type="text"
-              className="settings-text"
-              value={s.scriptFontFamily}
-              placeholder={`預設（${DEFAULT_FONT_FAMILY}）`}
-              title={DEFAULT_FONT_FAMILY}
-              onChange={(e) => updateSettings({ scriptFontFamily: e.target.value })}
-            />
-          </Row>
+          <FontPicker value={s.scriptFontFamily} onChange={(scriptFontFamily) => updateSettings({ scriptFontFamily })} />
           <Row label="Notion 式劇本編輯器" hint="標題、標音直接顯示效果，看不到符號；關掉就改回原本的程式碼式編輯器"><Toggle checked={s.richScript} onChange={(v) => updateSettings({ richScript: v })} /></Row>
           {s.richScript ? (
             <div className="settings-note">「自動換行」和「小地圖」只有程式碼式編輯器才有，關掉上面的 Notion 式劇本編輯器就會出現。</div>

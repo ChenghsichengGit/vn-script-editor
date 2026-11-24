@@ -12,7 +12,7 @@ import FieldText from './FieldText';
 import { imageSrc } from '../images';
 import { openImageViewer } from './ImageViewer';
 import { fieldMarks, hasMarks, useChangeMarks } from '../changeMarks';
-import FieldGroupTabs, { groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
+import FieldGroupTabs, { groupKey, groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
 
 export function CardImage({ path, className }: { path: string; className?: string }) {
   const [broken, setBroken] = useState(false);
@@ -132,7 +132,7 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
     setOpenFields(next);
   };
   const groups = groupsIn(card.fields, schemaFields);
-  const [group, setGroup] = useFieldGroup(section, groups);
+  const [group, setGroup] = useFieldGroup(groupKey('side', tabId), groups);
   const fieldItem = (f: Field, i: number) =>
     f.collapsed ? (
       <div key={i} className="card-fold">

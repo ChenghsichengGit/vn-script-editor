@@ -15,7 +15,7 @@ import MemoryPanel, { MemoryLinks } from './MemoryPanel';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
 import { dragWith, reorderAt } from '../hooks';
 import { useCtrlWheel } from '../settings';
-import FieldGroupTabs, { groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
+import FieldGroupTabs, { groupKey, groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
 
 const lastPane = new Map<string, 'detail' | 'memory'>();
 const PANE_EVENT = 'vn-card-pane';
@@ -25,9 +25,8 @@ export function showCardMemory(tabId: string) {
   window.dispatchEvent(new CustomEvent<string>(PANE_EVENT, { detail: tabId }));
 }
 
-export default function CardEditor({ card, section, isCommand, schemaFields, flashKeys, markKey, memory, onChange }: {
+export default function CardEditor({ card, isCommand, schemaFields, flashKeys, markKey, memory, onChange }: {
   card: Card;
-  section: string; // 區塊 id：記住上次看的欄位分類
   markKey: string; // 這張卡的分頁 id：「外部修改」標記記在這個名字底下
   isCommand: boolean;
   schemaFields: SchemaField[];
@@ -122,7 +121,7 @@ export default function CardEditor({ card, section, isCommand, schemaFields, fla
     );
   };
   const groups = groupsIn(card.fields, schemaFields);
-  const [group, setGroup] = useFieldGroup(section, groups);
+  const [group, setGroup] = useFieldGroup(groupKey('editor', markKey), groups);
   // AI 剛改了某個分類裡的欄位：切過去讓它看得到閃一下
   useEffect(() => {
     const hit = flashKeys?.map((k) => groupOf(schemaFields, k)).find((g) => g && g !== group);

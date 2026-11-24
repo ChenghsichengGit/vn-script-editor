@@ -97,7 +97,6 @@ function EditorPanel({ api, params }: IDockviewPanelProps<PanelParams>) {
       <CardEditor
         memory={memory}
         card={card}
-        section={cardRef.section}
         isCommand={cardRef.section === 'commands'}
         schemaFields={ctx.schemas[cardRef.section].fields}
         flashKeys={ctx.flash?.tabId === tabId ? ctx.flash.keys : undefined}

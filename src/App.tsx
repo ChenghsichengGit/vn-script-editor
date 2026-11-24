@@ -53,7 +53,7 @@ import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, 
 import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
 import SectionsDialog from './components/SectionsDialog';
 import { removeUnusedImages, setImageRoot } from './images';
-import { groupOf, showFieldGroup } from './components/FieldGroupTabs';
+import { groupKey, groupOf, showFieldGroup } from './components/FieldGroupTabs';
 import { remapMemories, scriptPath } from './memories';
 import { setProgress } from './progress';
 import { SceneInfo, remapScenePaths, renameInScenes, sceneItems } from './scene';
@@ -560,7 +560,7 @@ export default function App() {
     } else {
       // 找到的欄位在別的分類：切到那個分類
       const key = typeof t.part === 'object' ? findCard(t.section, t.cardId)?.fields[t.part.field]?.key : undefined;
-      if (key) showFieldGroup(t.section, groupOf(schemas[t.section].fields, key));
+      if (key) showFieldGroup(groupKey('editor', cardTabId(t.section, t.cardId)), groupOf(schemas[t.section].fields, key));
       cardOps.open(t.section, t.cardId);
     }
   };
