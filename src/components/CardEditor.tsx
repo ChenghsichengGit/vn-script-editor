@@ -291,8 +291,13 @@ export default function CardEditor({ card, isCommand, schemaFields, flashKeys, m
     );
   };
   return (
-    <div className={`card-editor${flashKeys?.includes('__name') ? ' ai-flash-name' : ''}${flashKeys?.includes('__detail') ? ' ai-flash-detail' : ''}`} spellCheck={false}>
-      <div className="card-editor-scroll" ref={scrollRef} onScroll={onScroll}>
+    <div
+      className={`card-editor${flashKeys?.includes('__name') ? ' ai-flash-name' : ''}${flashKeys?.includes('__detail') ? ' ai-flash-detail' : ''}`}
+      spellCheck={false}
+      ref={scrollRef} // 整頁一起捲：滾動條在最右邊（目錄的右側），目錄固定在右上
+      onScroll={onScroll}
+    >
+      <div className="card-editor-scroll">
         <ChangeBar markKey={markKey} />
         <div className="card-editor-inner">
           {isCommand ? (

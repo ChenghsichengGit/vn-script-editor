@@ -397,9 +397,20 @@ export default function VnsEditor(props: {
           onScroll={onScroll}
           style={{ fontFamily: font, fontSize: textPx(settings, 'scriptFontSize') }}
           onContextMenu={(e) => (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))}
-          onMouseDown={(e) => e.target === e.currentTarget && (e.preventDefault(), editor.commands.focus('end'))}
+          onMouseDown={(e) => (e.target as HTMLElement).dataset.blank !== undefined && (e.preventDefault(), editor.commands.focus('end'))}
+          data-blank
         >
-          <EditorContent editor={editor} />
+          {/* 目錄放在捲動區裡面、固定在右上：滾動條就在目錄的右邊 */}
+          <div className="vns-scroll-row" data-blank>
+            <div className="vns-doc-col" data-blank>
+              <EditorContent editor={editor} />
+            </div>
+            {headings.length > 0 && (
+              <div className="vns-outline-slot" onContextMenu={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                <Outline headings={headings} active={activeHeading} onJump={jump} />
+              </div>
+            )}
+          </div>
         </div>
         <BubbleMenu editor={editor} tippyOptions={{ duration: 100, placement: 'top-start' }} className="bubble-toolbar">
           {bubble.map((b) => (
@@ -408,7 +419,6 @@ export default function VnsEditor(props: {
         </BubbleMenu>
         <VnsCompletionPopup editor={editor} />
       </div>
-      {headings.length > 0 && <Outline headings={headings} active={activeHeading} onJump={jump} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
     </div>
   );
