@@ -7,7 +7,7 @@ import EditorDock, { EditorDockHandle } from './components/EditorDock';
 import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import SettingsDialog from './components/SettingsDialog';
-import { getSettings, updateSettings, useSettings } from './settings';
+import { getSettings, textPx, updateSettings, useSettings } from './settings';
 import {
   Card,
   CardOps,
@@ -70,8 +70,12 @@ import {
   Side,
   dockSection,
   floatSection,
+  hostOf,
   loadLayout,
+  membersOf,
   reconcileLayout,
+  stackSection,
+  unstack,
 } from './layout';
 import {
   ProjectData,
@@ -249,9 +253,15 @@ export default function App() {
     if (settings.theme === 'dark') delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = settings.theme;
   }, [settings.theme]);
+  // 各區域的文字大小（除掉 UI 大小，畫面放大時文字不跟著變）
   useEffect(() => {
-    document.documentElement.style.setProperty('--card-font-size', `${settings.cardFontSize}px`);
-  }, [settings.cardFontSize]);
+    const css = document.documentElement.style;
+    const card = textPx(settings, 'cardFontSize');
+    css.setProperty('--card-font-size', `${card}px`);
+    css.setProperty('--card-field-size', `${(card * 13) / 15}px`); // 欄位、名稱：比詳細內容小一點（預設 13 對 15）
+    css.setProperty('--side-zoom', String(textPx(settings, 'sidebarFontSize') / 13)); // 側邊欄內容原本以 13px 為準
+    css.setProperty('--viewer-zoom', String(textPx(settings, 'viewerFontSize') / 13));
+  }, [settings.cardFontSize, settings.sidebarFontSize, settings.viewerFontSize, settings.uiZoom]);
   const dirtyKeyOf = (tabId: string) => (parseCardTab(tabId) ? tabId : fileKey(tabId));
   const confirmTabClose = (tabId: string) =>
     latest.current.dirty.has(dirtyKeyOf(tabId))
@@ -732,19 +742,33 @@ export default function App() {
   useEffect(() => window.api.onMenu((ev) => void onMenuRef.current(ev)), []);
   useEffect(() => writeJSON(LAYOUT_KEY, layout), [layout]);
   const existing = new Set(sectionOrder());
-  const visibleIds = (ids: SectionId[]) => ids.filter((s) => existing.has(s) && !layout.hidden.includes(s));
+  // 疊成標籤：一格裡現在看得到的區塊（存在、沒被隱藏），照標籤順序
+  const tabsIn = (slot: SectionId) => membersOf(layout, slot).filter((s) => existing.has(s) && !layout.hidden.includes(s));
+  const shownIn = (slot: SectionId) => {
+    const list = tabsIn(slot);
+    const cur = layout.current[slot];
+    return cur && list.includes(cur) ? cur : (list[0] ?? slot);
+  };
+  const visibleIds = (ids: SectionId[]) => ids.filter((s) => tabsIn(s).length > 0);
   const leftSections = visibleIds(layout.left.sections);
   const rightSections = visibleIds(layout.right.sections);
-  const floatPanels = layout.floating.filter((f) => existing.has(f.id) && !layout.hidden.includes(f.id));
+  const floatPanels = layout.floating.filter((f) => tabsIn(f.id).length > 0);
   const showLeft = leftVisible && leftSections.length > 0;
   const showRight = rightSections.length > 0;
-  const activeSections = sectionOrder().filter((s) => !layout.hidden.includes(s) && (layout.left.sections.includes(s) ? leftVisible : true));
+  const activeSections = sectionOrder().filter((s) => !layout.hidden.includes(s) && (layout.left.sections.includes(hostOf(layout, s)) ? leftVisible : true));
   const toggleSection = (id: SectionId) => {
+    const slot = hostOf(layout, id);
+    // 疊在後面的標籤：切過去（看不到的話順便打開），不是隱藏
+    if (membersOf(layout, slot).length > 1 && shownIn(slot) !== id) {
+      setLayout((l) => ({ ...l, current: { ...l.current, [slot]: id }, hidden: l.hidden.filter((s) => s !== id) }));
+      if (layout.left.sections.includes(slot)) setLeftVisible(true);
+      return;
+    }
     if (activeSections.includes(id)) {
       setLayout((l) => ({ ...l, hidden: [...l.hidden, id] }));
     } else {
-      setLayout((l) => ({ ...l, hidden: l.hidden.filter((s) => s !== id) }));
-      if (layout.left.sections.includes(id)) setLeftVisible(true);
+      setLayout((l) => ({ ...l, hidden: l.hidden.filter((s) => s !== id), ...(membersOf(l, slot).length > 1 && { current: { ...l.current, [slot]: id } }) }));
+      if (layout.left.sections.includes(slot)) setLeftVisible(true);
     }
   };
   const startWidthResize = (side: Side, e: React.MouseEvent) => {
@@ -764,16 +788,20 @@ export default function App() {
   const mainRef = useRef<HTMLDivElement>(null);
   const [panelDrag, setPanelDrag] = useState<{
     id: SectionId;
+    single: boolean; // 拖的是一個標籤（不是整格）
     ghost: boolean; // 從側邊欄拉出來的才有跟著滑鼠的標籤；浮動面板是整個視窗本身在動
     x: number;
     y: number;
     hit: PanelHit | null;
   } | null>(null);
-  const startPanelDrag = (id: SectionId, e: React.MouseEvent) => {
+  // single = 按住的是標籤：只拖這一個區塊（從那一疊拿出來）；否則拖的是整格（標題列空白處；浮動視窗就是移動視窗）
+  const startPanelDrag = (id: SectionId, e: React.MouseEvent, single = false) => {
     e.preventDefault();
     const startX = e.clientX;
     const startY = e.clientY;
-    const float = layout.floating.find((f) => f.id === id);
+    const float = single ? undefined : layout.floating.find((f) => f.id === id);
+    const alone = membersOf(layout, hostOf(layout, id)).length < 2;
+    const skipSlot = !single || alone ? id : null; // 放到自己身上沒意義的那一格
     const layerRect = mainRef.current!.getBoundingClientRect();
     const shown = float
       ? document.querySelector<HTMLElement>(`.float-panel[data-float="${id}"]`)?.getBoundingClientRect()
@@ -788,27 +816,34 @@ export default function App() {
       (ev) => {
         if (!started && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
         started = true;
-        hit = hitTestPanel(ev.clientX, ev.clientY, id, !float);
+        hit = hitTestPanel(ev.clientX, ev.clientY, id, skipSlot, !float);
         if (float) {
           const x = Math.min(Math.max(0, ev.clientX - layerRect.left - grabX), Math.max(0, layerRect.width - floatW));
           const y = Math.min(Math.max(0, ev.clientY - layerRect.top - grabY), Math.max(0, layerRect.height - floatH));
           patchFloat(id, { x, y, w: floatW, h: floatH }); // 一開始拖就把縮小後的大小定下來，面板才不會邊拖邊變大
         }
-        setPanelDrag({ id, ghost: !float, x: ev.clientX, y: ev.clientY, hit });
+        setPanelDrag({ id, single, ghost: !float, x: ev.clientX, y: ev.clientY, hit });
       },
       (ev) => {
         setPanelDrag(null);
         const target = hit;
         if (!started || !target) return;
-        if (target.kind === 'dock') {
-          setLayout((l) => dockSection(l, id, target.side, target.before));
+        // 只拖一個標籤：先從那一疊拿出來（拿走佔位的區塊時，原本插在它前面的改成插在接手的區塊前面）
+        const free = (l: Layout) => (single ? unstack(l, id) : l);
+        const heir = single ? membersOf(layout, id).find((s) => s !== id) : undefined;
+        if (target.kind === 'stack') {
+          setLayout((l) => stackSection(l, id, target.host, target.before, !single));
+          if (layout.left.sections.includes(target.host)) setLeftVisible(true);
+        } else if (target.kind === 'dock') {
+          const before = target.before === id && heir ? heir : target.before;
+          setLayout((l) => dockSection(free(l), id, target.side, before));
           if (target.side === 'left') setLeftVisible(true);
         } else if (!float) {
           const w = Math.min(FLOAT_DEFAULT_W, layerRect.width);
           const h = Math.min(FLOAT_DEFAULT_H, layerRect.height);
           const x = Math.min(Math.max(0, ev.clientX - layerRect.left - 40), Math.max(0, layerRect.width - w));
           const y = Math.min(Math.max(0, ev.clientY - layerRect.top - 12), Math.max(0, layerRect.height - h));
-          setLayout((l) => floatSection(l, id, { x, y, w: Math.max(FLOAT_MIN_W, w), h: Math.max(FLOAT_MIN_H, h) }));
+          setLayout((l) => floatSection(free(l), id, { x, y, w: Math.max(FLOAT_MIN_W, w), h: Math.max(FLOAT_MIN_H, h) }));
         }
       },
     );
@@ -1395,6 +1430,12 @@ export default function App() {
     folded: layout.folded,
     onFold: (id: SectionId, fold: boolean) => setLayout((l) => ({ ...l, folded: fold ? [...new Set([...l.folded, id])] : l.folded.filter((s) => s !== id) })),
     scene: sceneInfo,
+    stacks: {
+      members: tabsIn,
+      shown: shownIn,
+      pick: (slot: SectionId, id: SectionId) => setLayout((l) => ({ ...l, current: { ...l.current, [slot]: id } })),
+      onTabDrag: (id: SectionId, e: React.MouseEvent) => startPanelDrag(id, e, true),
+    },
   };
   const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
   const dockZones: Side[] = panelDrag ? (['left', 'right'] as Side[]).filter((s) => !(s === 'left' ? showLeft : showRight)) : [];
@@ -1482,7 +1523,11 @@ export default function App() {
       )}
       {panelDrag?.ghost && (
         <div className="drag-ghost" style={{ left: panelDrag.x + 12, top: panelDrag.y + 8 }}>
-          <Icon icon={sectionMeta(panelDrag.id).icon} /> {sectionMeta(panelDrag.id).title}
+          {(panelDrag.single ? [panelDrag.id] : tabsIn(panelDrag.id)).map((s) => (
+            <span key={s} className="drag-ghost-item">
+              <Icon icon={sectionMeta(s).icon} /> {sectionMeta(s).title}
+            </span>
+          ))}
         </div>
       )}
       <StatusBar
@@ -1525,23 +1570,52 @@ const countChars = (text: string) => text.replace(/\s/g, '').length.toLocaleStri
 type Box = { left: number; top: number; width: number; height: number };
 type PanelHit =
   | { kind: 'dock'; side: Side; before: SectionId | null; mark: 'line' | 'zone'; rect: Box } // 放進側邊欄，插在 before 前面（null = 最後）
-  | { kind: 'float'; mark: 'zone'; rect: Box }; // 變成浮動視窗
+  | { kind: 'float'; mark: 'zone'; rect: Box } // 變成浮動視窗
+  | { kind: 'stack'; host: SectionId; before: SectionId | null; mark: 'line' | 'zone'; rect: Box }; // 疊到某一格，插在 before 這個標籤前面
 const boxOf = (r: DOMRect): Box => ({ left: r.left, top: r.top, width: r.width, height: r.height });
 
-function hitTestPanel(x: number, y: number, dragId: SectionId, allowFloat: boolean): PanelHit | null {
+// 滑鼠在某一格（側邊欄或浮動視窗）的標題列上：疊進去；有標籤列就算插在哪個標籤前面
+function hitTestStack(x: number, y: number, dragId: SectionId, skipSlot: SectionId | null): PanelHit | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    const header = (el as HTMLElement).closest?.<HTMLElement>('.section-header');
+    const section = header?.parentElement;
+    if (!header || !section?.classList.contains('section')) continue;
+    const host = section.dataset.slot as SectionId | undefined;
+    if (!host || host === skipSlot) continue; // 是自己（例如正在拖的浮動視窗）：看底下那一層
+    const tabs = [...header.querySelectorAll<HTMLElement>('.section-tab')].filter((t) => t.dataset.tab !== dragId);
+    if (tabs.length === 0) return { kind: 'stack', host, before: null, mark: 'zone', rect: boxOf(header.getBoundingClientRect()) };
+    const hr = header.getBoundingClientRect();
+    let before: SectionId | null = null;
+    let lineX = tabs[tabs.length - 1].getBoundingClientRect().right;
+    for (const t of tabs) {
+      const tr = t.getBoundingClientRect();
+      if (x < tr.left + tr.width / 2) {
+        before = t.dataset.tab as SectionId;
+        lineX = tr.left;
+        break;
+      }
+    }
+    return { kind: 'stack', host, before, mark: 'line', rect: { left: lineX - 1, top: hr.top + 2, width: 3, height: hr.height - 4 } };
+  }
+  return null;
+}
+
+function hitTestPanel(x: number, y: number, dragId: SectionId, skipSlot: SectionId | null, allowFloat: boolean): PanelHit | null {
   const inside = (r: DOMRect) => x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+  const onHeader = hitTestStack(x, y, dragId, skipSlot);
+  if (onHeader) return onHeader;
   for (const side of ['left', 'right'] as Side[]) {
     const bar = document.querySelector<HTMLElement>(`.sidebar[data-side="${side}"]`);
     if (bar) {
       const r = bar.getBoundingClientRect();
       if (!inside(r)) continue;
-      const panels = [...bar.querySelectorAll<HTMLElement>(':scope > .section')].filter((el) => el.dataset.section !== dragId);
+      const panels = [...bar.querySelectorAll<HTMLElement>(':scope > .section')].filter((el) => el.dataset.slot !== skipSlot);
       let before: SectionId | null = null;
       let lineY = panels.length ? panels[panels.length - 1].getBoundingClientRect().bottom : r.top;
       for (const el of panels) {
         const pr = el.getBoundingClientRect();
         if (y < pr.top + pr.height / 2) {
-          before = el.dataset.section as SectionId;
+          before = el.dataset.slot as SectionId;
           lineY = pr.top;
           break;
         }

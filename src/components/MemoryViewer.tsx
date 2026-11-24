@@ -13,6 +13,7 @@ import { RichTextView } from './RichTextEditor';
 import FieldText from './FieldText';
 import Icon, { IconDef } from './Icon';
 import { eventChannel, useKeys } from '../hooks';
+import { useCtrlWheel } from '../settings';
 
 type View = 'data' | 'timeline' | 'relations';
 
@@ -67,6 +68,8 @@ function MemoryViewer({ section, card, focus, initialView, cards, files, schemaF
   onClose: () => void;
 }) {
   const hasMemory = !!sectionDef(section)?.memory;
+  const boxRef = useRef<HTMLDivElement>(null);
+  useCtrlWheel(boxRef, 'viewerFontSize');
   const [view, setViewState] = useState<View>(hasMemory ? initialView : 'data');
   const setView = (v: View) => {
     if (v !== 'data') lastMemView = v;
@@ -112,7 +115,7 @@ function MemoryViewer({ section, card, focus, initialView, cards, files, schemaF
   });
   return (
     <div className="memory-viewer" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="memory-viewer-box">
+      <div className="memory-viewer-box" ref={boxRef}>
         <div className="memory-viewer-head">
           <span className="memory-viewer-title">
             <Icon icon={sectionMeta(section).icon} /> {card.name || '（未命名）'}

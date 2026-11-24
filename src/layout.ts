@@ -30,6 +30,9 @@ export interface Layout {
   problemsOpen: boolean; // 編輯區下方的面板（問題 Ctrl+Shift+M／搜尋 Ctrl+Shift+F）開著沒（名稱沿用舊的，才讀得到舊設定）
   problemsHeight: number;
   panelTab: 'problems' | 'search'; // 下方面板顯示哪個分頁
+  // 疊成標籤的區塊：key = 佔位的區塊（它的 id 放在側邊欄清單或浮動視窗裡），值 = 這一疊所有的區塊（標籤順序，含佔位的）
+  tabs: Partial<Record<SectionId, SectionId[]>>;
+  current: Partial<Record<SectionId, SectionId>>; // 每一疊目前顯示哪個標籤
 }
 
 export const LAYOUT_KEY = 'vn-editor-layout';
@@ -51,6 +54,8 @@ const defaultLayout = (): Layout => ({
   problemsOpen: false,
   problemsHeight: 180,
   panelTab: 'problems',
+  tabs: {},
+  current: {},
 });
 
 const isSection = (x: unknown): x is SectionId => typeof x === 'string' && x !== '';
@@ -96,6 +101,21 @@ function normalizeLayout(raw: unknown): Layout {
       z: num(f.z, floating.length + 1),
     });
   }
+  // 疊成標籤：佔位的區塊要在清單或浮動視窗裡，其他成員不能在別的地方出現過
+  const tabs: Layout['tabs'] = {};
+  const current: Layout['current'] = {};
+  const hosts = new Set(seen);
+  for (const [host, list] of Object.entries(r.tabs && typeof r.tabs === 'object' ? r.tabs : {})) {
+    if (!hosts.has(host) || !Array.isArray(list)) continue;
+    const members = [host, ...list.filter((s: unknown): s is SectionId => isSection(s) && s !== host && !seen.has(s))];
+    members.slice(1).forEach((s) => seen.add(s));
+    const ordered = list.filter((s: unknown) => members.includes(s as SectionId)) as SectionId[];
+    if (!ordered.includes(host)) ordered.unshift(host);
+    if (ordered.length < 2) continue;
+    tabs[host] = ordered;
+    const cur = r.current?.[host];
+    if (isSection(cur) && ordered.includes(cur)) current[host] = cur;
+  }
   for (const id of sectionOrder()) if (!seen.has(id)) left.push(id); // 漏掉的補回左邊
   return {
     left: { sections: left, width: clampWidth(num(r.left.width, 300)) },
@@ -108,6 +128,8 @@ function normalizeLayout(raw: unknown): Layout {
     problemsOpen: r.problemsOpen === true,
     problemsHeight: Math.min(600, Math.max(80, num(r.problemsHeight, 180))),
     panelTab: r.panelTab === 'search' ? 'search' : 'problems',
+    tabs,
+    current,
   };
 }
 
@@ -136,8 +158,75 @@ export function floatSection(l: Layout, id: SectionId, rect: { x: number; y: num
   return unhide({ ...next, floating: [...next.floating, { id, ...rect, z }] }, id);
 }
 
+// ── 疊成標籤 ──
+export const membersOf = (l: Layout, host: SectionId): SectionId[] => l.tabs[host] ?? [host];
+export const hostOf = (l: Layout, id: SectionId): SectionId => (Object.keys(l.tabs).find((h) => l.tabs[h]!.includes(id)) as SectionId | undefined) ?? id;
+const withoutKey = <T>(rec: Partial<Record<SectionId, T>>, key: SectionId) => {
+  const next = { ...rec };
+  delete next[key];
+  return next;
+};
+// 把一個區塊從它那一疊拿出來（變成沒有放在任何地方，接著要 dock／float／疊到別處）
+// 拿走的是佔位的區塊時，由下一個成員接手它的位置、高度
+export function unstack(l: Layout, id: SectionId): Layout {
+  const host = hostOf(l, id);
+  const list = l.tabs[host];
+  if (!list) return l;
+  const rest = list.filter((s) => s !== id);
+  const nextCur = l.current[host] === id ? undefined : l.current[host];
+  if (id !== host) {
+    const tabs = rest.length > 1 ? { ...l.tabs, [host]: rest } : withoutKey(l.tabs, host);
+    const current = rest.length > 1 && nextCur ? { ...l.current, [host]: nextCur } : withoutKey(l.current, host);
+    return { ...l, tabs, current };
+  }
+  const heir = rest[0];
+  const swap = (s: SectionId) => (s === host ? heir : s);
+  let tabs = withoutKey(l.tabs, host);
+  let current = withoutKey(l.current, host);
+  if (rest.length > 1) {
+    tabs = { ...tabs, [heir]: rest };
+    if (nextCur) current = { ...current, [heir]: nextCur };
+  }
+  const sizes = { ...l.sizes };
+  if (sizes[host] !== undefined) sizes[heir] = sizes[host];
+  return {
+    ...l,
+    left: { ...l.left, sections: l.left.sections.map(swap) },
+    right: { ...l.right, sections: l.right.sections.map(swap) },
+    floating: l.floating.map((f) => (f.id === host ? { ...f, id: heir } : f)),
+    tabs,
+    current,
+    sizes,
+  };
+}
+// 疊到 host 那一疊，插在 before 這個標籤前面（null = 最後）；whole = 拖的是整疊（標題列空白處），整疊一起併過去
+export function stackSection(l: Layout, id: SectionId, host: SectionId, before: SectionId | null, whole: boolean): Layout {
+  const insert = (list: SectionId[], items: SectionId[]) => {
+    const at = before ? list.indexOf(before) : -1;
+    list.splice(at < 0 ? list.length : at, 0, ...items);
+    return list;
+  };
+  if (hostOf(l, id) === host && !whole) {
+    const list = insert(membersOf(l, host).filter((s) => s !== id), [id]);
+    return { ...l, tabs: { ...l.tabs, [host]: list }, current: { ...l.current, [host]: id } };
+  }
+  let next: Layout;
+  let moving: SectionId[];
+  if (whole) {
+    moving = membersOf(l, id);
+    next = { ...detach(l, id), tabs: withoutKey(l.tabs, id), current: withoutKey(l.current, id) };
+  } else {
+    moving = [id];
+    next = unstack(l, id);
+    next = detach(next, id);
+  }
+  const list = insert(membersOf(next, host).filter((s) => !moving.includes(s)), moving);
+  next ={ ...next, tabs: { ...next.tabs, [host]: list }, current: { ...next.current, [host]: id } };
+  return moving.reduce(unhide, next);
+}
+
 export function reconcileLayout(l: Layout, ids: SectionId[]): Layout {
-  const placed = new Set([...l.left.sections, ...l.right.sections, ...l.floating.map((f) => f.id)]);
+  const placed = new Set([...l.left.sections, ...l.right.sections, ...l.floating.map((f) => f.id), ...Object.values(l.tabs).flat()]);
   const missing = ids.filter((id) => !placed.has(id));
   return missing.length === 0 ? l : { ...l, left: { ...l.left, sections: [...l.left.sections, ...missing] } };
 }

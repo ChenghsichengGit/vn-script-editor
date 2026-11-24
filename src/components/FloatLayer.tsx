@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { dragWith } from '../hooks';
+import { useCtrlWheel } from '../settings';
 import { FLOAT_MIN_H, FLOAT_MIN_W, FloatPanel } from '../layout';
 import SectionPanel, { TreeProps } from './SectionPanel';
 import ScenePanel from './ScenePanel';
@@ -15,6 +16,7 @@ const HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 export default function FloatLayer({ panels, onChange, onFront, ...tree }: Props) {
   const layerRef = useRef<HTMLDivElement>(null);
+  useCtrlWheel(layerRef, 'sidebarFontSize'); // 浮動視窗算左邊區域（圖層本身不接滑鼠，事件是從視窗冒上來的）
   const [size, setSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const el = layerRef.current!;
@@ -66,7 +68,10 @@ export default function FloatLayer({ panels, onChange, onFront, ...tree }: Props
             style={{ left: r.x, top: r.y, width: r.w, height: r.h, zIndex: p.z }}
             onMouseDownCapture={() => p.z !== top && onFront(p.id)}
           >
-            {p.id === SCENE_ID ? <ScenePanel {...tree} id={p.id} fill floating /> : <SectionPanel {...tree} id={p.id} fill floating />}
+            {(() => {
+              const id = tree.stacks.shown(p.id); // 疊成標籤的浮動視窗：顯示目前的標籤
+              return id === SCENE_ID ? <ScenePanel key={id} {...tree} id={id} slot={p.id} fill floating /> : <SectionPanel key={id} {...tree} id={id} slot={p.id} fill floating />;
+            })()}
             {HANDLES.map((d) => (
               <div key={d} className={`float-handle ${d}`} onMouseDown={(e) => startResize(p, d, e)} />
             ))}

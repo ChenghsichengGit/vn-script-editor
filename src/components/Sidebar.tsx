@@ -1,5 +1,6 @@
 import { Fragment, useRef } from 'react';
 import { dragWith } from '../hooks';
+import { useCtrlWheel } from '../settings';
 import type { Layout, Side } from '../layout';
 import { SectionId } from '../model';
 import { FILES_SECTION, SCENE_ID, sectionOrder } from '../sections';
@@ -8,7 +9,7 @@ import ScenePanel from './ScenePanel';
 
 interface Props extends TreeProps {
   side: Side;
-  sections: SectionId[]; // 要顯示的區塊（已經排除被隱藏的），由上到下
+  sections: SectionId[]; // 要顯示的格子（疊成標籤的用佔位區塊的 id；已經排除整疊都被隱藏的），由上到下
   layout: Layout;
   onLayoutChange: (patch: Partial<Layout>) => void;
 }
@@ -20,6 +21,7 @@ const DEFAULT_HEIGHT = 200; // 還沒調整過的區塊預設高度（像素）
 export default function Sidebar(props: Props) {
   const { layout, sections, side, onLayoutChange, ...tree } = props;
   const asideRef = useRef<HTMLElement>(null);
+  useCtrlWheel(asideRef, 'sidebarFontSize');
   // 摺疊或沒有內容的區塊只剩標題列；空出來的高度給最下面那個展開的區塊（負責填滿空間）
   const isEmpty = (id: SectionId) =>
     id === SCENE_ID
@@ -27,11 +29,16 @@ export default function Sidebar(props: Props) {
       : id === FILES_SECTION.id
         ? Object.keys(tree.files).length === 0 && !tree.folders[id]?.length
         : !tree.cards[id]?.length && !tree.folders[id]?.length;
-  const isShort = (id: SectionId) => tree.folded.includes(id) || isEmpty(id);
+  const shown = tree.stacks.shown;
+  // 一格疊了好幾個區塊時，看現在顯示的那個
+  const isShort = (slot: SectionId) => {
+    const id = shown(slot);
+    return tree.folded.includes(id) || isEmpty(id);
+  };
   const live = sections.filter((id) => !isShort(id));
   const filler = live[live.length - 1];
   const existing = new Set(sectionOrder());
-  const placed = layout[side].sections.filter((id) => sections.includes(id) || (layout.hidden.includes(id) && existing.has(id)));
+  const placed = layout[side].sections.filter((id) => sections.includes(id) || existing.has(id)); // 沒顯示的 = 整疊都被隱藏
   const bonus: Partial<Record<SectionId, number>> = {};
   placed.forEach((id, i) => {
     if (sections.includes(id)) return;
@@ -50,7 +57,7 @@ export default function Sidebar(props: Props) {
     const ids = [...above, ...below];
     const index = above.length - 1;
     const height = (id: SectionId) =>
-      asideRef.current!.querySelector(`:scope > [data-section="${id}"]`)!.getBoundingClientRect().height;
+      asideRef.current!.querySelector(`:scope > [data-slot="${id}"]`)!.getBoundingClientRect().height;
     const start = ids.map(height);
     const cur = start.slice(); // 目前的高度（每一步都在這上面改）
     const minOf = (i: number) => (ids[i] === filler ? FILLER_MIN_HEIGHT : MIN_HEIGHT);
@@ -81,16 +88,16 @@ export default function Sidebar(props: Props) {
   };
   return (
     <aside className="sidebar" data-side={side} style={{ width: layout[side].width }} ref={asideRef}>
-      {sections.map((id, i) => (
-        <Fragment key={id}>
-          {i > 0 && <div className="section-sash" onMouseDown={(e) => startSectionResize(i, e)} />}
-          {id === SCENE_ID ? (
-            <ScenePanel {...tree} id={id} fill={id === filler} short={isShort(id)} height={(layout.sizes[id] ?? DEFAULT_HEIGHT) + (bonus[id] ?? 0)} />
-          ) : (
-            <SectionPanel {...tree} id={id} fill={id === filler} short={isShort(id)} height={(layout.sizes[id] ?? DEFAULT_HEIGHT) + (bonus[id] ?? 0)} />
-          )}
-        </Fragment>
-      ))}
+      {sections.map((slot, i) => {
+        const id = shown(slot);
+        const panel = { ...tree, id, slot, fill: slot === filler, short: isShort(slot), height: (layout.sizes[slot] ?? DEFAULT_HEIGHT) + (bonus[slot] ?? 0) };
+        return (
+          <Fragment key={slot}>
+            {i > 0 && <div className="section-sash" onMouseDown={(e) => startSectionResize(i, e)} />}
+            {id === SCENE_ID ? <ScenePanel key={id} {...panel} /> : <SectionPanel key={id} {...panel} />}
+          </Fragment>
+        );
+      })}
     </aside>
   );
 }

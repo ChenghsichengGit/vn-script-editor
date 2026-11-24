@@ -1,5 +1,5 @@
 // 程式的設定（UI 大小、字體大小等）：全程式共用一份，不跟著專案走，記在 localStorage
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { readJSON, writeJSON } from './hooks';
 
 export interface Settings {
@@ -9,7 +9,9 @@ export interface Settings {
   wordWrap: boolean; // 劇本自動換行
   minimap: boolean; // 劇本右側的小地圖
   minimapScale: 1 | 2 | 3; // 小地圖的放大倍數（小／中／大）
-  cardFontSize: number; // 設定卡編輯畫面的內文大小
+  cardFontSize: number; // 設定卡編輯畫面的內文大小（Ctrl＋滾輪）
+  sidebarFontSize: number; // 左邊區域（側邊欄、浮動視窗）的文字大小（Ctrl＋滾輪）
+  viewerFontSize: number; // 放大檢視的文字大小（Ctrl＋滾輪）
   autoSave: boolean; // 關掉後只有 Ctrl+S 才存檔
   openLastProject: boolean; // 程式啟動時直接開啟上次的專案
   aiPlayback: boolean; // 外部（例如 AI）改了檔案時：切到那個分頁、播放打字效果
@@ -31,6 +33,8 @@ export const defaultSettings: Settings = {
   minimap: true,
   minimapScale: 2,
   cardFontSize: 15,
+  sidebarFontSize: 13,
+  viewerFontSize: 13,
   autoSave: true,
   openLastProject: true,
   aiPlayback: true,
@@ -44,7 +48,17 @@ export const LIMITS = {
   uiZoom: { min: 0.8, max: 1.5, step: 0.1 },
   scriptFontSize: { min: 10, max: 40, step: 1 },
   cardFontSize: { min: 11, max: 28, step: 1 },
+  sidebarFontSize: { min: 10, max: 24, step: 1 },
+  viewerFontSize: { min: 10, max: 24, step: 1 },
 } as const;
+export type FontSizeKey = 'scriptFontSize' | 'cardFontSize' | 'sidebarFontSize' | 'viewerFontSize';
+
+// 「UI 大小」只放大介面，不放大文字：整個畫面被放大 uiZoom 倍，文字的像素就除回去
+export const textPx = (s: Settings, key: FontSizeKey) => s[key] / s.uiZoom;
+// Ctrl＋滾輪：往上變大、往下變小
+export function wheelFontSize(key: FontSizeKey, e: WheelEvent) {
+  updateSettings({ [key]: getSettings()[key] + (e.deltaY < 0 ? 1 : -1) });
+}
 
 const clamp = (k: keyof typeof LIMITS, v: unknown, fallback: number) => {
   if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
@@ -63,6 +77,8 @@ function normalize(raw: unknown): Settings {
     minimap: bool(r.minimap, d.minimap),
     minimapScale: r.minimapScale === 1 || r.minimapScale === 2 || r.minimapScale === 3 ? r.minimapScale : d.minimapScale,
     cardFontSize: clamp('cardFontSize', r.cardFontSize, d.cardFontSize),
+    sidebarFontSize: clamp('sidebarFontSize', r.sidebarFontSize, d.sidebarFontSize),
+    viewerFontSize: clamp('viewerFontSize', r.viewerFontSize, d.viewerFontSize),
     autoSave: bool(r.autoSave, d.autoSave),
     openLastProject: bool(r.openLastProject, d.openLastProject),
     aiPlayback: bool(r.aiPlayback, d.aiPlayback),
@@ -87,8 +103,24 @@ export function updateSettings(patch: Partial<Settings>) {
   listeners.forEach((fn) => fn());
 }
 
-export function resetSettings() {
-  updateSettings(defaultSettings);
+export function resetSettings(keys?: (keyof Settings)[]) {
+  updateSettings(keys ? Object.fromEntries(keys.map((k) => [k, defaultSettings[k]])) : defaultSettings);
+}
+
+// 在這個元素上按住 Ctrl 滾滾輪：調整 key 這個文字大小（不讓 WebView 整頁縮放）
+export function useCtrlWheel(ref: React.RefObject<HTMLElement>, key: FontSizeKey) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const on = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      wheelFontSize(key, e);
+    };
+    el.addEventListener('wheel', on, { passive: false });
+    return () => el.removeEventListener('wheel', on);
+  });
 }
 
 const subscribe = (fn: () => void) => {

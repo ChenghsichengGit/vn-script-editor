@@ -1,7 +1,7 @@
 import { useLatest } from '../hooks';
 import { useEffect, useRef, useState } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { DEFAULT_FONT_FAMILY, getSettings, updateSettings, useSettings } from '../settings';
+import { DEFAULT_FONT_FAMILY, getSettings, textPx, updateSettings, useSettings } from '../settings';
 import { LANGUAGE_ID, registerScriptLanguage, scriptHeadings } from '../scriptLanguage';
 import { BubbleState, addScriptActions, attachPreview, promptScriptRuby, setHeadingLines, trackSelectionBubble } from '../scriptPreview';
 import type monacoApi from '../monaco';
@@ -117,8 +117,8 @@ export default function ScriptEditor(props: Props) {
           }}
           options={{
             fontFamily: settings.scriptFontFamily.trim() ? `${settings.scriptFontFamily}, ${DEFAULT_FONT_FAMILY}` : DEFAULT_FONT_FAMILY,
-            fontSize: settings.scriptFontSize,
-            lineHeight: Math.round(settings.scriptFontSize * 1.75), // 行距跟著字的大小等比例
+            fontSize: textPx(settings, 'scriptFontSize'), // 除掉 UI 大小：畫面放大時文字不跟著變
+            lineHeight: Math.round(textPx(settings, 'scriptFontSize') * 1.75), // 行距跟著字的大小等比例
             wordWrap: settings.wordWrap ? 'on' : 'off',
             minimap: { enabled: settings.minimap, scale: settings.minimapScale },
             lineNumbersMinChars: 3,

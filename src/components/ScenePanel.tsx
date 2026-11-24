@@ -8,7 +8,7 @@ import { useChangeMarks } from '../changeMarks';
 import CardItem from './CardItem';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import Icon from './Icon';
-import { FoldButton, TreeProps, pinItem } from './SectionPanel';
+import { FoldButton, SectionTitle, TreeProps, pinItem } from './SectionPanel';
 import { openCardViewer } from './MemoryViewer';
 
 interface Props extends TreeProps {
@@ -17,6 +17,7 @@ interface Props extends TreeProps {
   height?: number;
   floating?: boolean;
   short?: boolean;
+  slot?: SectionId; // 疊成標籤時佔位的區塊
 }
 
 export default function ScenePanel(props: Props) {
@@ -39,20 +40,29 @@ export default function ScenePanel(props: Props) {
     <div
       className={`section scene-section${props.fill ? ' filler' : ''}${props.floating ? ' floating' : ''}${short ? ' short' : ''}`}
       data-section={id}
+      data-slot={props.slot ?? id}
       style={!props.fill && !short ? { height: props.height } : undefined}
     >
       <div
         className="section-header"
         onMouseDown={(e) => {
-          if (e.button === 0 && !(e.target as HTMLElement).closest('button')) props.onHeaderDrag(id, e);
+          if (e.button === 0 && !(e.target as HTMLElement).closest('button')) props.onHeaderDrag(props.slot ?? id, e);
         }}
         onContextMenu={(e) => openMenu(e, rootItems)}
       >
         {!props.floating && <FoldButton id={id} folded={props.folded.includes(id)} empty={scene.items.length === 0} onFold={props.onFold} />}
-        <span className="section-title" title={scene.path ? `目前進度：${scene.path}` : '打開劇本後，這裡會列出這一場用到的設定卡'}>
-          {meta.title}
-          {scene.path && <span className="scene-script">：{sourceLabel(scene.path)}</span>}
-        </span>
+        <SectionTitle
+          id={id}
+          slot={props.slot ?? id}
+          stacks={props.stacks}
+          tip={scene.path ? `目前進度：${scene.path}` : '打開劇本後，這裡會列出這一場用到的設定卡'}
+          title={
+            <>
+              {meta.title}
+              {scene.path && <span className="scene-script">：{sourceLabel(scene.path)}</span>}
+            </>
+          }
+        />
         <span className="section-actions">
           <button className="icon-btn" data-tip={bulk.show ? '全部收起：每張卡只顯示名稱' : '全部展開：顯示每張卡的欄位和詳細內容'} onClick={toggleBulk}>
             <Icon icon={bulk.show ? 'collapse-all' : 'expand-all'} />

@@ -196,9 +196,24 @@ html, body, #root {
   border-bottom: 1px solid var(--border);
 }
 .section-title { flex: 1; }
+/* 疊成標籤的區塊：標題列換成一排標籤 */
+.section-tabs { flex: 1; min-width: 0; display: flex; align-self: stretch; overflow: hidden; }
+.section-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  white-space: nowrap;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.section-tab:first-child { padding-left: 0; }
+.section-tab:hover { color: var(--text); }
+.section-tab.on { color: var(--text); border-bottom-color: var(--accent); cursor: grab; }
+.drag-ghost-item + .drag-ghost-item { margin-left: 10px; }
 .section-actions { display: flex; opacity: 0; }
 .section-header:hover .section-actions { opacity: 1; }
-.section-body { flex: 1; overflow-y: auto; padding-bottom: 6px; }
+.section-body { flex: 1; overflow-y: auto; padding-bottom: 6px; zoom: var(--side-zoom, 1); } /* 左邊區域的文字大小（Ctrl＋滾輪） */
 .section-sash { height: 1px; flex-shrink: 0; background: var(--border); position: relative; z-index: 5; }
 .section-sash::before { content: ''; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; cursor: row-resize; }
 .section-sash::after {
@@ -411,7 +426,7 @@ body.dragging, body.dragging * { user-select: none; }
 .dockview-theme-vn .dv-watermark { background: var(--bg-editor); }
 .card-editor { flex: 1; min-height: 0; height: 100%; display: flex; }
 .card-editor-scroll { flex: 1; min-width: 0; overflow-y: auto; }
-.card-editor-inner { max-width: 820px; padding: 20px 32px 80px; display: flex; flex-direction: column; gap: 10px; }
+.card-editor-inner { max-width: 820px; padding: 20px 32px 80px; display: flex; flex-direction: column; gap: 10px; font-size: var(--card-field-size, 13px); }
 .card-editor input, .card-editor textarea {
   font: inherit;
   color: var(--text);
@@ -452,11 +467,15 @@ body.dragging, body.dragging * { user-select: none; }
 .field-value-view:hover { border-color: var(--border); }
 .field-text { display: block; }
 .field-text-plain { display: block; white-space: pre-wrap; }
+.field-text ruby { ruby-position: over; ruby-align: center; }
+.field-text rt { font-size: 0.6em; color: var(--text-dim); user-select: none; letter-spacing: 0.02em; line-height: 1.1; }
+.field-link { color: var(--accent); text-decoration: none; cursor: pointer; word-break: break-all; }
+.field-link:hover { text-decoration: underline; }
 .field-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 5px; }
 .field-list-item { display: contents; }
 .field-list-marker { color: var(--text-dim); text-align: right; min-width: 0.8em; }
 .field-list-text { min-width: 0; white-space: pre-wrap; word-break: break-word; }
-.card-editor .card-editor-name { font-size: 22px; font-weight: 600; background: none; padding-left: 0; }
+.card-editor .card-editor-name { font-size: 1.7em; font-weight: 600; background: none; padding-left: 0; }
 .card-editor-fields { display: flex; flex-direction: column; gap: 6px; }
 .card-editor-row { display: grid; grid-template-columns: 14px 140px 1fr auto 24px; gap: 8px; align-items: start; }
 .field-grip { display: flex; align-items: center; justify-content: center; height: 30px; margin-right: -4px; color: var(--text-dim); cursor: grab; opacity: 0; }
@@ -960,7 +979,7 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .memory-viewer-title { font-weight: 600; }
 .memory-viewer-spacer { flex: 1; }
 .memory-viewer select { font: inherit; color: var(--text); background: var(--bg-tab); border: 1px solid var(--border); border-radius: 3px; padding: 2px 4px; }
-.memory-viewer-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 16px; }
+.memory-viewer-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 16px; zoom: var(--viewer-zoom, 1); } /* 放大檢視的文字大小（Ctrl＋滾輪） */
 .card-detail-open { cursor: zoom-in; }
 .memory-tl { display: flex; flex-direction: column; }
 .memory-tl-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 2.2fr); column-gap: 8px; min-height: 26px; }

@@ -1,4 +1,5 @@
 .codicon-files::before { content: "\eaf0"; }
+.codicon-text-size::before { content: "\eb69"; }
 .codicon-person::before { content: "\ea67"; }
 .codicon-globe::before { content: "\eb01"; }
 .codicon-terminal::before { content: "\ea85"; }

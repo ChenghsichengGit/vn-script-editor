@@ -67,6 +67,40 @@ export interface TreeProps {
   folded: SectionId[]; // 摺疊成只剩標題列的區塊
   onFold: (id: SectionId, fold: boolean) => void;
   scene: SceneInfo; // 「本場」：目前劇本、列出的卡、手動固定
+  stacks: StackOps; // 疊成標籤的區塊
+}
+
+export interface StackOps {
+  members: (host: SectionId) => SectionId[]; // 這一疊要顯示的標籤（已經排除被隱藏的）
+  shown: (host: SectionId) => SectionId; // 這一疊現在顯示的區塊
+  pick: (host: SectionId, id: SectionId) => void; // 點標籤切換
+  onTabDrag: (id: SectionId, e: React.MouseEvent) => void; // 按住標籤拖：只拖這一個區塊
+}
+
+// 標題列：疊了好幾個區塊就畫成一排標籤，只有一個就照舊畫標題
+export function SectionTitle({ id, slot, stacks, title, tip }: { id: SectionId; slot: SectionId; stacks: StackOps; title: React.ReactNode; tip?: string }) {
+  const members = stacks.members(slot);
+  if (members.length < 2) return <span className="section-title" title={tip}>{title}</span>;
+  return (
+    <span className="section-tabs">
+      {members.map((m) => (
+        <span
+          key={m}
+          className={`section-tab${m === id ? ' on' : ''}`}
+          data-tab={m}
+          title={m === id ? tip : `切換到「${sectionMeta(m).title}」（按住可以拖曳）`}
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation(); // 不要變成拖整疊
+            stacks.onTabDrag(m, e);
+          }}
+          onClick={() => m !== id && stacks.pick(slot, m)}
+        >
+          {sectionMeta(m).title}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 interface Props extends TreeProps {
@@ -75,6 +109,7 @@ interface Props extends TreeProps {
   height?: number; // 固定高度（fill 時不用）
   floating?: boolean; // 在浮動視窗裡：標題列就是視窗的標題列
   short?: boolean; // 摺疊或沒有內容：只剩標題列
+  slot?: SectionId; // 疊成標籤時佔位的區塊（拖標題列空白處 = 拖整疊）；沒疊 = 自己
 }
 
 // 標題列最前面的摺疊鈕（浮動視窗裡沒有；沒有內容又沒摺疊時只留空位）
@@ -453,17 +488,18 @@ export default function SectionPanel(props: Props) {
     <div
       className={`section${props.fill ? ' filler' : ''}${props.floating ? ' floating' : ''}${short ? ' short' : ''}`}
       data-section={id}
+      data-slot={props.slot ?? id}
       style={!props.fill && !short ? { height: props.height } : undefined}
     >
       <div
         className="section-header"
         onMouseDown={(e) => {
-          if (e.button === 0 && !(e.target as HTMLElement).closest('button')) props.onHeaderDrag(id, e);
+          if (e.button === 0 && !(e.target as HTMLElement).closest('button')) props.onHeaderDrag(props.slot ?? id, e);
         }}
         onContextMenu={(e) => openMenu(e, { kind: 'root' })}
       >
         {!props.floating && <FoldButton id={id} folded={props.folded.includes(id)} empty={empty} onFold={props.onFold} />}
-        <span className="section-title">{meta.title}</span>
+        <SectionTitle id={id} slot={props.slot ?? id} stacks={props.stacks} title={meta.title} />
         <span className="section-actions">
           {!isFiles && (
             <button className="icon-btn" data-tip={bulk.show ? '全部收起：每張卡只顯示名稱' : '全部展開：顯示每張卡的欄位和詳細內容'} onClick={toggleBulk}>

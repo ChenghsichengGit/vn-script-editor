@@ -13,7 +13,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { RubyNode, promptRuby } from './RubyMark';
 import { blockOf, docToVns, isCommandText, isCommentText, lineOf, vnsToDoc } from '../vnsDoc';
 import { registerScriptView } from '../scriptLanguage';
-import { DEFAULT_FONT_FAMILY, getSettings, updateSettings, useSettings } from '../settings';
+import { DEFAULT_FONT_FAMILY, getSettings, textPx, updateSettings, useSettings } from '../settings';
 import { useLatest } from '../hooks';
 import Outline, { Heading } from './Outline';
 import ChangeBar from './ChangeBar';
@@ -393,7 +393,7 @@ export default function VnsEditor(props: {
           className="vns-scroll"
           ref={scrollRef}
           onScroll={onScroll}
-          style={{ fontFamily: font, fontSize: settings.scriptFontSize }}
+          style={{ fontFamily: font, fontSize: textPx(settings, 'scriptFontSize') }}
           onContextMenu={(e) => (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))}
           onMouseDown={(e) => e.target === e.currentTarget && (e.preventDefault(), editor.commands.focus('end'))}
         >

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_FONT_FAMILY, LIMITS, resetSettings, updateSettings, useSettings } from '../settings';
+import { DEFAULT_FONT_FAMILY, FontSizeKey, LIMITS, Settings, resetSettings, updateSettings, useSettings } from '../settings';
 import './SettingsDialog.css';
 import { useEscape } from '../hooks';
+import Icon from './Icon';
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -88,12 +89,39 @@ function ZoomSlider({ value }: { value: number }) {
   );
 }
 
+type Category = 'look' | 'text' | 'script' | 'save' | 'external';
+const CATEGORIES: { id: Category; label: string; icon: string; keys: (keyof Settings)[] }[] = [
+  { id: 'look', label: '外觀', icon: 'symbol-color', keys: ['theme', 'uiZoom'] },
+  { id: 'text', label: '文字大小', icon: 'text-size', keys: ['scriptFontSize', 'sidebarFontSize', 'cardFontSize', 'viewerFontSize'] },
+  { id: 'script', label: '劇本編輯器', icon: 'edit', keys: ['scriptFontFamily', 'richScript', 'wordWrap', 'minimap', 'minimapScale'] },
+  { id: 'save', label: '存檔與專案', icon: 'save', keys: ['autoSave', 'openLastProject'] },
+  { id: 'external', label: '外部修改', icon: 'sparkle', keys: ['aiPlayback', 'aiSpeed', 'markExternal'] },
+];
+let lastCategory: Category = 'look'; // 下次打開停在上次看的分類
+
+const WHEEL_HINT = '在這個區域按住 Ctrl 滾滑鼠滾輪也可以調整';
+
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const s = useSettings();
   useEscape(onClose);
-  const onReset = () => {
+  const [cat, setCatState] = useState<Category>(lastCategory);
+  const setCat = (c: Category) => {
+    lastCategory = c;
+    setCatState(c);
+  };
+  const current = CATEGORIES.find((c) => c.id === cat)!;
+  const onResetAll = () => {
     if (window.confirm('確定要把所有設定恢復成預設值嗎？')) resetSettings();
   };
+  const onResetCat = () => {
+    if (window.confirm(`確定要把「${current.label}」的設定恢復成預設值嗎？`)) resetSettings(current.keys);
+  };
+  const fontRow = (key: FontSizeKey, label: string, hint: string) => (
+    <Row label={label} hint={`${hint}；${WHEEL_HINT}`}>
+      <NumberField value={s[key]} {...LIMITS[key]} onCommit={(v) => updateSettings({ [key]: v })} />
+      <span className="settings-unit">px</span>
+    </Row>
+  );
   return (
     <div
       className="settings-backdrop"
@@ -106,8 +134,21 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           <span className="settings-title">設定</span>
           <button type="button" className="settings-close" onClick={onClose} title="關閉">×</button>
         </div>
+        <div className="settings-main">
+          <nav className="settings-nav">
+            {CATEGORIES.map((c) => (
+              <button key={c.id} type="button" className={c.id === cat ? 'on' : ''} onClick={() => setCat(c.id)}>
+                <Icon icon={c.icon} /> {c.label}
+              </button>
+            ))}
+          </nav>
         <div className="settings-body">
-          <div className="settings-group">外觀</div>
+          <div className="settings-page-head">
+            <span className="settings-page-title">{current.label}</span>
+            <button type="button" className="settings-link" onClick={onResetCat}>恢復這一類的預設</button>
+          </div>
+          {cat === 'look' && (
+            <>
           <Row label="顏色主題" hint="整個程式和劇本編輯器一起換色">
             <div className="settings-segment">
               {(['dark', 'light', 'hc'] as const).map((v, i) => (
@@ -117,11 +158,20 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           </Row>
-          <Row label="UI 大小" hint="整個程式一起放大縮小"><ZoomSlider value={s.uiZoom} /></Row>
-          <div className="settings-group">劇本編輯器</div>
-          <Row label="文字大小" hint="在劇本裡按住 Ctrl 滾滑鼠滾輪也可以調整">
-            <NumberField value={s.scriptFontSize} {...LIMITS.scriptFontSize} onCommit={(v) => updateSettings({ scriptFontSize: v })} />
-          </Row>
+          <Row label="UI 大小" hint="放大縮小按鈕、圖示、間距、選單這些介面；劇本、左邊區域、設定卡、放大檢視的文字照「文字大小」不變"><ZoomSlider value={s.uiZoom} /></Row>
+            </>
+          )}
+          {cat === 'text' && (
+            <>
+              <div className="settings-note">每個區域各自調整，互不影響；改「UI 大小」也不會改到這裡的文字。</div>
+              {fontRow('scriptFontSize', '劇本', '劇本編輯器的文字')}
+              {fontRow('sidebarFontSize', '左邊區域', '側邊欄的檔案、卡片清單、展開的欄位，和浮動視窗')}
+              {fontRow('cardFontSize', '設定卡', '卡片編輯頁的欄位和詳細內容')}
+              {fontRow('viewerFontSize', '放大檢視', '卡片放大視窗的內容')}
+            </>
+          )}
+          {cat === 'script' && (
+            <>
           <Row label="字型" hint="輸入字型名稱，例如 微軟正黑體；空白 = 預設">
             <input
               type="text"
@@ -133,8 +183,12 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             />
           </Row>
           <Row label="Notion 式劇本編輯器" hint="標題、標音直接顯示效果，看不到符號；關掉就改回原本的程式碼式編輯器"><Toggle checked={s.richScript} onChange={(v) => updateSettings({ richScript: v })} /></Row>
-          <Row label="自動換行"><Toggle checked={s.wordWrap} onChange={(v) => updateSettings({ wordWrap: v })} /></Row>
-          <Row label="小地圖" hint="右側的縮圖">
+          {s.richScript ? (
+            <div className="settings-note">「自動換行」和「小地圖」只有程式碼式編輯器才有，關掉上面的 Notion 式劇本編輯器就會出現。</div>
+          ) : (
+            <>
+          <Row label="自動換行" hint="只有程式碼式編輯器有效"><Toggle checked={s.wordWrap} onChange={(v) => updateSettings({ wordWrap: v })} /></Row>
+          <Row label="小地圖" hint="右側的縮圖；只有程式碼式編輯器有效">
             <div className="settings-segment">
               {([1, 2, 3] as const).map((n) => (
                 <button
@@ -150,17 +204,23 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
             <Toggle checked={s.minimap} onChange={(v) => updateSettings({ minimap: v })} />
           </Row>
-          <div className="settings-group">設定卡</div>
-          <Row label="內文大小">
-            <NumberField value={s.cardFontSize} {...LIMITS.cardFontSize} onCommit={(v) => updateSettings({ cardFontSize: v })} />
-          </Row>
-          <div className="settings-group">其他</div>
+            </>
+          )}
+            </>
+          )}
+          {cat === 'save' && (
+            <>
           <Row label="自動存檔" hint="關掉後要按 Ctrl+S（存目前的分頁）或 Ctrl+K S（全部存檔）才會存檔">
             <Toggle checked={s.autoSave} onChange={(v) => updateSettings({ autoSave: v })} />
           </Row>
           <Row label="啟動時開啟上次的專案" hint="打開程式就直接回到上次的專案和分頁">
             <Toggle checked={s.openLastProject} onChange={(v) => updateSettings({ openLastProject: v })} />
           </Row>
+            </>
+          )}
+          {cat === 'external' && (
+            <>
+              <div className="settings-note">「外部修改」= 一起寫的人（例如雲端同步）或 AI 在程式外面改了專案裡的檔案。</div>
           <Row label="外部修改時播放打字效果" hint="AI 等在程式外面改了檔案：切到那個分頁，把改動一個字一個字打出來（按任何鍵可以跳過）">
             <div className="settings-segment">
               {(['slow', 'normal', 'fast'] as const).map((v, i) => (
@@ -180,9 +240,12 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           <Row label="標出外部修改" hint="一起寫的人（或 AI）在程式外面改了檔案：改到的行、欄位、段落用淡黃底標出來，側邊欄也會有黃點；按分頁上方的「清除標記」才會消失">
             <Toggle checked={s.markExternal} onChange={(v) => updateSettings({ markExternal: v })} />
           </Row>
+            </>
+          )}
+        </div>
         </div>
         <div className="settings-footer">
-          <button type="button" className="settings-btn" onClick={onReset}>全部恢復預設</button>
+          <button type="button" className="settings-btn" onClick={onResetAll}>全部恢復預設</button>
           <button type="button" className="settings-btn settings-btn-primary" onClick={onClose}>關閉</button>
         </div>
       </div>

@@ -14,6 +14,7 @@ import ImageFieldInput from './ImageFieldInput';
 import MemoryPanel, { MemoryLinks } from './MemoryPanel';
 import { FIXED_COMMAND_FIELDS, bracketSuggest, commandSpecialFields } from '../scriptLanguage';
 import { dragWith, reorderAt } from '../hooks';
+import { useCtrlWheel } from '../settings';
 import FieldGroupTabs, { groupOf, groupsIn, useFieldGroup } from './FieldGroupTabs';
 
 const lastPane = new Map<string, 'detail' | 'memory'>();
@@ -35,6 +36,7 @@ export default function CardEditor({ card, section, isCommand, schemaFields, fla
   onChange: (patch: Partial<Card>) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  useCtrlWheel(scrollRef, 'cardFontSize');
   const emitted = useRef<string[]>([]);
   const editor = useRichEditor(
     card.detail,
