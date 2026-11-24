@@ -97,6 +97,8 @@
 .font-card-badge { flex: none; padding: 0 6px; font-size: 10px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; }
 .font-card-badge.web { color: var(--accent); border-color: var(--accent); }
 .font-card-style { font-size: 11px; color: var(--text-dim); }
+.font-card-langs { font-size: 11px; color: var(--accent); }
+.font-card-note { color: var(--warning, #d7a64a); }
 .font-card-sample { margin-top: 2px; font-size: 17px; line-height: 1.6; word-break: break-all; }
 .font-custom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; color: var(--text-dim); }
 .font-custom.on .settings-text { border-color: var(--accent); }

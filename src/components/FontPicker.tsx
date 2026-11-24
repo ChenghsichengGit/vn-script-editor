@@ -1,6 +1,11 @@
-// 設定頁的劇本字型：設定頁只有一列（目前的字型＋「選擇字型…」），按了才打開字型卡視窗，用那個字型直接畫範例；點了就套用
+// 設定頁的字型（UI 字型、內容字型）：設定頁只有一列（目前的字型＋「選擇字型…」），按了才打開字型卡視窗，用那個字型直接畫範例；點了就套用
 import { useEffect, useState } from 'react';
-import { DEFAULT_FONT_FAMILY } from '../settings';
+
+// 「預設」那張卡：用哪個字型畫、怎麼說明
+interface DefaultFont {
+  family: string;
+  style: string;
+}
 import { FONT_OPTIONS, FontOption, findFont, fontValue, loadFont } from '../fonts';
 import { useEscape } from '../hooks';
 
@@ -9,7 +14,7 @@ let lastSample = DEFAULT_SAMPLE; // 改過的範例文字，下次打開設定�
 
 type Status = 'loading' | 'ok' | 'offline';
 
-function FontCard({ font, sample, on, onPick }: { font: FontOption | null; sample: string; on: boolean; onPick: () => void }) {
+function FontCard({ font, fallback, sample, on, onPick }: { font: FontOption | null; fallback: DefaultFont; sample: string; on: boolean; onPick: () => void }) {
   const [status, setStatus] = useState<Status>(font?.web ? 'loading' : 'ok');
   useEffect(() => {
     if (!font?.web) return;
@@ -20,7 +25,7 @@ function FontCard({ font, sample, on, onPick }: { font: FontOption | null; sampl
       alive = false;
     };
   }, [font, sample]);
-  const family = font ? `${fontValue(font)}, ${DEFAULT_FONT_FAMILY}` : DEFAULT_FONT_FAMILY;
+  const family = font ? `${fontValue(font)}, ${fallback.family}` : fallback.family;
   return (
     <button type="button" className={`font-card${on ? ' on' : ''}`} onClick={onPick}>
       <span className="font-card-head">
@@ -29,13 +34,23 @@ function FontCard({ font, sample, on, onPick }: { font: FontOption | null; sampl
           {!font ? '內建' : !font.web ? '已安裝' : status === 'loading' ? '載入中…' : status === 'offline' ? '連不上網路' : '線上'}
         </span>
       </span>
-      <span className="font-card-style">{font ? font.style : 'Cascadia Code ＋ 微軟正黑體'}{font?.partial && '（部分繁體字用預設字型補）'}</span>
+      <span className="font-card-style">{font ? font.style : fallback.style}</span>
+      <span className="font-card-langs">
+        {font ? font.langs : '英・日・台灣字形'}
+        {font?.note && <span className="font-card-note">（{font.note}）</span>}
+      </span>
       <span className="font-card-sample" style={{ fontFamily: family }}>{sample || DEFAULT_SAMPLE}</span>
     </button>
   );
 }
 
-export default function FontPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export default function FontPicker({ title, hint, fallback, value, onChange }: {
+  title: string; // 例如「UI 字型」「內容字型」
+  hint: string;
+  fallback: DefaultFont;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const current = findFont(value);
   const label = value.trim() === '' ? '預設' : current ? current.label : value.trim();
@@ -43,15 +58,17 @@ export default function FontPicker({ value, onChange }: { value: string; onChang
   return (
     <div className="settings-row">
       <div className="settings-label">
-        <div>字型</div>
-        <div className="settings-hint">按「選擇字型…」看每種字型的樣子，點一下就換</div>
+        <div>{title}</div>
+        <div className="settings-hint">{hint}</div>
       </div>
       <div className="settings-control">
-        <span className="font-current" style={{ fontFamily: value.trim() ? `${value}, ${DEFAULT_FONT_FAMILY}` : DEFAULT_FONT_FAMILY }}>{label}</span>
+        <span className="font-current" style={{ fontFamily: value.trim() ? `${value}, ${fallback.family}` : fallback.family }}>{label}</span>
         <button type="button" className="settings-btn" onClick={() => setOpen(true)}>選擇字型…</button>
       </div>
       {open && (
         <FontDialog
+          title={title}
+          fallback={fallback}
           value={value}
           onPick={(v) => {
             onChange(v);
@@ -65,7 +82,7 @@ export default function FontPicker({ value, onChange }: { value: string; onChang
 }
 
 // 字型選擇視窗：疊在設定頁上面；點字型卡 = 套用並關掉，Esc／點外面／取消 = 不變
-function FontDialog({ value, onPick, onClose }: { value: string; onPick: (v: string) => void; onClose: () => void }) {
+function FontDialog({ title, fallback, value, onPick, onClose }: { title: string; fallback: DefaultFont; value: string; onPick: (v: string) => void; onClose: () => void }) {
   useEscape(onClose);
   const [sample, setSampleState] = useState(lastSample);
   const setSample = (s: string) => {
@@ -78,7 +95,7 @@ function FontDialog({ value, onPick, onClose }: { value: string; onPick: (v: str
     <div className="font-dialog" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="font-dialog-box" role="dialog" aria-label="選擇字型">
         <div className="settings-header">
-          <span className="settings-title">選擇劇本字型</span>
+          <span className="settings-title">選擇{title}</span>
           <input
             type="text"
             className="settings-text font-picker-sample"
@@ -89,9 +106,9 @@ function FontDialog({ value, onPick, onClose }: { value: string; onPick: (v: str
         </div>
         <div className="font-dialog-body">
           <div className="font-grid">
-            <FontCard font={null} sample={sample} on={value.trim() === ''} onPick={() => onPick('')} />
+            <FontCard font={null} fallback={fallback} sample={sample} on={value.trim() === ''} onPick={() => onPick('')} />
             {FONT_OPTIONS.map((f) => (
-              <FontCard key={f.family} font={f} sample={sample} on={current === f} onPick={() => onPick(fontValue(f))} />
+              <FontCard key={f.family} font={f} fallback={fallback} sample={sample} on={current === f} onPick={() => onPick(fontValue(f))} />
             ))}
           </div>
           <div className="font-custom">
@@ -106,7 +123,7 @@ function FontDialog({ value, onPick, onClose }: { value: string; onPick: (v: str
             />
             <button type="button" className="settings-btn" disabled={!customText.trim()} onClick={() => onPick(customText.trim())}>使用這個字型</button>
             {customText.trim() && (
-              <span className="font-custom-preview" style={{ fontFamily: `${customText.trim()}, ${DEFAULT_FONT_FAMILY}` }}>{sample || DEFAULT_SAMPLE}</span>
+              <span className="font-custom-preview" style={{ fontFamily: `${customText.trim()}, ${fallback.family}` }}>{sample || DEFAULT_SAMPLE}</span>
             )}
           </div>
         </div>

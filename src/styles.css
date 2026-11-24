@@ -158,10 +158,11 @@ html, body, #root {
   height: 100%;
   background: var(--bg-editor);
   color: var(--text);
-  font-family: 'Segoe UI', 'Microsoft JhengHei UI', sans-serif;
+  font-family: var(--ui-font, 'Segoe UI', 'Microsoft JhengHei UI', sans-serif); /* UI 字型 */
   font-size: 13px;
   overflow: hidden;
 }
+button, input, select, textarea { font-family: inherit; } /* 表單元件預設不跟著字型走：一律跟著所在的地方 */
 .app { display: grid; grid-template-rows: 1fr 22px; grid-template-columns: minmax(0, 1fr); height: 100%; }
 .main { display: flex; min-height: 0; min-width: 0; position: relative; overflow: hidden; } /* position：浮動面板和放置提示以它為準 */
 .activity-bar { width: 48px; flex-shrink: 0; background: var(--bg-activity); display: flex; flex-direction: column; }
@@ -185,10 +186,10 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 24px;
+  height: 28px;
   flex-shrink: 0;
   padding: 0 4px 0 12px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.06em;
   user-select: none;
@@ -201,10 +202,10 @@ html, body, #root {
 .section-tab {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 10px;
   white-space: nowrap;
   color: var(--text-dim);
-  border-bottom: 2px solid transparent;
+  border-bottom: 3px solid transparent;
   cursor: pointer;
 }
 .section-tab:first-child { padding-left: 0; }
@@ -946,18 +947,18 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .card-tab-zoom .codicon { font-size: 11px; }
 .card-mem { display: flex; flex-direction: column; gap: 1px; padding: 2px 4px; border-radius: 3px; cursor: zoom-in; }
 /* 欄位分類分頁：一排小膠囊（和上面「資料／記憶」的底線分頁區分開） */
-.field-group-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.field-group-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
 .field-group-tabs button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 10px;
+  padding: 3px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 14px;
   background: transparent;
   color: var(--text-dim);
   font: inherit;
-  font-size: 12px;
+  font-size: 13.5px;
   cursor: pointer;
 }
 .field-group-tabs button:hover { color: var(--text); background: var(--bg-hover); }
@@ -965,7 +966,7 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .field-group-tabs .ext-dot { margin: 0; }
 .card-body > .card-groups, .card-view-fields > .card-view-groups { grid-column: 1 / -1; }
 .card-body > .card-groups { margin: 3px 0 1px; }
-.card-body > .card-groups button { font-size: 11px; padding: 0 8px; }
+.card-body > .card-groups button { font-size: 12.5px; padding: 2px 11px; }
 .card-editor-groups { margin: 10px 0 6px; }
 .card-mem:hover { background: var(--bg-hover); }
 .card-mem-row { display: flex; gap: 6px; min-width: 0; white-space: nowrap; }
@@ -1095,3 +1096,23 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 
 /* 側邊欄的記憶：目前進度 */
 .card-mem-cut { font-size: 11px; color: var(--text-dim); padding-bottom: 2px; }
+
+/* 內容字型：你寫的字（欄位內容、詳細內容、卡片編輯頁和放大檢視的卡片名稱、記憶、搜尋找到的那段）；劇本編輯器另外套
+   放在最後、前面加 body：蓋過各處的 font: inherit */
+body :is(
+  .rich-content .tiptap,
+  .rich-view,
+  .field-text,
+  .card-view-value,
+  .field-value-view,
+  .card-editor textarea,
+  .card-editor .card-editor-name,
+  .memory-viewer-title,
+  .memory-time,
+  .memory-text,
+  .memory-tl-time,
+  .memory-tl-text,
+  .memory-relations .memory-rel-row:not(.memory-rel-head),
+  .card-mem-text,
+  .search-preview
+) { font-family: var(--content-font, 'Segoe UI', 'Microsoft JhengHei UI', sans-serif); }

@@ -5,7 +5,8 @@ import { readJSON, writeJSON } from './hooks';
 export interface Settings {
   uiZoom: number; // 整個程式的縮放比例（1 = 100%）
   scriptFontSize: number; // 劇本編輯器的文字大小（Ctrl＋滾輪改的也是這個）
-  scriptFontFamily: string; // 劇本編輯器的字型，空白 = 預設
+  scriptFontFamily: string; // 內容字型（劇本、欄位內容、詳細內容、記憶…你寫的字），空白 = 預設（名稱沿用舊的，才讀得到舊設定）
+  uiFontFamily: string; // UI 字型（選單、按鈕、標題列、側邊欄名稱、欄位名稱…），空白 = 預設
   wordWrap: boolean; // 劇本自動換行
   minimap: boolean; // 劇本右側的小地圖
   minimapScale: 1 | 2 | 3; // 小地圖的放大倍數（小／中／大）
@@ -23,12 +24,16 @@ export interface Settings {
 
 const KEY = 'vn-editor-settings';
 
-export const DEFAULT_FONT_FAMILY = "'Cascadia Code', 'Microsoft JhengHei UI', monospace";
+export const DEFAULT_FONT_FAMILY = "'Cascadia Code', 'Microsoft JhengHei UI', monospace"; // 劇本的預設字型
+export const DEFAULT_UI_FONT = "'Segoe UI', 'Microsoft JhengHei UI', sans-serif"; // 介面（和劇本以外的內容）的預設字型
+// 選了字型時，後面接上預設字型（選的字型沒有的字用預設補）
+export const withFallback = (value: string, fallback: string) => (value.trim() ? `${value.trim()}, ${fallback}` : fallback);
 
 export const defaultSettings: Settings = {
   uiZoom: 1,
   scriptFontSize: 15,
   scriptFontFamily: '',
+  uiFontFamily: '',
   wordWrap: true,
   minimap: true,
   minimapScale: 2,
@@ -73,6 +78,7 @@ function normalize(raw: unknown): Settings {
     uiZoom: clamp('uiZoom', r.uiZoom, d.uiZoom),
     scriptFontSize: clamp('scriptFontSize', r.scriptFontSize, d.scriptFontSize),
     scriptFontFamily: typeof r.scriptFontFamily === 'string' ? r.scriptFontFamily : d.scriptFontFamily,
+    uiFontFamily: typeof r.uiFontFamily === 'string' ? r.uiFontFamily : d.uiFontFamily,
     wordWrap: bool(r.wordWrap, d.wordWrap),
     minimap: bool(r.minimap, d.minimap),
     minimapScale: r.minimapScale === 1 || r.minimapScale === 2 || r.minimapScale === 3 ? r.minimapScale : d.minimapScale,

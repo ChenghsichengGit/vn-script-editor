@@ -7,7 +7,8 @@ import EditorDock, { EditorDockHandle } from './components/EditorDock';
 import StatusBar from './components/StatusBar';
 import WelcomeScreen from './components/WelcomeScreen';
 import SettingsDialog from './components/SettingsDialog';
-import { getSettings, textPx, updateSettings, useSettings } from './settings';
+import { DEFAULT_UI_FONT, getSettings, textPx, updateSettings, useSettings, withFallback } from './settings';
+import { ensureFont } from './fonts';
 import {
   Card,
   CardOps,
@@ -253,6 +254,14 @@ export default function App() {
     if (settings.theme === 'dark') delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = settings.theme;
   }, [settings.theme]);
+  // UI 字型、內容字型（劇本編輯器自己套內容字型，其他內容用 --content-font）
+  useEffect(() => {
+    const css = document.documentElement.style;
+    css.setProperty('--ui-font', withFallback(settings.uiFontFamily, DEFAULT_UI_FONT));
+    css.setProperty('--content-font', withFallback(settings.scriptFontFamily, DEFAULT_UI_FONT));
+    void ensureFont(settings.uiFontFamily);
+    void ensureFont(settings.scriptFontFamily);
+  }, [settings.uiFontFamily, settings.scriptFontFamily]);
   // 各區域的文字大小（除掉 UI 大小，畫面放大時文字不跟著變）
   useEffect(() => {
     const css = document.documentElement.style;

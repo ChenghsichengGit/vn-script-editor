@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { FontSizeKey, LIMITS, Settings, resetSettings, updateSettings, useSettings } from '../settings';
+import { DEFAULT_FONT_FAMILY, DEFAULT_UI_FONT, FontSizeKey, LIMITS, Settings, resetSettings, updateSettings, useSettings } from '../settings';
 import FontPicker from './FontPicker';
 import './SettingsDialog.css';
 import { useKeys } from '../hooks';
@@ -92,9 +92,9 @@ function ZoomSlider({ value }: { value: number }) {
 
 type Category = 'look' | 'text' | 'script' | 'save' | 'external';
 const CATEGORIES: { id: Category; label: string; icon: string; keys: (keyof Settings)[] }[] = [
-  { id: 'look', label: '外觀', icon: 'symbol-color', keys: ['theme', 'uiZoom'] },
-  { id: 'text', label: '文字大小', icon: 'text-size', keys: ['scriptFontSize', 'sidebarFontSize', 'cardFontSize', 'viewerFontSize'] },
-  { id: 'script', label: '劇本編輯器', icon: 'edit', keys: ['scriptFontFamily', 'richScript', 'wordWrap', 'minimap', 'minimapScale'] },
+  { id: 'look', label: '外觀', icon: 'symbol-color', keys: ['theme', 'uiZoom', 'uiFontFamily'] },
+  { id: 'text', label: '內容文字', icon: 'text-size', keys: ['scriptFontFamily', 'scriptFontSize', 'sidebarFontSize', 'cardFontSize', 'viewerFontSize'] },
+  { id: 'script', label: '劇本編輯器', icon: 'edit', keys: ['richScript', 'wordWrap', 'minimap', 'minimapScale'] },
   { id: 'save', label: '存檔與專案', icon: 'save', keys: ['autoSave', 'openLastProject'] },
   { id: 'external', label: '外部修改', icon: 'sparkle', keys: ['aiPlayback', 'aiSpeed', 'markExternal'] },
 ];
@@ -159,12 +159,26 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           </Row>
-          <Row label="UI 大小" hint="放大縮小按鈕、圖示、間距、選單這些介面；劇本、左邊區域、設定卡、放大檢視的文字照「文字大小」不變"><ZoomSlider value={s.uiZoom} /></Row>
+          <Row label="UI 大小" hint="放大縮小按鈕、圖示、間距、選單這些介面；劇本、左邊區域、設定卡、放大檢視的文字照「內容文字」的大小不變"><ZoomSlider value={s.uiZoom} /></Row>
+          <FontPicker
+            title="UI 字型"
+            hint="選單、分頁、按鈕、標題列、側邊欄的檔案和卡片名稱、欄位名稱、對話框這些介面的字"
+            fallback={{ family: DEFAULT_UI_FONT, style: 'Segoe UI ＋ 微軟正黑體' }}
+            value={s.uiFontFamily}
+            onChange={(uiFontFamily) => updateSettings({ uiFontFamily })}
+          />
             </>
           )}
           {cat === 'text' && (
             <>
-              <div className="settings-note">每個區域各自調整，互不影響；改「UI 大小」也不會改到這裡的文字。</div>
+              <div className="settings-note">「內容文字」是你寫的字：劇本、欄位內容、詳細內容、卡片編輯頁和放大檢視的卡片名稱、記憶、搜尋找到的那一段。字型大家共用；大小每個區域各自調整，改「UI 大小」也不會改到這裡的文字。</div>
+              <FontPicker
+                title="內容字型"
+                hint="劇本裡 # 開頭的指令照舊用等寬字型"
+                fallback={{ family: DEFAULT_FONT_FAMILY, style: '劇本：Cascadia Code ＋ 微軟正黑體；其他：Segoe UI ＋ 微軟正黑體' }}
+                value={s.scriptFontFamily}
+                onChange={(scriptFontFamily) => updateSettings({ scriptFontFamily })}
+              />
               {fontRow('scriptFontSize', '劇本', '劇本編輯器的文字')}
               {fontRow('sidebarFontSize', '左邊區域', '側邊欄的檔案、卡片清單、展開的欄位，和浮動視窗')}
               {fontRow('cardFontSize', '設定卡', '卡片編輯頁的欄位和詳細內容')}
@@ -173,7 +187,6 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           )}
           {cat === 'script' && (
             <>
-          <FontPicker value={s.scriptFontFamily} onChange={(scriptFontFamily) => updateSettings({ scriptFontFamily })} />
           <Row label="Notion 式劇本編輯器" hint="標題、標音直接顯示效果，看不到符號；關掉就改回原本的程式碼式編輯器"><Toggle checked={s.richScript} onChange={(v) => updateSettings({ richScript: v })} /></Row>
           {s.richScript ? (
             <div className="settings-note">「自動換行」和「小地圖」只有程式碼式編輯器才有，關掉上面的 Notion 式劇本編輯器就會出現。</div>
