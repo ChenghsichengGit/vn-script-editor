@@ -1103,7 +1103,6 @@ body.dragging:has(.memory-row.dragging), body.dragging:has(.memory-row.dragging)
 .scene-pin .codicon { font-size: 12px; }
 
 /* 側邊欄的記憶：目前進度 */
-.card-mem-cut { font-size: 11px; color: var(--text-dim); padding-bottom: 2px; }
 
 /* 內容字型：你寫的字（欄位內容、詳細內容、卡片編輯頁和放大檢視的卡片名稱、記憶、搜尋找到的那段）；劇本編輯器另外套
    放在最後、前面加 body：蓋過各處的 font: inherit */

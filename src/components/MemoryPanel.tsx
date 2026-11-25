@@ -15,12 +15,12 @@ export interface MemoryLinks {
   onOpenSource: (path: string) => void;
 }
 
-// 「看到」：預設跟著目前進度（最後看的劇本），也可以選全部或某個劇本為止
+// 「看到」：預設全部，也可以選跟著目前進度（最後看的劇本）或某個劇本為止
 export function useCut(memories: Memory[]) {
-  const [cut, setCut] = useState(AUTO_CUT);
+  const [cut, setCut] = useState('');
   const progress = useProgress();
   const valid = cut === AUTO_CUT || cut === '' || cutOptions(memories).includes(cut);
-  const active = valid ? cut : AUTO_CUT;
+  const active = valid ? cut : '';
   return { cut: active, setCut, shown: memoriesAt(memories, active, progress) };
 }
 

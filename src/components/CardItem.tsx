@@ -2,8 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardOps, CardSectionId, Field, SchemaField, cardTabId } from '../model';
 import { fieldIconDef } from '../fieldIcons';
 import { sectionDef, sectionMeta } from '../sections';
-import { AUTO_CUT, memoriesAt, relationSummary, relations, sourceLabel } from '../memories';
-import { useProgress } from '../progress';
+import { relationSummary, relations } from '../memories';
 import { openCardViewer, openMemoryViewer } from './MemoryViewer';
 import type { IconDef } from './Icon';
 import NameInput from './NameInput';
@@ -99,8 +98,6 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
   };
   const showMem = hasMemory && sideTab === 'memory';
   const memories = card.memories ?? [];
-  const progress = useProgress();
-  const memShown = memoriesAt(memories, AUTO_CUT, progress); // 側邊欄的記憶跟著目前進度
   const [openFields, setOpenFields] = useState<Set<number>>(new Set()); // 被點開的「收合欄位」
   useEffect(() => {
     if (bulk.tick > 0) setOpen(bulk.show);
@@ -228,16 +225,11 @@ export default function CardItem({ section, card, ops, bulk, selected, depth, on
           )}
           {showMem ? (
             <div className="card-mem" title="點一下放大看時間線和關係" onClick={() => openMemoryViewer(section, card.id)}>
-              {memories.length > 0 && progress.path && (
-                <div className="card-mem-cut">到「{sourceLabel(progress.path)}」為止{memShown.length < memories.length && `（${memShown.length}／${memories.length} 筆）`}</div>
-              )}
               {memories.length === 0 ? (
                 <span className="memory-note">還沒有記憶</span>
-              ) : memShown.length === 0 ? (
-                <span className="memory-note">到這裡為止還沒有記憶</span>
               ) : (
                 <>
-                  {relations(memShown).map((r) => {
+                  {relations(memories).map((r) => {
                     const icon = targetIcon(r.target);
                     return (
                       <div key={r.target} className="card-mem-row">
