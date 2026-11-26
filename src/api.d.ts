@@ -55,6 +55,10 @@ interface AppApi {
   readyToClose(): void;
   setZoom(factor: number): void; // 整個畫面的縮放，1 = 100%
   openUrl(url: string): Promise<void>; // 用系統預設瀏覽器打開（只接受 http/https）
+  revealPath(path: string): Promise<void>; // 在檔案總管裡顯示（檔案 = 選取它，資料夾 = 打開）；只接受專案裡的路徑
+  pickAssetFiles(): Promise<string[]>; // 選檔視窗（可多選），回傳絕對路徑；取消 = 空陣列
+  copyAssetFile(source: string, target: string): Promise<void>; // 把剛選的檔案複製到專案裡（target 已存在就失敗）
+  writeAssetFile(target: string, data: Uint8Array): Promise<void>; // 拖進來的檔案內容寫到專案裡（target 已存在就失敗）
 }
 
 interface Window {

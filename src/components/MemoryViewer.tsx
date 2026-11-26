@@ -28,6 +28,7 @@ const channel = eventChannel<At>('vn-open-memory');
 let lastMemView: 'timeline' | 'relations' = 'timeline'; // 上次看的是時間線還是關係（下次打開記憶沿用）
 export const openMemoryViewer = (section: CardSectionId, id: string) => channel.open({ section, id, view: lastMemView });
 export const openCardViewer = (section: CardSectionId, id: string, focus?: 'detail') => channel.open({ section, id, view: 'data', focus });
+export const closeCardViewer = () => channel.open(null as unknown as At); // 例如點了資源連結，要去看編輯區的分頁
 
 export default function MemoryViewerHost({ cards, files, schemaFields, openTab }: {
   cards: Record<CardSectionId, Card[]>;

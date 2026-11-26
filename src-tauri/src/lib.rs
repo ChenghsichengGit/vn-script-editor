@@ -21,6 +21,7 @@ struct AppState {
     open_projects: Mutex<HashMap<String, PathBuf>>,
     next_window: AtomicUsize,
     watchers: Mutex<HashMap<String, RecommendedWatcher>>,
+    picked: Mutex<HashSet<PathBuf>>, // 使用者在選檔視窗選過的專案外檔案：只有這些可以被複製進專案、顯示預覽
 }
 
 fn normalize(p: &Path) -> PathBuf {
@@ -195,8 +196,15 @@ fn serve_image(app: &AppHandle, uri_path: &str) -> tauri::http::Response<Vec<u8>
         return respond(400, "text/plain", Vec::new());
     };
     let state = app.state::<AppState>();
-    let Ok(target) = guard(&state, &path) else {
-        return respond(403, "text/plain", Vec::new());
+    let target = match guard(&state, &path) {
+        Ok(t) => t,
+        Err(_) => {
+            let p = normalize(Path::new(&path));
+            if !state.picked.lock().unwrap().contains(&p) {
+                return respond(403, "text/plain", Vec::new());
+            }
+            p
+        }
     };
     let Some(mime) = image_mime(&target) else {
         return respond(403, "text/plain", Vec::new());
@@ -269,6 +277,57 @@ async fn image_import(app: AppHandle, state: State<'_, AppState>, root: String) 
     }
     let name = source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     store_image(&root, &name, |target| fs::copy(&source, target).map(|_| ())).map(Some)
+}
+
+// 資源：選檔視窗（可以選多個），回傳選到的絕對路徑；記在 picked，之後才能複製進專案
+#[tauri::command]
+async fn asset_pick_files(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let Some(files) = app.dialog().file().set_title("加入檔案").blocking_pick_files() else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    let mut picked = state.picked.lock().unwrap();
+    for f in files {
+        let p = normalize(&f.into_path().map_err(|e| e.to_string())?);
+        picked.insert(p.clone());
+        out.push(p.to_string_lossy().into_owned());
+    }
+    Ok(out)
+}
+
+// 資源：把選檔視窗選到的檔案複製到專案裡的 target（已經有同名檔案就不做）
+#[tauri::command]
+fn asset_copy(state: State<AppState>, source: String, target: String) -> Result<(), String> {
+    let src = normalize(Path::new(&source));
+    if !state.picked.lock().unwrap().contains(&src) {
+        return Err("只能加入剛才選擇的檔案".into());
+    }
+    let dst = guard(&state, &target)?;
+    if dst.exists() {
+        return Err(format!("已經有同名的檔案：{}", dst.display()));
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(err)?;
+    }
+    fs::copy(&src, &dst).map(|_| ()).map_err(err)
+}
+
+// 資源：從檔案總管拖進來的檔案（畫面讀出內容送過來），寫到專案裡的 x-path（已經有同名檔案就不做）
+#[tauri::command]
+fn asset_write(state: State<AppState>, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("檔案內容格式不對".into());
+    };
+    let raw = request.headers().get("x-path").and_then(|v| v.to_str().ok()).ok_or("缺少參數")?;
+    let path = percent_decode(raw).ok_or("參數格式不對")?;
+    let dst = guard(&state, &path)?;
+    if dst.exists() {
+        return Err(format!("已經有同名的檔案：{}", dst.display()));
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(err)?;
+    }
+    fs::write(&dst, data).map_err(err)
 }
 
 #[tauri::command]
@@ -625,6 +684,43 @@ fn open_url(url: String) -> Result<(), String> {
     cmd.spawn().map(|_| ()).map_err(err)
 }
 
+// 在檔案總管裡顯示專案資料夾裡的檔案（選取它）或打開資料夾；只接受已開啟的專案裡的路徑
+#[tauri::command]
+fn reveal_path(state: State<AppState>, path: String) -> Result<(), String> {
+    let target = guard(&state, &path)?;
+    if !target.exists() {
+        return Err("找不到這個檔案或資料夾".into());
+    }
+    let is_dir = target.is_dir();
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        use std::os::windows::process::CommandExt;
+        let mut c = std::process::Command::new("explorer.exe");
+        if is_dir {
+            c.arg(&target);
+        } else {
+            c.raw_arg(format!("/select,\"{}\"", target.display()));
+        }
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        if !is_dir {
+            c.arg("-R");
+        }
+        c.arg(&target);
+        c
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(if is_dir { target.as_path() } else { target.parent().unwrap_or(&target) });
+        c
+    };
+    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 fn build_menu(app: &AppHandle, recent: &[RecentProject]) -> tauri::Result<Menu<Wry>> {
     let mut recent_menu = SubmenuBuilder::new(app, "最近的專案");
     if recent.is_empty() {
@@ -711,6 +807,7 @@ pub fn run() {
             open_projects: Mutex::new(HashMap::new()),
             next_window: AtomicUsize::new(0),
             watchers: Mutex::new(HashMap::new()),
+            picked: Mutex::new(HashSet::new()),
         })
         .register_uri_scheme_protocol("vnimg", |ctx, request| serve_image(ctx.app_handle(), request.uri().path()))
         .invoke_handler(tauri::generate_handler![
@@ -724,6 +821,9 @@ pub fn run() {
             image_save,
             image_import,
             image_remove_unused,
+            asset_pick_files,
+            asset_copy,
+            asset_write,
             project_pick_folder,
             export_save_text,
             project_pack,
@@ -739,6 +839,7 @@ pub fn run() {
             app_ready_to_close,
             set_zoom,
             open_url,
+            reveal_path,
         ])
         .setup(|app| {
             let handle = app.handle();

@@ -20,6 +20,7 @@ import Outline, { Heading } from './Outline';
 import ChangeBar from './ChangeBar';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import { VnsDiagnostics } from './VnsDiagnostics';
+import { VnsAssetChips } from './VnsAssetChips';
 import { VnsCompletion, VnsCompletionPopup, completionKey } from './VnsCompletion';
 import { VNS_EXTERNAL_META, VnsChangeMarks } from './VnsChangeMarks';
 import { createVnsPlayer, registerVnsPlayer } from './VnsPlayback';
@@ -242,6 +243,7 @@ export const vnsExtensions = [
   VnsBehavior,
   VnsDiagnostics,
   VnsCompletion,
+  VnsAssetChips,
 ];
 // 內建的 Markdown 輸入規則（「# 」變標題等）會跟 .vns 的 # 指令衝突，只留標音的
 export const vnsInputRules = ['ruby'];

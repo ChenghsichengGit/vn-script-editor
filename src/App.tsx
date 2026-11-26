@@ -34,7 +34,9 @@ import UpdateDialog from './components/UpdateDialog';
 import HelpDialog, { HelpTopic } from './components/HelpDialog';
 import Tooltip from './components/Tooltip';
 import ImageViewerHost from './components/ImageViewer';
-import MemoryViewerHost, { openCardViewer } from './components/MemoryViewer';
+import AssetViewerHost from './components/AssetViewer';
+import AssetEditorHost from './components/AssetEditor';
+import MemoryViewerHost, { closeCardViewer, openCardViewer } from './components/MemoryViewer';
 import { renameCardLinks, setLinkCards, setLinkOpener } from './cardLinks';
 import RubyPromptHost from './components/RubyPrompt';
 import Icon, { fileIcon } from './components/Icon';
@@ -54,6 +56,7 @@ import { FIXED_COMMAND_FIELDS, checkScript, migrateFormatField, revealInEditor, 
 import { SectionDef, SectionRemoval, cardSectionIds, getCardSections, sectionMeta, sectionOrder, setCardSections } from './sections';
 import SectionsDialog from './components/SectionsDialog';
 import { removeUnusedImages, setImageRoot } from './images';
+import { flushAssetMeta, isAssetMetaPath, loadAssetMeta, resetAssets, scanAssets, setAssetActions, setScannedAssets, touchesAssets, useAssets } from './assets';
 import { groupKey, groupOf, showFieldGroup } from './components/FieldGroupTabs';
 import { remapMemories, scriptPath } from './memories';
 import { setProgress } from './progress';
@@ -145,7 +148,14 @@ export default function App() {
   useEffect(() => setProgress({ fileId: sceneScript ? sceneFile : '', path: scenePath, order: scriptList }), [sceneFile, sceneScript, scenePath, scriptList]);
   const sceneText = sceneScript ? (contents[sceneFile] ?? '') : '';
   const sceneList = useMemo(() => sceneItems(sceneText, scenePath, cards, scenes), [sceneText, scenePath, cards, scenes]);
-  useEffect(() => setScriptData(cards, schemas), [cards, schemas]);
+  const assets = useAssets(); // 「資源/」資料夾讀出來的樹（含資源.json 的備註）
+  const assetRoot = useRef<string | null>(null); // 目前專案的資料夾（開／關專案時馬上更新，讀完資源時用來判斷專案換了沒）
+  const loadAssets = (root: string) =>
+    scanAssets(root).then(
+      (tree) => assetRoot.current === root && setScannedAssets(root, tree),
+      (e) => reportError(e),
+    );
+  useEffect(() => setScriptData(cards, schemas, assets), [cards, schemas, assets]);
   useEffect(() => setLinkCards(cards), [cards]);
   useEffect(() => setLinkOpener((section, id) => openCardViewer(section, id)), []);
   // 不顯示瀏覽器內建的右鍵選單（上一頁、重新整理、檢查…）；文字輸入框保留（剪下、複製、貼上）
@@ -197,6 +207,7 @@ export default function App() {
   const latest = useLatest({ project, files, contents, cards, dirty, activeTab });
   const flush = async (only?: string[]): Promise<string | null> => {
     const { project, files, contents, cards, dirty } = latest.current;
+    if (!only) await flushAssetMeta().catch(reportError); // 資源的備註還沒寫出去的也一起寫
     const keys = [...dirty].filter((k) => !only || only.includes(k));
     if (!project || keys.length === 0) return null;
     setDirty((d) => new Set([...d].filter((k) => !keys.includes(k))));
@@ -427,11 +438,22 @@ export default function App() {
     }
   };
   const syncRef = useLatest(syncFromDisk);
+  // 重新讀「資源/」資料夾（讀完時專案已經換了就丟掉結果）
+  const rescanAssets = () => {
+    if (assetRoot.current) void loadAssets(assetRoot.current);
+  };
   useEffect(() => {
     let timer: number | undefined;
-    return window.api.onFsChange(() => {
+    let assetTimer: number | undefined;
+    return window.api.onFsChange((paths) => {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void syncRef.current(), 300);
+      const root = assetRoot.current;
+      if (root && touchesAssets(root, paths)) {
+        window.clearTimeout(assetTimer);
+        assetTimer = window.setTimeout(() => void loadAssets(root), 300);
+      }
+      if (root && isAssetMetaPath(root, paths)) void loadAssetMeta(root).catch(reportError);
     });
   }, []);
   const conflictDialog = conflict && (
@@ -640,6 +662,10 @@ export default function App() {
     setImageRoot(store.root); // 圖片的相對路徑都接在這個資料夾後面
     clearAllMarks(); // 上一個專案的「外部修改」標記不要帶過來
     window.api.watchProject(store.root).catch(reportError);
+    assetRoot.current = store.root;
+    resetAssets(store.root);
+    void loadAssetMeta(store.root).catch(reportError);
+    void loadAssets(store.root);
   };
   const [createKey, setCreateKey] = useState(0);
   const [startInCreate, setStartInCreate] = useState(false);
@@ -654,6 +680,9 @@ export default function App() {
     dockRef.current?.saveLayout(); // 編輯區即將卸載，先把版面存起來
     setProject(null);
     setImageRoot(null);
+    await flushAssetMeta().catch(reportError);
+    assetRoot.current = null;
+    resetAssets('');
     clearAllMarks();
     setFiles({});
     setFolders(emptyFolders);
@@ -859,6 +888,17 @@ export default function App() {
   };
   const openTab = (id: string) => dockRef.current?.open(id);
   const closeTabs = (ids: string[]) => dockRef.current?.closeTabs(ids);
+  // 資源視窗：打開前先關掉卡片的放大檢視；重新讀資源資料夾
+  useEffect(
+    () =>
+      setAssetActions({
+        beforeOpen: closeCardViewer,
+        rescan: () => {
+          if (assetRoot.current) void loadAssets(assetRoot.current);
+        },
+      }),
+    [],
+  );
   const takenNames = (section: SectionId, folder: string, except: { id?: string; folder?: string } = {}) => {
     const taken = new Set<string>();
     for (const f of folders[section]) {
@@ -1391,6 +1431,8 @@ export default function App() {
       {help && <HelpDialog topic={help} onClose={() => setHelp(null)} />}
       <Tooltip />
       <ImageViewerHost />
+      <AssetViewerHost />
+      <AssetEditorHost />
       {quickPick !== null && <QuickPick key={quickPick} initial={quickPick} files={quickFiles} commands={quickCommands} onClose={() => setQuickPick(null)} />}
     </>
   );
@@ -1445,6 +1487,9 @@ export default function App() {
       pick: (slot: SectionId, id: SectionId) => setLayout((l) => ({ ...l, current: { ...l.current, [slot]: id } })),
       onTabDrag: (id: SectionId, e: React.MouseEvent) => startPanelDrag(id, e, true),
     },
+    assets,
+    projectRoot: project?.store.root ?? '',
+    onRescanAssets: rescanAssets,
   };
   const onLayoutChange = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
   const dockZones: Side[] = panelDrag ? (['left', 'right'] as Side[]).filter((s) => !(s === 'left' ? showLeft : showRight)) : [];

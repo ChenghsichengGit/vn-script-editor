@@ -161,7 +161,7 @@ const vnTheme: DockviewTheme = { ...themeDark, name: 'vn', className: 'dockview-
 const tabIdOf = (p: { params?: unknown }) => (p.params as Partial<PanelParams> | undefined)?.tabId;
 const panelsOf = (api: DockviewApi, tabId: string) => api.panels.filter((p) => tabIdOf(p) === tabId);
 
-function addPanel(api: DockviewApi, tabId: string, title: string, position?: { referencePanel: string; direction: 'right' | 'below' }) {
+function addPanel(api: DockviewApi, tabId: string, title: string, position?: { referencePanel: string; direction: 'right' | 'below' | 'within' }) {
   let id = tabId;
   for (let n = 2; api.getPanel(id); n++) id = `${tabId}~${n}`;
   api.addPanel<PanelParams>({ id, component: COMPONENT, title, params: { tabId }, position });
@@ -207,6 +207,8 @@ export interface EditorDockHandle {
   saveLayout: () => void; // 立刻把版面存起來（離開專案前呼叫）
   closeActive: () => void; // 關掉目前作用中的分頁（Ctrl+W）；沒有分頁就什麼都不做
   splitActive: (direction: 'right' | 'below') => void; // 把目前的分頁在右邊／下面再開一個畫面（Ctrl+\、Ctrl+K Ctrl+\）
+  tabIds: () => string[]; // 目前開著的分頁
+  retab: (from: string, to: string) => void; // 分頁換成另一個 id（資源改名）：位置不變，原本在前面的還是在前面
 }
 
 type Props = Omit<EditorCtxValue, 'activePanelId'> & {
@@ -259,6 +261,18 @@ const EditorDock = forwardRef<EditorDockHandle, Props>(function EditorDock(props
     splitActive: (direction) => {
       const api = apiRef.current;
       if (api?.activePanel) splitPanel(api, api.activePanel, direction);
+    },
+    tabIds: () => [...new Set((apiRef.current?.panels ?? []).map((p) => tabIdOf(p) ?? ''))].filter(Boolean),
+    retab: (from, to) => {
+      const api = apiRef.current;
+      if (!api || from === to) return;
+      for (const p of panelsOf(api, from)) {
+        const before = new Set(api.panels);
+        addPanel(api, to, propsRef.current.tabLabel(to), { referencePanel: p.id, direction: 'within' });
+        const added = api.panels.find((x) => !before.has(x));
+        p.api.close();
+        added?.api.setActive();
+      }
     },
   }));
   const onReady = ({ api }: DockviewReadyEvent) => {

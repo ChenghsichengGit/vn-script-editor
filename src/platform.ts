@@ -48,4 +48,8 @@ window.api = {
   readyToClose: () => void invoke('app_ready_to_close'),
   setZoom: (factor) => void invoke('set_zoom', { factor }),
   openUrl: (url) => invoke('open_url', { url }),
+  revealPath: (path) => invoke('reveal_path', { path }),
+  pickAssetFiles: () => invoke('asset_pick_files'),
+  copyAssetFile: (source, target) => invoke('asset_copy', { source, target }),
+  writeAssetFile: (target, data) => invoke('asset_write', data, { headers: { 'x-path': encodeURIComponent(target) } }),
 };

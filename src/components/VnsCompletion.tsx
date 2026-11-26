@@ -17,7 +17,7 @@ export const completionKey = new PluginKey<CompletionState>('vnsCompletion');
 // 只留標籤含有已打的字的項目（不分大小寫，保持原本順序）；只剩跟打的字一模一樣的就不用跳了
 export function filterCompletions(items: ScriptCompletion[], typed: string) {
   const t = typed.toLowerCase();
-  const out = items.filter((c) => c.label.toLowerCase().includes(t));
+  const out = items.filter((c) => (c.filterText ?? c.label).toLowerCase().includes(t)); // 資源也比對備註名稱
   return out.every((c) => c.label.toLowerCase() === t) ? [] : out;
 }
 

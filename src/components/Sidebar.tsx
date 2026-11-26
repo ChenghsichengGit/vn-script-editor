@@ -3,9 +3,10 @@ import { dragWith } from '../hooks';
 import { useCtrlWheel } from '../settings';
 import type { Layout, Side } from '../layout';
 import { SectionId } from '../model';
-import { FILES_SECTION, SCENE_ID, sectionOrder } from '../sections';
+import { ASSETS_ID, SCENE_ID, sectionOrder } from '../sections';
 import SectionPanel, { TreeProps } from './SectionPanel';
 import ScenePanel from './ScenePanel';
+import AssetPanel from './AssetPanel';
 
 interface Props extends TreeProps {
   side: Side;
@@ -22,19 +23,10 @@ export default function Sidebar(props: Props) {
   const { layout, sections, side, onLayoutChange, ...tree } = props;
   const asideRef = useRef<HTMLElement>(null);
   useCtrlWheel(asideRef, 'sidebarFontSize');
-  // 摺疊或沒有內容的區塊只剩標題列；空出來的高度給最下面那個展開的區塊（負責填滿空間）
-  const isEmpty = (id: SectionId) =>
-    id === SCENE_ID
-      ? tree.scene.items.length === 0
-      : id === FILES_SECTION.id
-        ? Object.keys(tree.files).length === 0 && !tree.folders[id]?.length
-        : !tree.cards[id]?.length && !tree.folders[id]?.length;
+  // 摺疊的區塊只剩標題列（沒有內容的不會自動縮小）；空出來的高度給最下面那個展開的區塊（負責填滿空間）
   const shown = tree.stacks.shown;
   // 一格疊了好幾個區塊時，看現在顯示的那個
-  const isShort = (slot: SectionId) => {
-    const id = shown(slot);
-    return tree.folded.includes(id) || isEmpty(id);
-  };
+  const isShort = (slot: SectionId) => tree.folded.includes(shown(slot));
   const live = sections.filter((id) => !isShort(id));
   const filler = live[live.length - 1];
   const existing = new Set(sectionOrder());
@@ -94,7 +86,7 @@ export default function Sidebar(props: Props) {
         return (
           <Fragment key={slot}>
             {i > 0 && <div className="section-sash" onMouseDown={(e) => startSectionResize(i, e)} />}
-            {id === SCENE_ID ? <ScenePanel key={id} {...panel} /> : <SectionPanel key={id} {...panel} />}
+            {id === SCENE_ID ? <ScenePanel key={id} {...panel} /> : id === ASSETS_ID ? <AssetPanel key={id} {...panel} /> : <SectionPanel key={id} {...panel} />}
           </Fragment>
         );
       })}

@@ -1,5 +1,5 @@
 // 「本場」區塊：目前劇本用到的設定卡（指令參數裡出現的、記憶出處是這個劇本的）＋手動固定的，照區塊分組
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { CardSectionId, SectionId } from '../model';
 import { cardTabId } from '../model';
 import { sectionMeta } from '../sections';
@@ -27,8 +27,26 @@ export default function ScenePanel(props: Props) {
   const [bulk, setBulk] = useState({ show: false, tick: 0 });
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [renaming, setRenaming] = useState<{ section: CardSectionId; id: string } | null>(null);
+  const [bodies, setBodies] = useState<Set<string>>(new Set()); // 欄位展開著的卡（卡片分頁 id）
+  const [sel, setSel] = useState<string | null>(null); // 點一下選到的卡；點兩下打開分頁
+  // 打開了本場裡的卡：選到它
+  useEffect(() => {
+    if (props.activeTab && scene.items.some((it) => cardTabId(it.section, it.card.id) === props.activeTab)) setSel(props.activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.activeTab]);
   const short = !!props.short && !props.floating;
-  const toggleBulk = () => setBulk((b) => ({ show: !b.show, tick: b.tick + 1 }));
+  const toggleBody = (key: string) =>
+    setBodies((b) => {
+      const next = new Set(b);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const toggleBulk = () => {
+    const show = !bulk.show;
+    setBulk((b) => ({ show, tick: b.tick + 1 }));
+    setBodies(show ? new Set(scene.items.map((it) => cardTabId(it.section, it.card.id))) : new Set());
+  };
   const openMenu = (e: React.MouseEvent, items: ContextMenuItem[]) => {
     e.preventDefault();
     e.stopPropagation();
@@ -50,7 +68,7 @@ export default function ScenePanel(props: Props) {
         }}
         onContextMenu={(e) => openMenu(e, rootItems)}
       >
-        {!props.floating && <FoldButton id={id} folded={props.folded.includes(id)} empty={scene.items.length === 0} onFold={props.onFold} />}
+        {!props.floating && <FoldButton id={id} folded={props.folded.includes(id)} onFold={props.onFold} />}
         <SectionTitle
           id={id}
           slot={props.slot ?? id}
@@ -69,7 +87,7 @@ export default function ScenePanel(props: Props) {
           </button>
         </span>
       </div>
-      <div className="section-body" onContextMenu={(e) => openMenu(e, rootItems)}>
+      <div className="section-body ap-tree" tabIndex={0} onContextMenu={(e) => openMenu(e, rootItems)}>
         {!scene.path ? (
           <div className="scene-note">打開劇本後，這裡會列出這一場用到的角色和設定。</div>
         ) : scene.items.length === 0 ? (
@@ -91,8 +109,16 @@ export default function ScenePanel(props: Props) {
                   card={card}
                   ops={props.cardOps}
                   bulk={bulk}
-                  selected={props.activeTab === cardTabId(section, card.id)}
+                  selected={false}
                   depth={0}
+                  pad={4}
+                  bodyOpen={bodies.has(cardTabId(section, card.id))}
+                  onBodyToggle={() => toggleBody(cardTabId(section, card.id))}
+                  rowProps={{
+                    onClick: () => setSel(cardTabId(section, card.id)),
+                    onDoubleClick: () => props.cardOps.open(section, card.id),
+                  }}
+                  rowClass={` ap-row${sel === cardTabId(section, card.id) ? ' ap-selected' : ''}`}
                   onMenu={(e) =>
                     openMenu(e, [
                       { label: '編輯', onClick: () => props.cardOps.open(section, card.id) },

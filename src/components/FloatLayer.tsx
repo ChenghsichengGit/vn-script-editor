@@ -4,7 +4,8 @@ import { useCtrlWheel } from '../settings';
 import { FLOAT_MIN_H, FLOAT_MIN_W, FloatPanel } from '../layout';
 import SectionPanel, { TreeProps } from './SectionPanel';
 import ScenePanel from './ScenePanel';
-import { SCENE_ID } from '../sections';
+import AssetPanel from './AssetPanel';
+import { ASSETS_ID, SCENE_ID } from '../sections';
 
 interface Props extends TreeProps {
   panels: FloatPanel[]; // 要顯示的浮動面板（已經排除被隱藏的）
@@ -70,7 +71,9 @@ export default function FloatLayer({ panels, onChange, onFront, ...tree }: Props
           >
             {(() => {
               const id = tree.stacks.shown(p.id); // 疊成標籤的浮動視窗：顯示目前的標籤
-              return id === SCENE_ID ? <ScenePanel key={id} {...tree} id={id} slot={p.id} fill floating /> : <SectionPanel key={id} {...tree} id={id} slot={p.id} fill floating />;
+              if (id === SCENE_ID) return <ScenePanel key={id} {...tree} id={id} slot={p.id} fill floating />;
+              if (id === ASSETS_ID) return <AssetPanel key={id} {...tree} id={id} slot={p.id} fill floating />;
+              return <SectionPanel key={id} {...tree} id={id} slot={p.id} fill floating />;
             })()}
             {HANDLES.map((d) => (
               <div key={d} className={`float-handle ${d}`} onMouseDown={(e) => startResize(p, d, e)} />

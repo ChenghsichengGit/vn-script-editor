@@ -3,6 +3,7 @@ import monaco from './monaco';
 import { Card, CardSectionId, Schemas } from './model';
 import { sectionMeta } from './sections';
 import { rubyProblems } from './ruby';
+import { ASSET_DIR, Asset, AssetTree, findAsset } from './assets';
 
 export const LANGUAGE_ID = 'vns';
 
@@ -12,7 +13,7 @@ type Param =
   | { kind: 'ref'; name: string; type?: ParamType; optional: boolean; def?: string; desc?: string } // [名字]、[time:int=0]、[time:int?：說明]
   | { kind: 'choice'; options: string[] } // in|out
   | { kind: 'literal'; text: string; desc?: string }; // 固定字（in：淡入）
-type Choice = { label: string; detail: string };
+type Choice = { label: string; detail: string; filter?: string }; // filter：打字時也比對這段（資源的備註名稱）
 
 interface Usage {
   params: Param[];
@@ -22,7 +23,7 @@ interface Usage {
 }
 
 type Command = { name: string; usages: Usage[]; description: string }; // name 含 #，例如 #name
-type ParamValue = { value: string; source: string };
+type ParamValue = { value: string; source: string; note?: string };
 
 let commands: Command[] = [];
 let paramValues = new Map<string, ParamValue[]>(); // 參數名稱 → 可選的值
@@ -107,7 +108,7 @@ function parseOptions(text: string): Choice[] {
   });
 }
 
-export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Schemas) {
+export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Schemas, assets: AssetTree) {
   const byName = new Map<string, Command>();
   for (const card of cards.commands) {
     const lines = linesOf(fieldOf(card, '用法'));
@@ -144,6 +145,17 @@ export function setScriptData(cards: Record<CardSectionId, Card[]>, schemas: Sch
     const title = sectionMeta(section).title;
     if (nameParam) collect(nameParam, section, (card) => card.name.trim()), addSource(nameParam, `${title}的名稱`);
     for (const field of fields) if (field.param) collect(field.param, section, (card) => fieldOf(card, field.key)), addSource(field.param, `${title}的「${field.key}」`);
+  }
+  // 資源：類別名稱就是參數名稱（資源/立繪 → [立繪]）
+  for (const category of assets.categories) {
+    const list = paramValues.get(category.name) ?? [];
+    for (const a of category.assets) {
+      if (list.some((v) => v.value === a.name)) continue;
+      const where = [ASSET_DIR, category.name, ...a.folder.split('/').filter(Boolean)].join('／');
+      list.push({ value: a.name, source: a.note ? `${a.note}　${where}` : where, note: a.note || undefined });
+    }
+    paramValues.set(category.name, list);
+    addSource(category.name, `${ASSET_DIR}／${category.name}`);
   }
   for (const model of monaco.editor.getModels()) refresh(model);
   for (const cb of [...dataListeners]) cb();
@@ -187,7 +199,7 @@ const matchUsages = (cmd: Command, words: string[]) =>
 function paramChoices(u: Usage, p: Param): Choice[] {
   if (p.kind === 'choice') return p.options.map((o) => ({ label: o, detail: '' }));
   if (p.kind === 'literal') return [{ label: p.text, detail: p.desc || u.description || u.format }];
-  const values = u.ownOptions.get(p.name) ?? (paramValues.get(p.name) ?? []).map((v) => ({ label: v.value, detail: v.source }));
+  const values = u.ownOptions.get(p.name) ?? (paramValues.get(p.name) ?? []).map((v) => ({ label: v.value, detail: v.source, filter: v.note && `${v.value} ${v.note}` }));
   return values.length > 0 || p.def === undefined ? values : [{ label: p.def, detail: '預設值' }];
 }
 
@@ -215,6 +227,30 @@ export function checkScript(lines: string[]): ScriptProblem[] {
       mark('缺少參數', line.indent, line.indent + line.name.length);
   });
   return problems;
+}
+
+// 這一行裡哪些參數是資源（參數名稱是資源類別、值是那個類別裡的資源）：start/end 是第幾個字（0 起算，end 不含）
+export function assetArgs(raw: string): { start: number; end: number; asset: Asset }[] {
+  if (HEADING.test(raw)) return [];
+  const text = codeOf(raw);
+  const line = parseLine(text);
+  const cmd = line && findCommand(line.name);
+  if (!line || !cmd) return [];
+  const re = /\S+/g;
+  re.lastIndex = line.indent + line.name.length;
+  const parts: { word: string; start: number }[] = [];
+  for (let m = re.exec(text); m; m = re.exec(text)) parts.push({ word: m[0], start: m.index });
+  const out: { start: number; end: number; asset: Asset }[] = [];
+  parts.forEach((part, i) => {
+    const prev = parts.slice(0, i).map((p) => p.word);
+    for (const u of matchUsages(cmd, prev)) {
+      const p = u.params[i];
+      if (p?.kind !== 'ref' || u.ownOptions.has(p.name)) continue;
+      const asset = findAsset(p.name, part.word);
+      if (asset) return void out.push({ start: part.start, end: part.start + part.word.length, asset });
+    }
+  });
+  return out;
 }
 
 function validate(model: monaco.editor.ITextModel) {
@@ -284,7 +320,7 @@ const usageNote = (u: Usage) => {
   return note ? `${u.format}：${note}` : u.format;
 };
 
-export type ScriptCompletion = { kind: 'command' | 'value'; label: string; detail: string; documentation?: string; insertText: string; retrigger: boolean };
+export type ScriptCompletion = { kind: 'command' | 'value'; label: string; detail: string; documentation?: string; insertText: string; retrigger: boolean; filterText?: string };
 export function completionsAt(before: string): { from: number; items: ScriptCompletion[] } {
   const none = { from: before.length, items: [] };
   if (before.includes('//') || HEADING.test(before)) return none; // 在註解或標題裡
@@ -319,7 +355,14 @@ export function completionsAt(before: string): { from: number; items: ScriptComp
       else merged.set(c.label, { choice: c, hasMore });
     }
   }
-  const items = [...merged.values()].map(({ choice: c, hasMore }): ScriptCompletion => ({ kind: 'value', label: c.label, detail: c.detail, insertText: hasMore ? `${c.label} ` : c.label, retrigger: hasMore }));
+  const items = [...merged.values()].map(({ choice: c, hasMore }): ScriptCompletion => ({
+    kind: 'value',
+    label: c.label,
+    detail: c.detail,
+    insertText: hasMore ? `${c.label} ` : c.label,
+    retrigger: hasMore,
+    ...(c.filter && { filterText: c.filter }),
+  }));
   return { from: before.length - typing.length, items };
 }
 
@@ -334,15 +377,29 @@ function hintClass(label: string, more: number) {
   const key = `${label}\u0000${more}`;
   let cls = hintClasses.get(key);
   if (!cls) {
-    if (!hintSheet) {
-      const style = document.createElement('style');
-      document.head.appendChild(style);
-      hintSheet = style.sheet!;
-    }
     cls = `vns-h${hintClasses.size}`;
     hintClasses.set(key, cls);
-    hintSheet.insertRule(`.monaco-editor .${cls}::before { content: ${JSON.stringify(label)}; }`);
-    if (more > 0) hintSheet.insertRule(`.monaco-editor .${cls}::after { content: "+${more}"; }`);
+    sheet().insertRule(`.monaco-editor .${cls}::before { content: ${JSON.stringify(label)}; }`);
+    if (more > 0) sheet().insertRule(`.monaco-editor .${cls}::after { content: "+${more}"; }`);
+  }
+  return cls;
+}
+function sheet() {
+  if (!hintSheet) {
+    const style = document.createElement('style');
+    document.head.appendChild(style);
+    hintSheet = style.sheet!;
+  }
+  return hintSheet;
+}
+
+const noteClasses = new Map<string, string>();
+function noteClass(note: string) {
+  let cls = noteClasses.get(note);
+  if (!cls) {
+    cls = `vns-n${noteClasses.size}`;
+    noteClasses.set(note, cls);
+    sheet().insertRule(`.monaco-editor .${cls}::after { content: ${JSON.stringify(note)}; }`);
   }
   return cls;
 }
@@ -356,6 +413,14 @@ function showHints(model: monaco.editor.ITextModel) {
       if (level) {
         decorations.push({ range: new monaco.Range(n, 1, n, 1), options: { isWholeLine: true, className: `vns-h${level}-line` } });
         continue;
+      }
+      // 資源參數後面用淡色顯示備註名稱（劇本裡存的還是名稱）
+      for (const arg of assetArgs(full)) {
+        if (!arg.asset.note) continue;
+        decorations.push({
+          range: new monaco.Range(n, arg.start + 1, n, arg.end + 1),
+          options: { afterContentClassName: `vns-asset-note ${noteClass(arg.asset.note)}`, hoverMessage: { value: `資源「${arg.asset.name}」：${arg.asset.note}` } },
+        });
       }
       const text = codeOf(full); // 有註解時，提示畫在註解前面
       const hint = missingLabel(text);

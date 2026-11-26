@@ -23,6 +23,9 @@ export const FILES_SECTION: SectionDef = { id: 'files', title: '檔案', dir: '�
 // 「本場」：不是資料夾，列出目前劇本用到的設定卡和手動固定的卡（固定在清單最後面）
 export const SCENE_ID = '@scene';
 export const SCENE_SECTION: SectionDef = { id: SCENE_ID, title: '本場', dir: '', icon: 'pin', color: 'orange' };
+// 「資源」：讀專案的「資源/」資料夾（assets.ts），樹狀列出立繪、道具…（固定在本場前面）
+export const ASSETS_ID = '@assets';
+export const ASSETS_SECTION: SectionDef = { id: ASSETS_ID, title: '資源', dir: '', icon: 'file-media', color: 'yellow' };
 
 export const DEFAULT_CARD_SECTIONS: SectionDef[] = [
   { id: 'characters', title: '角色', dir: '角色', icon: 'person', color: 'green', newName: '新角色', memory: true },
@@ -38,10 +41,10 @@ export function setCardSections(list: SectionDef[]) {
 }
 export const getCardSections = () => cardSections;
 
-export const sectionOrder = (): SectionId[] => [FILES_SECTION.id, ...cardSections.map((s) => s.id), SCENE_ID];
+export const sectionOrder = (): SectionId[] => [FILES_SECTION.id, ...cardSections.map((s) => s.id), ASSETS_ID, SCENE_ID];
 export const cardSectionIds = (): CardSectionId[] => cardSections.map((s) => s.id);
 export const sectionDef = (id: SectionId): SectionDef | undefined =>
-  id === FILES_SECTION.id ? FILES_SECTION : id === SCENE_ID ? SCENE_SECTION : cardSections.find((s) => s.id === id);
+  id === FILES_SECTION.id ? FILES_SECTION : id === SCENE_ID ? SCENE_SECTION : id === ASSETS_ID ? ASSETS_SECTION : cardSections.find((s) => s.id === id);
 export const colorVar = (color?: string) => (color ? `var(--pal-${color})` : undefined);
 
 export function sectionMeta(id: SectionId): { title: string; icon: IconDef; newName?: string; dir: string } {

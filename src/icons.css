@@ -6,6 +6,8 @@
 .codicon-file-code::before { content: "\eae9"; }
 .codicon-markdown::before { content: "\eb1d"; }
 .codicon-file::before { content: "\ea7b"; }
+.codicon-file-media::before { content: "\eaea"; }
+.codicon-refresh::before { content: "\eb37"; }
 .codicon-folder::before { content: "\ea83"; }
 .codicon-folder-opened::before { content: "\eaf7"; }
 .codicon-chevron-right::before { content: "\eab6"; }
